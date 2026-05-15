@@ -1,0 +1,1043 @@
+import { type ReactNode, useState, type ReactElement } from "react";
+import {
+  ArrowLeft,
+  Calendar,
+  ChevronDown,
+  Crosshair,
+  Hand,
+  MoreVertical,
+  Users,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from "lucide-react";
+import type { CrmTaskPatch } from "@/lib/api/crm-tasks";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { buildPipelineLabels } from "@/lib/crm-pipeline";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import type { CrmTask, Customer } from "@/types/domain";
+
+/** Paleta wChat */
+const BRAND_ACCENT = "#5B2FD4";
+const RD_PAGE_BG = "hsl(var(--background))";
+const RD_CARD_SHADOW = "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)";
+const RD_RADIUS = "10px";
+
+/** Valor sentinela do Select de responsável (sem `profiles.id` vazio no Radix). */
+const CRM_TASK_ASSIGNEE_NONE = "__none__";
+
+function sourceColumn(cliente: Customer, ...keys: string[]): string {
+  const sc = cliente.sourceColumns;
+  if (!sc) {
+    return "";
+  }
+  for (const k of keys) {
+    const raw = sc[k];
+    if (raw != null && String(raw).trim() !== "") {
+      return String(raw).trim();
+    }
+  }
+  return "";
+}
+
+function PipelineChevrons({
+  activeIndex,
+  daysContact,
+  onStageSelect,
+}: {
+  activeIndex: number;
+  daysContact: number;
+  onStageSelect?: (stageIndex: number) => void;
+}) {
+  const segments = buildPipelineLabels(daysContact);
+  const interactive = Boolean(onStageSelect);
+  const notch = 12;
+  const inactiveFill = "#eceff1";
+
+  return (
+    <div className="w-full border-b border-[#dfe3e6] bg-[#eceff1]">
+      <div className="mx-auto max-w-[1600px] px-2 py-2 md:px-4">
+        <div
+          className="flex min-h-[48px] w-full gap-[3px] bg-white p-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+          role={interactive ? "tablist" : undefined}
+          aria-label={interactive ? "Etapas do funil de vendas" : undefined}
+        >
+          {segments.map((seg, i) => {
+            const active = i === activeIndex;
+            const isFirst = i === 0;
+            const isLast = i === segments.length - 1;
+            const clip = isFirst
+              ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
+              : isLast
+                ? `polygon(${notch}px 0, 100% 0, 100% 100%, ${notch}px 100%, 0 50%)`
+                : `polygon(${notch}px 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, ${notch}px 100%, 0 50%)`;
+
+            const label = (
+              <span
+                className={cn(
+                  "relative z-10 block hyphens-auto px-1.5 text-[9px] uppercase leading-tight tracking-wide sm:text-[10px] md:text-[11px]",
+                  active ? "font-extrabold text-white" : "font-bold text-[#546e7a]",
+                )}
+              >
+                {seg.label}
+              </span>
+            );
+
+            const shellStyle = {
+              clipPath: clip,
+              backgroundColor: active ? BRAND_ACCENT : inactiveFill,
+            } as const;
+
+            return (
+              <div key={seg.key} className="min-w-0 flex-1">
+                {interactive ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={cn(
+                      "flex min-h-[44px] w-full cursor-pointer items-center justify-center px-1 py-2 text-center outline-none transition-[filter,box-shadow] hover:brightness-[1.04] focus-visible:ring-2 focus-visible:ring-[#4E1BB1] focus-visible:ring-offset-1",
+                      active && "shadow-[0_1px_3px_rgba(0,0,0,0.12)]",
+                    )}
+                    style={shellStyle}
+                    onClick={() => onStageSelect?.(i)}
+                  >
+                    {label}
+                  </button>
+                ) : (
+                  <div
+                    className="flex min-h-[44px] items-center justify-center px-1 py-2 text-center"
+                    style={shellStyle}
+                  >
+                    {label}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NegField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-b border-[#eceff1] py-2.5 text-[13px] leading-snug last:border-b-0">
+      <span className="text-[#78909c]">{label}</span>
+      <span className="max-w-[58%] break-words text-right font-medium text-[#37474f]">{value || "—"}</span>
+    </div>
+  );
+}
+
+function formatCrmTaskDueLabel(iso: string | null): string | null {
+  if (!iso) {
+    return null;
+  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return null;
+  }
+  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function formatCrmTaskUpdatedLabel(iso: string | undefined): string | null {
+  if (!iso?.trim()) {
+    return null;
+  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return null;
+  }
+  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function crmTaskAssigneeDisplayName(
+  assigneeId: string | null | undefined,
+  assignees?: { id: string; nome: string }[],
+): string | null {
+  const id = assigneeId?.trim();
+  if (!id) {
+    return null;
+  }
+  const hit = assignees?.find((a) => a.id === id);
+  const nome = hit?.nome?.trim();
+  if (nome) {
+    return nome;
+  }
+  return "Responsável atribuído";
+}
+
+function isoToDatetimeLocalValue(iso: string | null): string {
+  if (!iso?.trim()) {
+    return "";
+  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return "";
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function crmTaskScopeBadge(
+  t: CrmTask,
+  mode: "negotiation-merge" | "customer-linked" | undefined,
+): ReactElement | null {
+  if (!mode) {
+    return null;
+  }
+  if (mode === "customer-linked") {
+    if (!t.negotiationId) {
+      return null;
+    }
+    return (
+      <span className="rounded bg-[#e3f2fd] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1565c0]">
+        Negociação
+      </span>
+    );
+  }
+  const clientScope = !t.negotiationId;
+  return (
+    <span
+      className={
+        clientScope
+          ? "rounded bg-[#eceff1] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#546e7a]"
+          : "rounded bg-[#e3f2fd] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1565c0]"
+      }
+    >
+      {clientScope ? "Cliente" : "Negociação"}
+    </span>
+  );
+}
+
+export type ClienteRdPerfilViewProps = {
+  cliente: Customer;
+  daysContact: number;
+  pipelineActiveIndex: number;
+  qualificationStars: number;
+  onBack: () => void;
+  onRefresh: () => void;
+  onMarkLoss: () => void;
+  onMarkWin: () => void;
+  onEdit: () => void;
+  onOpenInbox: () => void;
+  onBlock: () => void;
+  onCreateNote: () => void;
+  onCreateTask: () => void;
+  onCreateCup: () => void;
+  /** Quando definido, troca o bloco ilustrado por tarefas reais (lista pode ser vazia). */
+  crmOpenTasks?: CrmTask[];
+  /** Tarefas concluídas (ex.: histórico); exibidas em bloco recolhível quando houver itens. */
+  crmCompletedTasks?: CrmTask[];
+  /**
+   * Rótulo de escopo nas linhas de tarefa.
+   * `negotiation-merge`: Cliente vs Negociação (lista unificada na tela da negociação).
+   * `customer-linked`: só indica tarefas vinculadas a uma negociação (perfil do cliente).
+   */
+  crmTaskScopeLabelMode?: "negotiation-merge" | "customer-linked";
+  crmTasksLoading?: boolean;
+  onCompleteCrmTask?: (taskId: string) => void;
+  crmCompleteTaskPending?: boolean;
+  /** Volta tarefa concluída para aberta. */
+  onReopenCrmTask?: (taskId: string) => void;
+  onDeleteCrmTask?: (taskId: string) => void;
+  crmDeleteTaskPending?: boolean;
+  /** Editar título, prazo e observações (tarefa aberta ou concluída). */
+  onSaveCrmTaskEdit?: (payload: { id: string; patch: CrmTaskPatch }) => void | Promise<void>;
+  crmEditTaskPending?: boolean;
+  /** Colaboradores do tenant para rótulo e Select de responsável (`profiles.id`). */
+  crmTaskAssignees?: { id: string; nome: string }[];
+  /** Clique em uma etapa do funil (atualiza estágio persistido no cliente quando implementado na página). */
+  onPipelineStageChange?: (stageIndex: number) => void;
+  /** Rótulo do responsável da negociação (ficha `/crm/negociacao/:id`). */
+  negotiationAssigneeLabel?: string;
+  /** Exibe ação de assumir negócio do pool CRM. */
+  showClaimNegotiation?: boolean;
+  onClaimNegotiation?: () => void;
+  claimNegotiationPending?: boolean;
+  /** Devolver negócio ao pool (admin/operação). */
+  showReleaseNegotiation?: boolean;
+  onReleaseNegotiation?: () => void;
+  releaseNegotiationPending?: boolean;
+  /** Cadastro completo, CRM e WhatsApp (conteúdo legado) */
+  legacyDetailPanel: ReactNode;
+};
+
+export function ClienteRdPerfilView({
+  cliente,
+  daysContact,
+  pipelineActiveIndex,
+  qualificationStars,
+  onBack,
+  onRefresh,
+  onMarkLoss,
+  onMarkWin,
+  onEdit,
+  onOpenInbox,
+  onBlock,
+  onCreateNote,
+  onCreateTask,
+  onCreateCup,
+  crmOpenTasks,
+  crmCompletedTasks,
+  crmTaskScopeLabelMode,
+  crmTasksLoading,
+  onCompleteCrmTask,
+  crmCompleteTaskPending,
+  onReopenCrmTask,
+  onDeleteCrmTask,
+  crmDeleteTaskPending,
+  onSaveCrmTaskEdit,
+  crmEditTaskPending,
+  crmTaskAssignees,
+  onPipelineStageChange,
+  negotiationAssigneeLabel,
+  showClaimNegotiation,
+  onClaimNegotiation,
+  claimNegotiationPending,
+  showReleaseNegotiation,
+  onReleaseNegotiation,
+  releaseNegotiationPending,
+  legacyDetailPanel,
+}: ClienteRdPerfilViewProps) {
+  const { toast } = useToast();
+  const [promoVisible, setPromoVisible] = useState(true);
+  const [taskEditOpen, setTaskEditOpen] = useState(false);
+  const [taskEditTarget, setTaskEditTarget] = useState<CrmTask | null>(null);
+  const [taskEditTitle, setTaskEditTitle] = useState("");
+  const [taskEditDueLocal, setTaskEditDueLocal] = useState("");
+  const [taskEditNotes, setTaskEditNotes] = useState("");
+  const [taskEditAssigneeId, setTaskEditAssigneeId] = useState("");
+  const [crmTaskDelete, setCrmTaskDelete] = useState<{ id: string; title: string } | null>(null);
+
+  const openTaskEdit = (t: CrmTask) => {
+    setTaskEditTarget(t);
+    setTaskEditTitle(t.title);
+    setTaskEditDueLocal(isoToDatetimeLocalValue(t.dueAt));
+    setTaskEditNotes(t.notes ?? "");
+    setTaskEditAssigneeId(t.assigneeId ?? "");
+    setTaskEditOpen(true);
+  };
+
+  const taskMutationBusy = Boolean(
+    crmCompleteTaskPending || crmEditTaskPending || crmDeleteTaskPending,
+  );
+
+  return (
+    <div
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+      style={{ backgroundColor: RD_PAGE_BG }}
+    >
+      <header
+        className="border-b border-[#e8eaed] bg-white px-4 py-4 md:px-6"
+        style={{ boxShadow: "0 1px 2px rgba(0, 0, 0, 0.06)" }}
+      >
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="mt-0.5 shrink-0 text-[#546e7a] hover:bg-[#eceff1]"
+              onClick={onBack}
+              aria-label="Voltar"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-xl font-semibold tracking-tight text-[#212121] md:text-2xl">{cliente.nome}</h1>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1]">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                    <DropdownMenuItem onClick={onEdit}>Editar cadastro</DropdownMenuItem>
+                    <DropdownMenuItem onClick={onOpenInbox}>Abrir no Inbox</DropdownMenuItem>
+                    {cliente.status !== "bloqueado" ? (
+                      <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={onBlock}>
+                        Bloquear cliente
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1]"
+                  onClick={onRefresh}
+                  aria-label="Atualizar"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1]" aria-hidden>
+                  <Crosshair className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-md bg-[#ede7f6] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#5e35b1]">
+                  NOVA
+                </span>
+                <span className="rounded-md bg-[#eceff1] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#546e7a]">
+                  COMERCIAL
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:shrink-0">
+            {showClaimNegotiation && onClaimNegotiation ? (
+              <Button
+                type="button"
+                className="rounded-[10px] border-0 bg-primary px-4 py-2.5 font-semibold text-primary-foreground shadow-none hover:bg-primary/90"
+                disabled={claimNegotiationPending || releaseNegotiationPending}
+                onClick={onClaimNegotiation}
+              >
+                <Hand className="mr-2 h-4 w-4" aria-hidden />
+                {claimNegotiationPending ? "Assumindo…" : "Assumir negócio"}
+              </Button>
+            ) : null}
+            {showReleaseNegotiation && onReleaseNegotiation ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-[10px] border-[#c4b5fd] bg-white px-4 py-2.5 font-semibold text-[#4E1BB1] shadow-none hover:bg-[#F3EBFC]"
+                disabled={releaseNegotiationPending || claimNegotiationPending}
+                onClick={onReleaseNegotiation}
+              >
+                <Users className="mr-2 h-4 w-4" aria-hidden />
+                {releaseNegotiationPending ? "Devolvendo…" : "Devolver ao pool"}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              data-testid="crm-mark-loss"
+              className="rounded-[10px] border-0 bg-red-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-red-700"
+              onClick={onMarkLoss}
+            >
+              <ThumbsDown className="mr-2 h-4 w-4" />
+              Marcar perda
+            </Button>
+            <Button
+              type="button"
+              className="rounded-[10px] border-0 bg-emerald-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-emerald-700"
+              onClick={onMarkWin}
+            >
+              <ThumbsUp className="mr-2 h-4 w-4" />
+              Marcar venda
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <PipelineChevrons
+        activeIndex={pipelineActiveIndex}
+        daysContact={daysContact}
+        onStageSelect={onPipelineStageChange}
+      />
+
+      <div className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 md:px-6 lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start">
+        <aside className="space-y-4">
+          <Collapsible
+            defaultOpen
+            className="overflow-hidden border border-[#e8eaed] bg-[#fafafa]"
+            style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
+          >
+            <CollapsibleTrigger className="group flex w-full items-center justify-between border-b border-[#eceff1] bg-[#f5f5f5] px-4 py-3 text-left text-sm font-semibold text-[#37474f] hover:bg-[#eeeeee]">
+              Negociação
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#90a4ae] transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 py-1">
+                <NegField label="Nome" value={cliente.nome} />
+                {negotiationAssigneeLabel !== undefined ? (
+                  <NegField label="Responsável" value={negotiationAssigneeLabel} />
+                ) : null}
+                <NegField label="Qualificação" value={String(qualificationStars)} />
+                <NegField
+                  label="Criada em"
+                  value={
+                    cliente.cadastradoEm
+                      ? new Date(cliente.cadastradoEm).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          timeZone: "America/Sao_Paulo",
+                        })
+                      : ""
+                  }
+                />
+                <NegField
+                  label="Valor total"
+                  value={cliente.totalGasto > 0 ? cliente.totalGasto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""}
+                />
+                <NegField label="Previsão de fechamento" value="" />
+                <NegField label="Fonte" value={cliente.origem === "organico" ? "Orgânico" : cliente.origem === "pago" ? "Pago" : ""} />
+                <NegField label="Campanha" value={sourceColumn(cliente, "campanha", "Campanha")} />
+                <NegField label="Doença" value={sourceColumn(cliente, "doenca", "doença", "Doença")} />
+                <NegField label="Isenção" value={sourceColumn(cliente, "isencao", "isenção", "Isenção")} />
+                <NegField label="Benefício" value={sourceColumn(cliente, "beneficio", "benefício", "Benefício")} />
+                <NegField
+                  label="qual_sua_renda_mensal"
+                  value={sourceColumn(cliente, "qual_sua_renda_mensal", "renda_mensal", "Qual sua renda mensal")}
+                />
+                <NegField label="Telefone" value={cliente.telefone ?? ""} />
+                <NegField label="E-mail" value={cliente.email ?? ""} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </aside>
+
+        <main className="min-w-0 space-y-6">
+          <section
+            className="overflow-hidden border border-[#e8eaed] bg-white"
+            style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
+          >
+            <div className="flex items-center justify-between border-b border-[#eceff1] px-4 py-3">
+              <h2 className="text-sm font-semibold text-[#37474f]">Próximas tarefas</h2>
+              <Calendar className="h-4 w-4 text-[#90a4ae]" aria-hidden />
+            </div>
+            {crmOpenTasks !== undefined ? (
+              <div className="px-4 py-4 md:px-6">
+                {crmTasksLoading ? (
+                  <div className="space-y-3">
+                    <div className="h-14 animate-pulse rounded-lg bg-[#eceff1]" />
+                    <div className="h-14 animate-pulse rounded-lg bg-[#eceff1]" />
+                  </div>
+                ) : crmOpenTasks.length === 0 ? (
+                  <div className="flex flex-col items-center gap-4 py-8 text-center md:flex-row md:justify-between md:text-left">
+                    <p className="max-w-md text-sm leading-relaxed text-[#78909c]">
+                      Não há tarefas abertas. Crie uma para acompanhar o próximo passo.
+                    </p>
+                    <Button
+                      type="button"
+                      className="shrink-0 border-0 px-5 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
+                      style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
+                      onClick={onCreateTask}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Criar tarefa
+                    </Button>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {crmOpenTasks.map((t) => {
+                      const dueLabel = formatCrmTaskDueLabel(t.dueAt);
+                      const assigneeLabel = crmTaskAssigneeDisplayName(t.assigneeId, crmTaskAssignees);
+                      return (
+                        <li
+                          key={t.id}
+                          className="flex items-start gap-2 rounded-lg border border-[#eceff1] bg-[#fafbfb] px-3 py-2.5"
+                        >
+                          <Checkbox
+                            className="mt-0.5 border-[#90a4ae] data-[state=checked]:border-[#4E1BB1] data-[state=checked]:bg-[#4E1BB1]"
+                            checked={false}
+                            disabled={!onCompleteCrmTask || taskMutationBusy}
+                            aria-label={`Marcar como concluída: ${t.title}`}
+                            onCheckedChange={(c) => {
+                              if (c === true) {
+                                onCompleteCrmTask?.(t.id);
+                              }
+                            }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-sm font-medium text-[#37474f]">{t.title}</p>
+                              {crmTaskScopeBadge(t, crmTaskScopeLabelMode)}
+                            </div>
+                            {dueLabel ? (
+                              <p className="mt-0.5 text-xs text-[#78909c]">Prazo: {dueLabel}</p>
+                            ) : null}
+                            {assigneeLabel ? (
+                              <p className="mt-0.5 text-xs text-[#78909c]">Responsável: {assigneeLabel}</p>
+                            ) : null}
+                            {t.notes?.trim() ? (
+                              <p className="mt-1 text-xs leading-snug text-[#90a4ae]">{t.notes.trim()}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-start gap-0.5">
+                            {onSaveCrmTaskEdit ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1] hover:text-[#37474f]"
+                                disabled={taskMutationBusy}
+                                aria-label={`Editar tarefa: ${t.title}`}
+                                onClick={() => openTaskEdit(t)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            {onDeleteCrmTask ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-[#90a4ae] hover:bg-[#ffebee] hover:text-[#c62828]"
+                                disabled={taskMutationBusy}
+                                aria-label={`Excluir tarefa: ${t.title}`}
+                                onClick={() => setCrmTaskDelete({ id: t.id, title: t.title })}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {!crmTasksLoading && crmOpenTasks.length > 0 ? (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-[#cfd8dc] text-[#37474f] hover:bg-[#f5f5f5]"
+                      style={{ borderRadius: RD_RADIUS }}
+                      onClick={onCreateTask}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Nova tarefa
+                    </Button>
+                  </div>
+                ) : null}
+                {!crmTasksLoading && crmCompletedTasks != null && crmCompletedTasks.length > 0 ? (
+                  <Collapsible className="mt-6 border-t border-[#eceff1] pt-4">
+                    <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-1 py-2 text-left text-sm font-semibold text-[#546e7a] hover:bg-[#f5f5f5]">
+                      <span>
+                        Tarefas concluídas
+                        <span className="ml-2 font-normal text-[#90a4ae]">({crmCompletedTasks.length})</span>
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-[#90a4ae] transition-transform group-data-[state=open]:rotate-180" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2">
+                      <ul className="space-y-2">
+                        {crmCompletedTasks.map((t) => {
+                          const doneLabel = formatCrmTaskUpdatedLabel(t.updatedAt);
+                          const assigneeLabel = crmTaskAssigneeDisplayName(t.assigneeId, crmTaskAssignees);
+                          return (
+                            <li
+                              key={t.id}
+                              className="flex items-start gap-2 rounded-lg border border-[#eceff1] bg-[#fafafa] px-3 py-2.5"
+                            >
+                              <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#b0bec5]" aria-hidden />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="text-sm font-medium text-[#90a4ae] line-through">{t.title}</p>
+                                  {crmTaskScopeBadge(t, crmTaskScopeLabelMode)}
+                                </div>
+                                {doneLabel ? (
+                                  <p className="mt-0.5 text-xs text-[#78909c]">Concluída em {doneLabel}</p>
+                                ) : null}
+                                {assigneeLabel ? (
+                                  <p className="mt-0.5 text-xs text-[#78909c]">Responsável: {assigneeLabel}</p>
+                                ) : null}
+                                {t.notes?.trim() ? (
+                                  <p className="mt-1 text-xs leading-snug text-[#b0bec5]">{t.notes.trim()}</p>
+                                ) : null}
+                              </div>
+                              <div className="flex shrink-0 items-start gap-0.5">
+                                {onReopenCrmTask ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-[#90a4ae] hover:bg-[#e8f5e9] hover:text-[#2e7d32]"
+                                    disabled={taskMutationBusy}
+                                    aria-label={`Reabrir tarefa: ${t.title}`}
+                                    onClick={() => onReopenCrmTask(t.id)}
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                                {onSaveCrmTaskEdit ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1] hover:text-[#37474f]"
+                                    disabled={taskMutationBusy}
+                                    aria-label={`Editar tarefa concluída: ${t.title}`}
+                                    onClick={() => openTaskEdit(t)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                                {onDeleteCrmTask ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0 text-[#90a4ae] hover:bg-[#ffebee] hover:text-[#c62828]"
+                                    disabled={taskMutationBusy}
+                                    aria-label={`Excluir tarefa concluída: ${t.title}`}
+                                    onClick={() => setCrmTaskDelete({ id: t.id, title: t.title })}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-5 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-8">
+                <div className="flex w-full max-w-[260px] shrink-0 flex-col items-center md:items-start">
+                  <div
+                    className="flex w-full items-center justify-center overflow-hidden bg-[#f8fafb] p-3"
+                    style={{ borderRadius: RD_RADIUS, boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.04)" }}
+                  >
+                    <img
+                      src="/illustrations/proximas-tarefas-vazio.png"
+                      alt="Ilustração: acompanhamento de negociação"
+                      className="h-auto w-full max-h-[200px] object-contain object-center"
+                      width={240}
+                      height={200}
+                      decoding="async"
+                    />
+                  </div>
+                </div>
+                <p className="max-w-md text-center text-sm leading-relaxed text-[#78909c] md:text-left">
+                  Não existem tarefas pendentes para essa Negociação
+                </p>
+                <Button
+                  type="button"
+                  className="shrink-0 border-0 px-5 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
+                  style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
+                  onClick={onCreateTask}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Criar tarefa
+                </Button>
+              </div>
+            )}
+            <div className="border-t border-[#eceff1] px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-[#e0e0e0] bg-[#f5f5f5] py-2.5 font-medium text-[#424242] hover:bg-[#eeeeee] sm:w-auto"
+                style={{ borderRadius: RD_RADIUS }}
+                onClick={onCreateCup}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Criar copo personalizado
+              </Button>
+            </div>
+          </section>
+
+          <Tabs defaultValue="historico" className="w-full">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-0 rounded-none border-b border-[#e8eaed] bg-transparent p-0">
+              {(
+                [
+                  ["historico", "Histórico"],
+                  ["email", "E-mail"],
+                  ["tarefas", "Tarefas"],
+                  ["questionarios", "Questionários"],
+                  ["produtos", "Produtos"],
+                  ["arquivos", "Arquivos"],
+                  ["propostas", "Propostas"],
+                ] as const
+              ).map(([value, label]) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className={cn(
+                    "rounded-none border-b-[3px] border-transparent px-4 py-3 text-sm font-medium text-[#78909c] data-[state=active]:border-b-[#4E1BB1] data-[state=active]:bg-transparent data-[state=active]:text-[#4E1BB1] data-[state=active]:shadow-none",
+                  )}
+                >
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <TabsContent
+              value="historico"
+              className="mt-0 space-y-4 border border-t-0 border-[#e8eaed] bg-white p-4 md:p-5"
+              style={{ boxShadow: RD_CARD_SHADOW }}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  <Select defaultValue="wchat">
+                    <SelectTrigger className="h-9 w-[200px] rounded-md border-[#cfd8dc] bg-white text-sm">
+                      <SelectValue placeholder="Origem" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="wchat">Do: wChat</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select defaultValue="todos">
+                    <SelectTrigger className="h-9 w-[220px] rounded-md border-[#cfd8dc] bg-white text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Exibir: Todos os eventos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  className="border-0 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
+                  style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
+                  onClick={onCreateNote}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Criar anotação
+                </Button>
+              </div>
+
+              <div className="relative pl-6">
+                <div className="absolute bottom-0 left-[7px] top-2 w-px bg-[#cfd8dc]" aria-hidden />
+
+                {promoVisible ? (
+                  <div
+                    className="relative mb-6 border border-[#e8eaed] bg-white pl-4"
+                    style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
+                  >
+                    <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-[#7e57c2]" aria-hidden />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-3 rounded p-1 text-[#90a4ae] hover:bg-[#f5f5f5]"
+                      onClick={() => setPromoVisible(false)}
+                      aria-label="Fechar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="p-4 pr-10">
+                      <p className="font-semibold text-[#5e35b1]">Feche até 40% mais vendas</p>
+                      <p className="mt-2 text-sm leading-relaxed text-[#78909c]">
+                        Instale a extensão do WhatsApp no wChat para acompanhar negociações e responder mais rápido, sem sair do CRM.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                <p className="text-sm text-[#78909c]">Linha do tempo de atividades do cliente.</p>
+              </div>
+            </TabsContent>
+
+            {(["email", "tarefas", "questionarios", "produtos", "arquivos", "propostas"] as const).map((value) => (
+              <TabsContent
+                key={value}
+                value={value}
+                className="mt-0 border border-t-0 border-[#e8eaed] bg-white p-8 text-center text-sm text-[#78909c]"
+                style={{ boxShadow: RD_CARD_SHADOW }}
+              >
+                Nenhum conteúdo nesta aba ainda.
+              </TabsContent>
+            ))}
+          </Tabs>
+
+          <Collapsible
+            className="overflow-hidden border border-[#e8eaed] bg-white"
+            style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
+          >
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-[#37474f] hover:bg-[#fafafa]">
+              Cadastro completo, CRM e WhatsApp
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#90a4ae] transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-[#eceff1] bg-[#fafafa] px-2 py-4 md:px-4">
+              {legacyDetailPanel}
+            </CollapsibleContent>
+          </Collapsible>
+        </main>
+      </div>
+
+      <AlertDialog
+        open={crmTaskDelete != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCrmTaskDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="border-[#cfd8dc]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir tarefa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {crmTaskDelete
+                ? `“${crmTaskDelete.title}” será removida permanentemente. Esta ação não pode ser desfeita.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#cfd8dc]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#c62828] text-white hover:bg-[#b71c1c]"
+              onClick={() => {
+                if (crmTaskDelete && onDeleteCrmTask) {
+                  onDeleteCrmTask(crmTaskDelete.id);
+                }
+                setCrmTaskDelete(null);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={taskEditOpen}
+        onOpenChange={(open) => {
+          setTaskEditOpen(open);
+          if (!open) {
+            setTaskEditTarget(null);
+            setTaskEditAssigneeId("");
+          }
+        }}
+      >
+        <DialogContent className="border-[#cfd8dc] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar tarefa</DialogTitle>
+            <DialogDescription>Atualize título, prazo, responsável ou observações.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="crm-task-edit-title">Título</Label>
+              <Input
+                id="crm-task-edit-title"
+                value={taskEditTitle}
+                onChange={(e) => setTaskEditTitle(e.target.value)}
+                className="border-[#ced4da]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="crm-task-edit-due">Prazo (opcional)</Label>
+              <Input
+                id="crm-task-edit-due"
+                type="datetime-local"
+                value={taskEditDueLocal}
+                onChange={(e) => setTaskEditDueLocal(e.target.value)}
+                className="border-[#ced4da]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="crm-task-edit-notes">Observações (opcional)</Label>
+              <Textarea
+                id="crm-task-edit-notes"
+                value={taskEditNotes}
+                onChange={(e) => setTaskEditNotes(e.target.value)}
+                rows={3}
+                className="resize-none border-[#ced4da]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="crm-task-edit-assignee">Responsável (opcional)</Label>
+              <Select
+                value={taskEditAssigneeId.trim() ? taskEditAssigneeId : CRM_TASK_ASSIGNEE_NONE}
+                onValueChange={(v) => setTaskEditAssigneeId(v === CRM_TASK_ASSIGNEE_NONE ? "" : v)}
+              >
+                <SelectTrigger id="crm-task-edit-assignee" className="border-[#ced4da]">
+                  <SelectValue placeholder="Sem responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CRM_TASK_ASSIGNEE_NONE}>Sem responsável</SelectItem>
+                  {(crmTaskAssignees ?? []).map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.nome?.trim() || a.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setTaskEditOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#4E1BB1] hover:bg-[#4015A5]"
+              disabled={!onSaveCrmTaskEdit || !taskEditTarget || taskMutationBusy}
+              onClick={() => {
+                void (async () => {
+                  if (!taskEditTarget || !onSaveCrmTaskEdit) {
+                    return;
+                  }
+                  const title = taskEditTitle.trim();
+                  if (!title) {
+                    toast({
+                      title: "Título obrigatório",
+                      description: "Informe um título para a tarefa.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const patch: CrmTaskPatch = {
+                    title,
+                    dueAt: taskEditDueLocal.trim() ? new Date(taskEditDueLocal).toISOString() : null,
+                    notes: taskEditNotes.trim(),
+                    assigneeId: taskEditAssigneeId.trim() ? taskEditAssigneeId.trim() : null,
+                  };
+                  try {
+                    await Promise.resolve(onSaveCrmTaskEdit({ id: taskEditTarget.id, patch }));
+                    setTaskEditOpen(false);
+                    setTaskEditTarget(null);
+                  } catch {
+                    /* toast na página */
+                  }
+                })();
+              }}
+            >
+              {crmEditTaskPending ? "Salvando…" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

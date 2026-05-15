@@ -1,0 +1,71 @@
+import { Briefcase, LogOut, MessageSquare, Settings2, Users2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { NavLink } from "@/components/NavLink";
+import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
+
+type NavIcon = typeof MessageSquare;
+
+const linkItems: { title: string; url: string; icon: NavIcon }[] = [
+  { title: "Chat", url: "/inbox", icon: MessageSquare },
+  { title: "CRM", url: "/crm", icon: Briefcase },
+  { title: "Clientes", url: "/clientes", icon: Users2 },
+  { title: "Ajustes", url: "/configuracoes", icon: Settings2 },
+];
+
+function pathMatches(pathname: string, url: string) {
+  if (url === "/crm") {
+    return pathname === url;
+  }
+  return pathname === url || pathname.startsWith(`${url}/`);
+}
+
+export function MobileNav() {
+  const pathname = useLocation().pathname;
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  return (
+    <nav
+      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] left-2 right-2 z-40 rounded-2xl border border-border bg-card/95 p-1.5 shadow-lg backdrop-blur-md md:hidden"
+      aria-label="Navegacao principal"
+    >
+      <div className="flex items-stretch justify-between gap-0.5">
+        {linkItems.map((item) => {
+          const isActive = pathMatches(pathname, item.url);
+
+          return (
+            <NavLink
+              key={item.url}
+              to={item.url}
+              end={item.url === "/crm"}
+              className={cn(
+                "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[9px] font-medium leading-tight transition-colors sm:text-[10px]",
+                isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-wchat-100 hover:text-primary",
+              )}
+              activeClassName=""
+            >
+              <item.icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
+              <span className="max-w-full truncate">{item.title}</span>
+            </NavLink>
+          );
+        })}
+
+        <button
+          type="button"
+          aria-label="Sair"
+          onClick={async () => {
+            await signOut();
+            navigate("/login");
+          }}
+          className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[9px] font-medium leading-tight text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive sm:text-[10px]"
+        >
+          <LogOut className="h-[18px] w-[18px] shrink-0" aria-hidden />
+          <span className="max-w-full truncate">Sair</span>
+        </button>
+      </div>
+    </nav>
+  );
+}

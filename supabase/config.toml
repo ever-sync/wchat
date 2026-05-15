@@ -1,0 +1,11 @@
+# Configuracao lida pelo CLI no deploy. Ver:
+# https://supabase.com/docs/guides/functions/function-configuration
+#
+# Webhooks externos (UAZAPI) nao enviam Authorization: Bearer — sem isto o gateway
+# responde 401 UNAUTHORIZED_NO_AUTH_HEADER antes do Deno rodar.
+[functions.uazapi-webhook]
+verify_jwt = false
+
+# n8n envia com HMAC ou N8N_SERVICE_KEY — sem JWT de usuario
+[functions.n8n-reply]
+verify_jwt = false

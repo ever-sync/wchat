@@ -1,0 +1,515 @@
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { CrmFunnel, CrmStageRequiredField } from "@/data/crm-funnels";
+import {
+  addFunnel,
+  addStage,
+  createDefaultFunnel,
+  createDefaultStage,
+  moveStage,
+  removeFunnel,
+  removeStage,
+  slugifyFunnelKey,
+  uniqueKey,
+  updateFunnel,
+  updateStage,
+} from "@/lib/crm/funnel-editor-utils";
+import { CRM_STAGE_REQUIRED_FIELD_OPTIONS } from "@/lib/crm/stage-requirements";
+import { cn } from "@/lib/utils";
+
+type CrmFunnelConfigEditorProps = {
+  funnels: CrmFunnel[];
+  onChange: (funnels: CrmFunnel[]) => void;
+  disabled?: boolean;
+};
+
+function toggleStageField(
+  funnels: CrmFunnel[],
+  funnelId: string,
+  stageId: string,
+  field: CrmStageRequiredField,
+  checked: boolean,
+): CrmFunnel[] {
+  return funnels.map((funnel) => {
+    if (funnel.id !== funnelId) return funnel;
+    return {
+      ...funnel,
+      stages: funnel.stages.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        const next = new Set(stage.requiredFields ?? []);
+        if (checked) next.add(field);
+        else next.delete(field);
+        const requiredFields = [...next];
+        return {
+          ...stage,
+          requiredFields: requiredFields.length > 0 ? requiredFields : undefined,
+        };
+      }),
+    };
+  });
+}
+
+export function CrmFunnelConfigEditor({
+  funnels,
+  onChange,
+  disabled,
+}: CrmFunnelConfigEditorProps) {
+  const [funnelId, setFunnelId] = useState(funnels[0]?.id ?? "");
+  const [newFunnelOpen, setNewFunnelOpen] = useState(false);
+  const [newFunnelName, setNewFunnelName] = useState("");
+  const [deleteFunnelOpen, setDeleteFunnelOpen] = useState(false);
+  const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!funnels.some((f) => f.id === funnelId)) {
+      setFunnelId(funnels[0]?.id ?? "");
+    }
+  }, [funnelId, funnels]);
+
+  const activeFunnel = useMemo(
+    () => funnels.find((f) => f.id === funnelId) ?? funnels[0],
+    [funnelId, funnels],
+  );
+
+  if (funnels.length === 0) {
+    return (
+      <div className="space-y-4 rounded-xl border border-dashed border-border px-5 py-8 text-center">
+        <p className="text-sm text-muted-foreground">Nenhum funil configurado.</p>
+        <Button
+          type="button"
+          size="sm"
+          disabled={disabled}
+          onClick={() => setNewFunnelOpen(true)}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Criar primeiro funil
+        </Button>
+        <NewFunnelDialog
+          open={newFunnelOpen}
+          onOpenChange={setNewFunnelOpen}
+          name={newFunnelName}
+          onNameChange={setNewFunnelName}
+          disabled={disabled}
+          onConfirm={() => {
+            const funnel = createDefaultFunnel(newFunnelName || "Novo funil", funnels);
+            onChange(addFunnel(funnels, funnel));
+            setFunnelId(funnel.id);
+            setNewFunnelName("");
+            setNewFunnelOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
+  const selectedId = activeFunnel?.id ?? funnels[0].id;
+
+  const handleFunnelListNameChange = (value: string) => {
+    if (!activeFunnel) return;
+    onChange(updateFunnel(funnels, activeFunnel.id, { listName: value }));
+  };
+
+  const handleFunnelIdChange = (value: string) => {
+    if (!activeFunnel) return;
+    const nextId = slugifyFunnelKey(value);
+    const taken = new Set(funnels.filter((f) => f.id !== activeFunnel.id).map((f) => f.id));
+    const id = uniqueKey(taken, nextId);
+    onChange(updateFunnel(funnels, activeFunnel.id, { id }));
+    setFunnelId(id);
+  };
+
+  const handleStageTitleChange = (stageId: string, title: string) => {
+    if (!activeFunnel) return;
+    onChange(
+      updateStage(funnels, activeFunnel.id, stageId, {
+        title,
+      }),
+    );
+  };
+
+  const handleStageIdChange = (stageId: string, rawId: string) => {
+    if (!activeFunnel) return;
+    const nextId = slugifyFunnelKey(rawId);
+    const taken = new Set(
+      activeFunnel.stages.filter((s) => s.id !== stageId).map((s) => s.id),
+    );
+    const id = uniqueKey(taken, nextId);
+    onChange(updateStage(funnels, activeFunnel.id, stageId, { id }));
+  };
+
+  return (
+    <div className="space-y-5 rounded-xl border border-border/70 bg-muted/20 px-5 py-5 sm:px-6 sm:py-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Label htmlFor="crm-funnel-select" className="text-sm font-medium">
+              Funil
+            </Label>
+            <Select
+              value={selectedId}
+              onValueChange={setFunnelId}
+              disabled={disabled}
+            >
+              <SelectTrigger id="crm-funnel-select" className="h-9 bg-background">
+                <SelectValue placeholder="Selecione o funil" />
+              </SelectTrigger>
+              <SelectContent>
+                {funnels.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.listName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0"
+            disabled={disabled}
+            onClick={() => setNewFunnelOpen(true)}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Novo funil
+          </Button>
+        </div>
+      </div>
+
+      {activeFunnel ? (
+        <>
+          <div className="grid gap-4 rounded-lg border border-border bg-background p-4 sm:grid-cols-2 sm:p-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="crm-funnel-name">Nome exibido no CRM</Label>
+              <Input
+                id="crm-funnel-name"
+                value={activeFunnel.listName}
+                disabled={disabled}
+                onChange={(e) => handleFunnelListNameChange(e.target.value)}
+                placeholder="Ex.: COMERCIAL"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="crm-funnel-id">Identificador (slug)</Label>
+              <Input
+                id="crm-funnel-id"
+                value={activeFunnel.id}
+                disabled={disabled}
+                className="font-mono text-sm"
+                onChange={(e) => handleFunnelIdChange(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Usado internamente. Negociações antigas mantêm o id anterior se você alterar.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Etapas do Kanban</h3>
+                <p className="text-xs text-muted-foreground">
+                  Ordem de cima para baixo = colunas da esquerda para a direita no quadro.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  const stage = createDefaultStage(activeFunnel);
+                  onChange(addStage(funnels, activeFunnel.id, stage));
+                }}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Adicionar etapa
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {activeFunnel.stages.map((stage, index) => (
+                <div
+                  key={`${activeFunnel.id}-${stage.id}-${index}`}
+                  className={cn(
+                    "rounded-lg border border-border bg-card px-4 py-4 sm:px-5",
+                    index % 2 === 1 && "bg-muted/15",
+                  )}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                    <div className="flex shrink-0 flex-row gap-1 sm:flex-col">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={disabled || index === 0}
+                        aria-label="Mover etapa para cima"
+                        onClick={() =>
+                          onChange(moveStage(funnels, activeFunnel.id, stage.id, "up"))
+                        }
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={disabled || index === activeFunnel.stages.length - 1}
+                        aria-label="Mover etapa para baixo"
+                        onClick={() =>
+                          onChange(moveStage(funnels, activeFunnel.id, stage.id, "down"))
+                        }
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Nome da etapa</Label>
+                          <Input
+                            value={stage.title}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              handleStageTitleChange(stage.id, e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">ID da etapa</Label>
+                          <Input
+                            value={stage.id}
+                            disabled={disabled}
+                            className="font-mono text-sm"
+                            onChange={(e) =>
+                              handleStageIdChange(stage.id, e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Campos obrigatórios ao mover card para esta etapa
+                        </p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                          {CRM_STAGE_REQUIRED_FIELD_OPTIONS.map((opt) => {
+                            const checked = (stage.requiredFields ?? []).includes(opt.id);
+                            return (
+                              <label
+                                key={opt.id}
+                                className="flex cursor-pointer items-center gap-2 text-sm"
+                                title={opt.description}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onCheckedChange={(value) => {
+                                    onChange(
+                                      toggleStageField(
+                                        funnels,
+                                        activeFunnel.id,
+                                        stage.id,
+                                        opt.id,
+                                        value === true,
+                                      ),
+                                    );
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={disabled || activeFunnel.stages.length <= 1}
+                      aria-label="Excluir etapa"
+                      onClick={() => setDeleteStageId(stage.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end border-t border-border/60 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={disabled || funnels.length <= 1}
+              onClick={() => setDeleteFunnelOpen(true)}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Excluir funil
+            </Button>
+          </div>
+        </>
+      ) : null}
+
+      <NewFunnelDialog
+        open={newFunnelOpen}
+        onOpenChange={setNewFunnelOpen}
+        name={newFunnelName}
+        onNameChange={setNewFunnelName}
+        disabled={disabled}
+        onConfirm={() => {
+          const funnel = createDefaultFunnel(newFunnelName || "Novo funil", funnels);
+          onChange(addFunnel(funnels, funnel));
+          setFunnelId(funnel.id);
+          setNewFunnelName("");
+          setNewFunnelOpen(false);
+        }}
+      />
+
+      <AlertDialog open={deleteFunnelOpen} onOpenChange={setDeleteFunnelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir funil?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O funil &quot;{activeFunnel?.listName}&quot; será removido desta configuração. Cards no CRM
+              que ainda usam etapas deste funil podem ficar inconsistentes até você salvar e
+              reorganizar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!activeFunnel) return;
+                const next = removeFunnel(funnels, activeFunnel.id);
+                onChange(next);
+                setFunnelId(next[0]?.id ?? "");
+                setDeleteFunnelOpen(false);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteStageId != null}
+        onOpenChange={(open) => !open && setDeleteStageId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir etapa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Negociações já nesta etapa continuarão com o ID antigo no banco até serem movidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!activeFunnel || !deleteStageId) return;
+                onChange(removeStage(funnels, activeFunnel.id, deleteStageId));
+                setDeleteStageId(null);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function NewFunnelDialog({
+  open,
+  onOpenChange,
+  name,
+  onNameChange,
+  disabled,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  onNameChange: (value: string) => void;
+  disabled?: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo funil</DialogTitle>
+          <DialogDescription>
+            Serão criadas etapas iniciais (Lead e Contato). Você pode renomear e reordenar depois.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5 py-2">
+          <Label htmlFor="new-funnel-name">Nome do funil</Label>
+          <Input
+            id="new-funnel-name"
+            value={name}
+            disabled={disabled}
+            placeholder="Ex.: Parcerias"
+            onChange={(e) => onNameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onConfirm();
+              }
+            }}
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" disabled={disabled || !name.trim()} onClick={onConfirm}>
+            Criar funil
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

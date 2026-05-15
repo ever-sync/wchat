@@ -1,0 +1,110 @@
+import { lazy, Suspense } from "react";
+import { ThemeProvider } from "next-themes";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
+import Login from "./pages/Login";
+import Cadastro from "./pages/Cadastro";
+import CadastroPlano from "./pages/CadastroPlano";
+import CadastroPagamento from "./pages/CadastroPagamento";
+import AtivarAcesso from "./pages/AtivarAcesso";
+import RecuperarSenha from "./pages/RecuperarSenha";
+import RedefinirSenha from "./pages/RedefinirSenha";
+import Onboarding from "./pages/Onboarding";
+import NotFound from "./pages/NotFound";
+
+const Inbox = lazy(() => import("./pages/Inbox"));
+const Clientes = lazy(() => import("./pages/Clientes"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const ClientePerfil = lazy(() => import("./pages/ClientePerfil"));
+const Crm = lazy(() => import("./pages/Crm"));
+const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
+const Relatorios = lazy(() => import("./pages/Relatorios"));
+
+const PageFallback = () => (
+  <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
+    Carregando…
+  </div>
+);
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+    },
+  },
+});
+
+const RootRedirect = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Carregando sessão...
+      </div>
+    );
+  }
+
+  return <Navigate to={isAuthenticated ? "/inbox" : "/login"} replace />;
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} forcedTheme="light">
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <Suspense fallback={<PageFallback />}>
+              <RouteErrorBoundary>
+                <Routes>
+                  {/* Public */}
+                  <Route path="/" element={<RootRedirect />} />
+                  <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+                  <Route path="/cadastro" element={<PublicOnlyRoute><Cadastro /></PublicOnlyRoute>} />
+                  <Route path="/cadastro/plano" element={<PublicOnlyRoute><CadastroPlano /></PublicOnlyRoute>} />
+                  <Route path="/cadastro/pagamento" element={<PublicOnlyRoute><CadastroPagamento /></PublicOnlyRoute>} />
+                  <Route path="/recuperar-senha" element={<PublicOnlyRoute><RecuperarSenha /></PublicOnlyRoute>} />
+                  <Route path="/ativar-acesso" element={<AtivarAcesso />} />
+                  <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+                  <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+
+                  {/* Authenticated */}
+                  <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                    <Route
+                      path="/inbox"
+                      element={
+                        <RouteErrorBoundary title="Erro ao carregar o Inbox">
+                          <Inbox />
+                        </RouteErrorBoundary>
+                      }
+                    />
+                    <Route path="/clientes" element={<Clientes />} />
+                    <Route path="/clientes/:id" element={<ClientePerfil />} />
+                    <Route path="/crm" element={<Crm />} />
+                    <Route path="/crm/negociacao/:negotiationId" element={<CrmNegotiationDetail />} />
+                    <Route path="/relatorios" element={<Relatorios />} />
+                    <Route path="/configuracoes" element={<Configuracoes />} />
+                  </Route>
+
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </RouteErrorBoundary>
+            </Suspense>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  </QueryClientProvider>
+);
+
+export default App;

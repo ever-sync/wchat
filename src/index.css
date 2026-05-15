@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* wChat — paleta extraída da arte de marketing (img/image.png) */
+    --wchat-purple-900: 270 42% 18%;
+    --wchat-purple-800: 264 55% 28%;
+    --wchat-purple-700: 264 70% 35%;
+    --wchat-purple-600: 262 73% 40%;
+    --wchat-purple-500: 262 66% 51%;
+    --wchat-purple-400: 262 55% 62%;
+    --wchat-purple-200: 270 45% 90%;
+    --wchat-purple-100: 270 48% 96%;
+    --wchat-purple-50: 270 43% 98%;
+    --wchat-text: 252 7% 34%;
+    --wchat-text-muted: 252 6% 45%;
+    --wchat-white: 0 0% 100%;
+
+    /* Semânticos (shadcn / Tailwind) */
+    --background: var(--wchat-purple-50);
+    --foreground: var(--wchat-text);
+
+    --card: var(--wchat-white);
+    --card-foreground: var(--wchat-text);
+
+    --popover: var(--wchat-white);
+    --popover-foreground: var(--wchat-text);
+
+    --primary: var(--wchat-purple-600);
+    --primary-foreground: var(--wchat-white);
+
+    --secondary: var(--wchat-purple-100);
+    --secondary-foreground: var(--wchat-text);
+
+    --muted: var(--wchat-purple-100);
+    --muted-foreground: var(--wchat-text-muted);
+
+    --accent: var(--wchat-purple-500);
+    --accent-foreground: var(--wchat-white);
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: var(--wchat-purple-600);
+    --success-foreground: var(--wchat-white);
+
+    --warning: var(--wchat-purple-700);
+    --warning-foreground: var(--wchat-white);
+
+    --border: 270 28% 88%;
+    --input: 270 28% 88%;
+    --ring: var(--wchat-purple-600);
+
+    --radius: 0.625rem;
+
+    --sidebar-background: var(--wchat-white);
+    --sidebar-foreground: var(--wchat-text);
+    --sidebar-primary: var(--wchat-purple-600);
+    --sidebar-primary-foreground: var(--wchat-white);
+    --sidebar-accent: var(--wchat-purple-100);
+    --sidebar-accent-foreground: var(--wchat-text);
+    --sidebar-border: 270 28% 88%;
+    --sidebar-ring: var(--wchat-purple-600);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-poppins antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-syne text-[hsl(var(--wchat-purple-900))];
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply border border-border bg-card/80 backdrop-blur-xl;
+    box-shadow: 0 8px 32px hsl(var(--primary) / 0.08);
+  }
+
+  .glass-strong {
+    @apply border border-border bg-card/90 backdrop-blur-2xl;
+    box-shadow: 0 12px 40px hsl(var(--primary) / 0.12);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
