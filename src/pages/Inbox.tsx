@@ -1940,7 +1940,7 @@ export default function Inbox() {
               </>
             ) : (
               <div className="px-1">
-                <p className="font-syne text-xl font-semibold tracking-[-0.04em] text-foreground md:text-2xl">
+                <p className="text-xl font-semibold tracking-[-0.04em] text-foreground md:text-2xl">
                   wChat
                 </p>
                 <p className="mt-1 max-w-md text-sm font-medium text-muted-foreground">

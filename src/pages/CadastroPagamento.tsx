@@ -117,7 +117,7 @@ export default function CadastroPagamento() {
         <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
           <Zap className="w-5 h-5 text-accent-foreground" />
         </div>
-        <span className="font-syne font-bold text-xl text-foreground">DistribuiBot</span>
+        <span className="font-bold text-xl text-foreground">DistribuiBot</span>
       </div>
 
       <div className="flex items-center justify-center gap-2 mb-8">
@@ -141,7 +141,7 @@ export default function CadastroPagamento() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-w-4xl w-full">
         <div className="lg:col-span-3">
-          <h2 className="font-syne text-2xl font-bold text-foreground mb-1">Dados de pagamento</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-1">Dados de pagamento</h2>
           <p className="text-sm text-muted-foreground mb-6">Ambiente seguro. Dados fake para demonstração.</p>
 
           <Tabs defaultValue="cartao">
@@ -216,7 +216,7 @@ export default function CadastroPagamento() {
                 <div className="w-48 h-48 mx-auto bg-secondary rounded-xl flex items-center justify-center mb-4">
                   <QrCode className="w-32 h-32 text-muted-foreground" />
                 </div>
-                <p className="font-syne font-semibold text-foreground mb-2">Escaneie o QR Code</p>
+                <p className="font-semibold text-foreground mb-2">Escaneie o QR Code</p>
                 <p className="text-sm text-muted-foreground mb-4">Ou copie o código abaixo</p>
                 <div className="flex items-center gap-2 bg-secondary rounded-lg p-3 mb-4">
                   <code className="text-xs text-muted-foreground flex-1 truncate font-mono">00020126360014BR.GOV.BCB.PIX0114+5511998765432...</code>
@@ -240,7 +240,7 @@ export default function CadastroPagamento() {
 
         <div className="lg:col-span-2">
           <div className="glass rounded-xl p-6 sticky top-8">
-            <h3 className="font-syne font-bold text-foreground mb-4">Resumo do pedido</h3>
+            <h3 className="font-bold text-foreground mb-4">Resumo do pedido</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Plano</span>

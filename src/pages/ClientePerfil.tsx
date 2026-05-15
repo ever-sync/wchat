@@ -759,7 +759,7 @@ export default function ClientePerfil() {
                 <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Saldo de credito (CRM)</p>
-                    <p className="mt-2 font-syne text-2xl font-bold text-slate-800">
+                    <p className="mt-2 text-2xl font-bold text-slate-800">
                       {formatMoney(creditSummary?.totalCredit ?? 0)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -920,7 +920,7 @@ export default function ClientePerfil() {
         <TabsContent value="whatsapp">
           <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm">
             <CardHeader className="border-b border-border/60 bg-secondary/30">
-              <CardTitle className="font-syne text-lg">Relacionamento no WhatsApp</CardTitle>
+              <CardTitle className="text-lg">Relacionamento no WhatsApp</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-5">
               {customerChat ? (

@@ -105,7 +105,7 @@ export default function Cadastro() {
           <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
             <Zap className="w-5 h-5 text-accent-foreground" />
           </div>
-          <span className="font-syne font-bold text-xl text-foreground">DistribuiBot</span>
+          <span className="font-bold text-xl text-foreground">DistribuiBot</span>
         </div>
 
         {/* Stepper */}
@@ -126,7 +126,7 @@ export default function Cadastro() {
         </div>
 
         <div className="glass rounded-xl p-6">
-          <h1 className="font-syne text-2xl font-bold text-foreground mb-6 text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-6 text-center">
             Criar sua conta
           </h1>
 

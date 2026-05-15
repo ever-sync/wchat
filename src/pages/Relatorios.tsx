@@ -72,7 +72,7 @@ function MetricTile({
       )}
     >
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 font-syne text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
@@ -163,7 +163,7 @@ export default function Relatorios() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-syne text-2xl font-semibold tracking-tight text-foreground">Relatórios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Relatórios</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Atendimento WhatsApp, funil CRM, negócios parados, SLA comercial e performance da equipe.
           </p>

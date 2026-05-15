@@ -19,7 +19,7 @@ export default function CadastroPlano() {
         <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
           <Zap className="w-5 h-5 text-accent-foreground" />
         </div>
-        <span className="font-syne font-bold text-xl text-foreground">DistribuiBot</span>
+        <span className="font-bold text-xl text-foreground">DistribuiBot</span>
       </div>
 
       {/* Stepper */}
@@ -39,7 +39,7 @@ export default function CadastroPlano() {
         ))}
       </div>
 
-      <h1 className="font-syne text-3xl font-bold text-foreground mb-2 text-center">
+      <h1 className="text-3xl font-bold text-foreground mb-2 text-center">
         Escolha seu plano
       </h1>
       <p className="text-muted-foreground mb-6 text-center">
@@ -84,10 +84,10 @@ export default function CadastroPlano() {
               {plano.badge}
             </Badge>
 
-            <h3 className="font-syne text-xl font-bold text-foreground mb-1">{plano.nome}</h3>
+            <h3 className="text-xl font-bold text-foreground mb-1">{plano.nome}</h3>
 
             <div className="mb-5">
-              <span className="font-syne text-4xl font-bold text-foreground">
+              <span className="text-4xl font-bold text-foreground">
                 R$ {anual ? plano.preco_anual : plano.preco_mensal}
               </span>
               <span className="text-muted-foreground text-sm">/mês</span>

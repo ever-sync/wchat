@@ -20,9 +20,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        syne: ["Syne", "sans-serif"],
+        sans: ["Poppins", "sans-serif"],
         poppins: ["Poppins", "sans-serif"],
-        mono: ["DM Mono", "monospace"],
+        mono: ["Poppins", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

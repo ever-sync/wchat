@@ -60,7 +60,7 @@ export default function Onboarding() {
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
           <Zap className="h-5 w-5 text-accent-foreground" />
         </div>
-        <span className="font-syne text-xl font-bold text-foreground">DistribuiBot</span>
+        <span className="text-xl font-bold text-foreground">DistribuiBot</span>
       </div>
 
       <div className="mb-8 w-full max-w-xl">
@@ -74,7 +74,7 @@ export default function Onboarding() {
       <div className="glass w-full max-w-xl rounded-2xl p-8">
         {step === 1 && (
           <div className="text-center">
-            <h2 className="font-syne text-2xl font-bold text-foreground">Conectar WhatsApp</h2>
+            <h2 className="text-2xl font-bold text-foreground">Conectar WhatsApp</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Comece vinculando uma instancia UAZAPI realmente conectada.
             </p>
@@ -123,7 +123,7 @@ export default function Onboarding() {
 
         {step === 2 && (
           <div>
-            <h2 className="text-center font-syne text-2xl font-bold text-foreground">Importar clientes</h2>
+            <h2 className="text-center text-2xl font-bold text-foreground">Importar clientes</h2>
             <p className="mt-2 text-center text-sm text-muted-foreground">
               A operacao so ganha vida quando a base real entra no modulo de clientes.
             </p>
@@ -151,7 +151,7 @@ export default function Onboarding() {
 
         {step === 3 && (
           <div>
-            <h2 className="text-center font-syne text-2xl font-bold text-foreground">Organizar a operacao</h2>
+            <h2 className="text-center text-2xl font-bold text-foreground">Organizar a operacao</h2>
             <p className="mt-2 text-center text-sm text-muted-foreground">
               Antes de escalar o atendimento, revise equipe, acessos e integracoes.
             </p>
@@ -189,7 +189,7 @@ export default function Onboarding() {
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-success/20">
               <PartyPopper className="h-10 w-10 text-success" />
             </div>
-            <h2 className="font-syne text-2xl font-bold text-foreground">Estrutura inicial pronta</h2>
+            <h2 className="text-2xl font-bold text-foreground">Estrutura inicial pronta</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Sua conta ja tem a base para comecar, mas a operacao real depende de validar envios e respostas no WhatsApp.
             </p>

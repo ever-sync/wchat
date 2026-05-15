@@ -348,7 +348,7 @@ export default function Configuracoes() {
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto bg-background px-4 py-4 pb-24 md:mx-auto md:max-w-6xl md:px-6 md:py-8 md:pb-8">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="font-syne text-2xl font-bold text-foreground">Configuracoes</h1>
+          <h1 className="text-2xl font-bold text-foreground">Configuracoes</h1>
           <p className="text-sm text-muted-foreground">Perfil, integracoes, funis do CRM e acessos do tenant.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -373,7 +373,7 @@ export default function Configuracoes() {
         <TabsContent value="perfil" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">Meu perfil</CardTitle>
+              <CardTitle className="text-lg">Meu perfil</CardTitle>
               <CardDescription>Edite seus dados basicos de acesso.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -444,7 +444,7 @@ export default function Configuracoes() {
 
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">Resumo da conta</CardTitle>
+              <CardTitle className="text-lg">Resumo da conta</CardTitle>
               <CardDescription>Visao rapida da sessao e do tenant atual.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -472,7 +472,7 @@ export default function Configuracoes() {
         <TabsContent value="integracoes" className="space-y-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="font-syne text-xl font-bold text-foreground">Integrações operacionais</h2>
+              <h2 className="text-xl font-bold text-foreground">Integrações operacionais</h2>
               <p className="text-sm text-muted-foreground">Conecte instancias UAZAPI e acompanhe a operacao.</p>
             </div>
             <div className="flex gap-2">
@@ -582,7 +582,7 @@ export default function Configuracoes() {
             {[{ label: "Instancias conectadas", value: metrics.activeInstances, icon: MessageSquare }, { label: "Instancias cadastradas", value: metrics.totalInstances, icon: ShieldCheck }].map((metric) => (
               <Card key={metric.label} className="border-border/60 bg-card/80">
                 <CardContent className="flex items-center justify-between p-5">
-                  <div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="font-syne text-2xl font-bold text-foreground">{metric.value}</p></div>
+                  <div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="text-2xl font-bold text-foreground">{metric.value}</p></div>
                   <div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div>
                 </CardContent>
               </Card>
@@ -591,7 +591,7 @@ export default function Configuracoes() {
 
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">Instancias WhatsApp</CardTitle>
+              <CardTitle className="text-lg">Instancias WhatsApp</CardTitle>
               <CardDescription>Estados reais vindos da UAZAPI e do banco.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -604,7 +604,7 @@ export default function Configuracoes() {
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-syne text-lg font-bold text-foreground">{instance.displayName}</h3>
+                          <h3 className="text-lg font-bold text-foreground">{instance.displayName}</h3>
                           <Badge className={statusStyles[instance.status]}>{instance.status === "connected" ? "Conectada" : instance.status === "connecting" ? "Conectando" : instance.status === "error" ? "Erro" : "Desconectada"}</Badge>
                           {instance.isDefault ? <Badge className="bg-accent text-accent-foreground">Padrao</Badge> : null}
                         </div>
@@ -684,7 +684,7 @@ export default function Configuracoes() {
 
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">IA no n8n</CardTitle>
+              <CardTitle className="text-lg">IA no n8n</CardTitle>
               <CardDescription>
                 Webhook para o n8n responder leads no mesmo WhatsApp. Use a edge function{" "}
                 <code className="text-xs">n8n-reply</code> para enviar mensagens. A IA só é acionada
@@ -807,7 +807,7 @@ export default function Configuracoes() {
 
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">Vendedores (Trendii)</CardTitle>
+              <CardTitle className="text-lg">Vendedores (Trendii)</CardTitle>
               <CardDescription>
                 Perfis de equipe vinculados a vendedores para metas e relatórios ({sellers.length} ativos).
               </CardDescription>
@@ -834,14 +834,14 @@ export default function Configuracoes() {
         <TabsContent value="colaboradores" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             {[{ label: "Colaboradores ativos", value: collaboratorMetrics.active, icon: Users }, { label: "Administradores", value: collaboratorMetrics.admins, icon: ShieldCheck }, { label: "Convites pendentes", value: collaboratorMetrics.pending, icon: Mail }].map((metric) => (
-              <Card key={metric.label} className="border-border/60 bg-card/80"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="font-syne text-2xl font-bold text-foreground">{metric.value}</p></div><div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div></CardContent></Card>
+              <Card key={metric.label} className="border-border/60 bg-card/80"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="text-2xl font-bold text-foreground">{metric.value}</p></div><div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div></CardContent></Card>
             ))}
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
             <Card className="border-border/60 bg-card/80">
               <CardHeader>
-                <CardTitle className="font-syne text-lg">Criar acesso de colaborador</CardTitle>
+                <CardTitle className="text-lg">Criar acesso de colaborador</CardTitle>
                 <CardDescription>Convide por e-mail e defina o papel inicial.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -910,7 +910,7 @@ export default function Configuracoes() {
 
             <div className="space-y-4">
               <Card className="border-border/60 bg-card/80">
-                <CardHeader><CardTitle className="font-syne text-lg">Equipe ativa</CardTitle><CardDescription>Usuarios ja vinculados ao tenant.</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="text-lg">Equipe ativa</CardTitle><CardDescription>Usuarios ja vinculados ao tenant.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {collaborators.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum colaborador ativo encontrado.</div> : collaborators.map((member) => (
                     <div key={member.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
@@ -922,7 +922,7 @@ export default function Configuracoes() {
               </Card>
 
               <Card className="border-border/60 bg-card/80">
-                <CardHeader><CardTitle className="font-syne text-lg">Convites e pendencias</CardTitle><CardDescription>Controle do que ainda nao foi aceito.</CardDescription></CardHeader>
+                <CardHeader><CardTitle className="text-lg">Convites e pendencias</CardTitle><CardDescription>Controle do que ainda nao foi aceito.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {invites.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Ainda nao existem convites registrados.</div> : invites.map((invite) => (
                     <div key={invite.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
@@ -985,7 +985,7 @@ export default function Configuracoes() {
         <TabsContent value="funis" className="space-y-6">
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
-              <CardTitle className="font-syne text-lg">Funis do CRM</CardTitle>
+              <CardTitle className="text-lg">Funis do CRM</CardTitle>
               <CardDescription>
                 Crie e edite funis, etapas do Kanban e campos obrigatórios usados em <strong>/crm</strong>.
                 Sem configuração salva, o app usa os funis padrão.

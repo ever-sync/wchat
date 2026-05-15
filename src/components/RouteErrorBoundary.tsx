@@ -33,7 +33,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="h-7 w-7 text-destructive" />
           </div>
           <div className="max-w-md space-y-2">
-            <h2 className="font-syne text-xl font-semibold text-foreground">
+            <h2 className="text-xl font-semibold text-foreground">
               {this.props.title ?? "Algo deu errado nesta tela"}
             </h2>
             <p className="text-sm text-muted-foreground break-words">{this.state.error.message}</p>
