@@ -7,8 +7,9 @@ describe("canReleaseCrmNegotiationToPool", () => {
     expect(canReleaseCrmNegotiationToPool("operacao")).toBe(true);
   });
 
-  it("nega vendedor e demais papéis", () => {
-    expect(canReleaseCrmNegotiationToPool("vendedor")).toBe(false);
+  it("nega atendimento, financeiro e demais papeis", () => {
+    expect(canReleaseCrmNegotiationToPool("atendimento")).toBe(false);
+    expect(canReleaseCrmNegotiationToPool("financeiro")).toBe(false);
     expect(canReleaseCrmNegotiationToPool(undefined)).toBe(false);
   });
 });

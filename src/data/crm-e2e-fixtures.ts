@@ -11,7 +11,6 @@ export const E2E_POOL_NEGOTIATION: CrmNegotiation = {
   starCount: 0,
   createdAt: "2026-05-01T10:00:00.000Z",
   nextTaskAt: "2026-06-01T10:00:00.000Z",
-  closingForecast: null,
   lastContactAt: "2026-05-01T10:00:00.000Z",
   lastInteractionAt: "2026-05-01T10:00:00.000Z",
   qualification: 2,
