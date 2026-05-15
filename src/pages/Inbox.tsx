@@ -315,7 +315,7 @@ export default function Inbox() {
     { enabled: saleFlowOpen, staleTime: 60_000 },
   );
   const registerSaleFlow = useRegisterSaleFlow();
-  const { data: availableTags = [] } = useChatTags();
+  const { data: availableTags = [], isLoading: tagsLoading } = useChatTags();
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
   const assignChatMutation = useAssignChat();
@@ -1749,7 +1749,9 @@ export default function Inbox() {
               prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
             )
           }
+          onClearTags={() => setSelectedTagIds([])}
           availableTags={availableTags}
+          tagsLoading={tagsLoading}
           instances={instances}
           chatsLoading={chatsLoading}
           chats={chats}

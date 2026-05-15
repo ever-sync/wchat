@@ -29,6 +29,30 @@ export function mergeOpenCrmTasksForNegotiationView(
   return list;
 }
 
+export type OpenCrmTaskDueCounts = {
+  pending: number;
+  overdue: number;
+};
+
+/** Conta tarefas abertas sem prazo ou com prazo futuro (pendente) vs. vencidas (atrasada). */
+export function countOpenCrmTasksByDue(tasks: CrmTask[], nowMs = Date.now()): OpenCrmTaskDueCounts {
+  let pending = 0;
+  let overdue = 0;
+  for (const t of tasks) {
+    if (!t.dueAt?.trim()) {
+      pending += 1;
+      continue;
+    }
+    const ms = new Date(t.dueAt).getTime();
+    if (Number.isNaN(ms) || ms >= nowMs) {
+      pending += 1;
+    } else {
+      overdue += 1;
+    }
+  }
+  return { pending, overdue };
+}
+
 /** Concluídas: mesma união, ordenadas por `updatedAt` decrescente. */
 export function mergeCompletedCrmTasksForNegotiationView(
   byNegotiation: CrmTask[],

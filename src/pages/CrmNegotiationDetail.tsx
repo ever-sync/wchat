@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
+import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -342,6 +343,7 @@ function CrmNegotiationDetailContent({
   const [taskClientOnly, setTaskClientOnly] = useState(false);
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [lostDialogBlockCustomer, setLostDialogBlockCustomer] = useState(false);
+  const [winDialogOpen, setWinDialogOpen] = useState(false);
   const taskAssigneeDefaultSeededRef = useRef(false);
 
   useEffect(() => {
@@ -588,43 +590,14 @@ function CrmNegotiationDetailContent({
           setLostDialogOpen(true);
         }}
         onMarkWin={() => {
-          if (isPersistedRow) {
-            void (async () => {
-              try {
-                await updateNegotiation.mutateAsync({
-                  id: negotiation.id,
-                  patch: { status: "vendido", stageId: "venda" },
-                });
-                setPipelineActiveIndex(4);
-                if (linkedCustomer) {
-                  const nextStatus: CustomerStatus =
-                    linkedCustomer.status === "bloqueado" ? "ativo" : linkedCustomer.status;
-                  await syncLinkedCustomer(linkedCustomer, {
-                    status: nextStatus,
-                    stageKey: "venda",
-                    funnelId: negotiation.funnelId,
-                  });
-                }
-                toast({
-                  title: "Marcar venda",
-                  description: linkedCustomer
-                    ? "Negociação e funil do cliente atualizados. Registre itens na aba CRM do cadastro."
-                    : "Negociação marcada como vendida.",
-                });
-              } catch (e) {
-                toast({
-                  title: "Não foi possível salvar",
-                  description: e instanceof Error ? e.message : "Tente novamente.",
-                  variant: "destructive",
-                });
-              }
-            })();
+          if (!isPersistedRow && !isE2eMockAuth) {
+            toast({
+              title: "Marcar venda",
+              description: "Registre a venda na área CRM ao expandir o cadastro ou crie o cliente em Clientes.",
+            });
             return;
           }
-          toast({
-            title: "Marcar venda",
-            description: "Registre a venda na área CRM ao expandir o cadastro ou crie o cliente em Clientes.",
-          });
+          setWinDialogOpen(true);
         }}
         onEdit={() => {
           if (linkedCustomer) {
@@ -998,6 +971,49 @@ function CrmNegotiationDetailContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <MarkWinDialog
+        open={winDialogOpen}
+        onOpenChange={setWinDialogOpen}
+        initialValue={negotiation.totalValue}
+        pending={updateNegotiation.isPending || updateCustomer.isPending}
+        onConfirm={async (totalValue) => {
+          try {
+            if (isE2eMockAuth && !isPersistedRow) {
+              setPipelineActiveIndex(4);
+              toast({ title: "Marcar venda", description: "Negociação atualizada." });
+              return;
+            }
+            await updateNegotiation.mutateAsync({
+              id: negotiation.id,
+              patch: { status: "vendido", stageId: "venda", totalValue },
+            });
+            setPipelineActiveIndex(4);
+            if (linkedCustomer) {
+              const nextStatus: CustomerStatus =
+                linkedCustomer.status === "bloqueado" ? "ativo" : linkedCustomer.status;
+              await syncLinkedCustomer(linkedCustomer, {
+                status: nextStatus,
+                stageKey: "venda",
+                funnelId: negotiation.funnelId,
+              });
+            }
+            toast({
+              title: "Marcar venda",
+              description: linkedCustomer
+                ? "Negociação e funil do cliente atualizados. Registre itens na aba CRM do cadastro."
+                : "Negociação marcada como vendida.",
+            });
+          } catch (e) {
+            toast({
+              title: "Não foi possível salvar",
+              description: e instanceof Error ? e.message : "Tente novamente.",
+              variant: "destructive",
+            });
+            throw e;
+          }
+        }}
+      />
 
       <MarkLostDialog
         open={lostDialogOpen}

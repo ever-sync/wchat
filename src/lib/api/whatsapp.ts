@@ -1049,6 +1049,20 @@ function chatMatchesInboxFilters(chat: InboxChat, filters: InboxChatFilters | un
       return false;
     }
   }
+  if (f.tagIds?.length) {
+    const tagSet = new Set(f.tagIds);
+    if (!chat.tags?.some((tag) => tagSet.has(tag.tagId))) {
+      return false;
+    }
+  }
+  const now = Date.now();
+  if (f.snoozedOnly) {
+    if (!chat.snoozeUntil || new Date(chat.snoozeUntil).getTime() <= now) {
+      return false;
+    }
+  } else if (f.hideSnoozed && chat.snoozeUntil && new Date(chat.snoozeUntil).getTime() > now) {
+    return false;
+  }
   return true;
 }
 

@@ -37,6 +37,7 @@ import {
 import { useCustomerCreditSummary, useCustomerCredits, useCustomerSales, useReturns } from "@/lib/api/sales";
 import { useEnsureLeadFromChat } from "@/lib/api/crm-lead";
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
+import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CUSTOMER_TAGS_SOURCE_KEY, parseCustomerTags, serializeCustomerTags } from "@/lib/customer-tags";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import { leadPrefillFromInboxChat, linkSearchHintFromInboxChat } from "@/lib/inbox-clientes-deeplink";
@@ -805,10 +806,20 @@ export function CustomerProfileSheet({
               </div>
             ) : null}
 
+            {chat && !customer && isSupabaseConfigured ? (
+              <div className="mb-5">
+                <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} />
+              </div>
+            ) : null}
+
             {customer && chat ? (
               <div className="space-y-5">
                 <CustomerQuickFacts customer={customer} chat={chat} messageCount={totalMessages} />
-                <ProfileTagsPicker customer={customer} suggestionTags={tagSuggestions} />
+                {isSupabaseConfigured ? (
+                  <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} />
+                ) : (
+                  <ProfileTagsPicker customer={customer} suggestionTags={tagSuggestions} />
+                )}
                 {isSupabaseConfigured ? (
                   <ProfilePipelineSelects customer={customer} funnels={effectiveCrmFunnels} />
                 ) : null}

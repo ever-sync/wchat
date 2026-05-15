@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countOpenCrmTasksByDue,
   mergeCompletedCrmTasksForNegotiationView,
   mergeOpenCrmTasksForNegotiationView,
 } from "@/lib/crm/negotiation-task-view";
@@ -56,6 +57,29 @@ describe("mergeOpenCrmTasksForNegotiationView", () => {
     });
     const out = mergeOpenCrmTasksForNegotiationView([t0, t1], [t2]);
     expect(out.map((x) => x.id)).toEqual(["c", "b", "a"]);
+  });
+});
+
+describe("countOpenCrmTasksByDue", () => {
+  const now = new Date("2026-05-15T12:00:00.000Z").getTime();
+
+  it("separa pendentes e atrasadas", () => {
+    const tasks = [
+      task({ id: "1", title: "sem prazo", status: "aberta", dueAt: null }),
+      task({
+        id: "2",
+        title: "futura",
+        status: "aberta",
+        dueAt: "2026-06-01T10:00:00.000Z",
+      }),
+      task({
+        id: "3",
+        title: "atrasada",
+        status: "aberta",
+        dueAt: "2026-05-01T10:00:00.000Z",
+      }),
+    ];
+    expect(countOpenCrmTasksByDue(tasks, now)).toEqual({ pending: 2, overdue: 1 });
   });
 });
 

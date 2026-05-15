@@ -1,19 +1,7 @@
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 
-/** Chaves de teste do Google — sempre passam na verificacao (dev/local). */
-export const RECAPTCHA_TEST_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXJiZLyM";
-
 export function getRecaptchaSiteKey(): string | null {
-  const configured = import.meta.env.VITE_RECAPTCHA_SITE_KEY?.trim();
-  if (configured) {
-    return configured;
-  }
-
-  if (import.meta.env.DEV) {
-    return RECAPTCHA_TEST_SITE_KEY;
-  }
-
-  return null;
+  return import.meta.env.VITE_RECAPTCHA_SITE_KEY?.trim() || null;
 }
 
 export function isRecaptchaEnabled(): boolean {

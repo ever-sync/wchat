@@ -1,7 +1,10 @@
-import { Search, SquarePen, Tag, X } from "lucide-react";
-import type { RefObject } from "react";
+import { ChevronDown, Search, SquarePen, Tag, X } from "lucide-react";
+import { useState, type RefObject } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { ChatTag, InboxChat, WhatsappInstance } from "@/types/domain";
 import { ConversationRow } from "./ConversationRow";
 
@@ -18,7 +21,9 @@ export type ConversationListProps = {
   onSnoozedFilterChange: (value: "active" | "snoozed") => void;
   selectedTagIds: string[];
   onTagToggle: (tagId: string) => void;
+  onClearTags: () => void;
   availableTags: ChatTag[];
+  tagsLoading?: boolean;
   instances: WhatsappInstance[];
   chatsLoading: boolean;
   chats: InboxChat[];
@@ -45,7 +50,9 @@ export function ConversationList({
   onSnoozedFilterChange,
   selectedTagIds,
   onTagToggle,
+  onClearTags,
   availableTags,
+  tagsLoading = false,
   instances,
   chatsLoading,
   chats,
@@ -56,7 +63,12 @@ export function ConversationList({
   onPrefetchChat,
   searchInputRef,
 }: ConversationListProps) {
+  const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const activeTagCount = selectedTagIds.length;
+  const tagFilterLabel =
+    activeTagCount > 0
+      ? `${activeTagCount} etiqueta${activeTagCount > 1 ? "s" : ""}`
+      : "Etiquetas";
 
   return (
     <aside className="flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden border-r border-border bg-card md:max-w-[420px]">
@@ -111,7 +123,7 @@ export function ConversationList({
             </Select>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Select
               value={snoozedFilter}
               onValueChange={(value) => onSnoozedFilterChange(value as "active" | "snoozed")}
@@ -136,36 +148,75 @@ export function ConversationList({
               </SelectContent>
             </Select>
 
-            {availableTags.length > 0 ? (
-              <div className="relative">
-                <Select
-                  value=""
-                  onValueChange={(tagId) => onTagToggle(tagId)}
-                >
-                  <SelectTrigger className="h-9 rounded-lg border-0 bg-wchat-50 text-xs text-foreground focus:ring-primary">
-                    <Tag className="mr-1.5 h-3 w-3 shrink-0" />
-                    <span>
-                      {activeTagCount > 0 ? `${activeTagCount} etiq.` : "Etiquetas"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="border-border bg-card text-foreground">
-                    {availableTags.map((tag) => (
-                      <SelectItem key={tag.id} value={tag.id}>
-                        <span className="flex items-center gap-2">
+          </div>
+
+          <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "flex h-9 w-full items-center justify-between gap-2 rounded-lg bg-wchat-50 px-3 text-xs text-foreground transition-colors hover:bg-wchat-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                  activeTagCount > 0 && "ring-1 ring-primary/35",
+                )}
+                aria-label="Filtrar por etiquetas"
+              >
+                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  <Tag className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  {tagFilterLabel}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[var(--radix-popover-trigger-width)] border-border bg-card p-1.5 text-foreground"
+            >
+              {tagsLoading ? (
+                <p className="px-2 py-3 text-center text-xs text-muted-foreground">Carregando etiquetas...</p>
+              ) : availableTags.length === 0 ? (
+                <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                  Nenhuma etiqueta cadastrada ainda.
+                </p>
+              ) : (
+                <>
+                  <div className="max-h-52 space-y-0.5 overflow-y-auto overscroll-y-contain">
+                    {availableTags.map((tag) => {
+                      const checked = selectedTagIds.includes(tag.id);
+                      return (
+                        <label
+                          key={tag.id}
+                          className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-xs hover:bg-wchat-50"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => onTagToggle(tag.id)}
+                            aria-label={tag.name}
+                          />
                           <span
-                            className="inline-block h-2 w-2 rounded-full"
+                            className="inline-block h-2 w-2 shrink-0 rounded-full"
                             style={{ backgroundColor: tag.color }}
                           />
-                          {tag.name}
-                          {selectedTagIds.includes(tag.id) ? " ✓" : ""}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </div>
+                          <span className="min-w-0 flex-1 truncate font-medium">{tag.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {activeTagCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClearTags();
+                        setTagsPopoverOpen(false);
+                      }}
+                      className="mt-1 w-full rounded-md px-2 py-2 text-center text-xs font-medium text-primary hover:bg-wchat-50"
+                    >
+                      Limpar filtro
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
 
           {selectedTagIds.length > 0 ? (
             <div className="flex flex-wrap gap-1">

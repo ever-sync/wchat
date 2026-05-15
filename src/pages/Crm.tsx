@@ -41,7 +41,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { CrmKanbanCardTasks } from "@/components/crm/CrmKanbanCardTasks";
+import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { Button } from "@/components/ui/button";
@@ -973,7 +973,7 @@ export default function Crm() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#F8F9FA] text-[#212529]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F8F9FA] text-[#212529]">
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#dee2e6] bg-white px-4 py-3 md:gap-3 md:px-6">
         <div className="mr-auto inline-flex overflow-hidden rounded-md border border-[#ced4da] bg-white shadow-sm">
           <button
@@ -1707,10 +1707,11 @@ export default function Crm() {
 
       {view === "board" ? (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={(e) => void handleDragEnd(e)}>
-          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-4 md:p-6">
-            <div className="flex h-full min-w-max gap-4 pb-2">
-              {stagesWithCards.map((stage) => (
-                <KanbanColumn
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+              <div className="flex h-full min-h-0 min-w-max items-stretch gap-4 pb-2">
+                {stagesWithCards.map((stage) => (
+                  <KanbanColumn
                   key={stage.id}
                   stage={stage}
                   staleNegotiationDays={staleNegotiationDays}
@@ -1738,8 +1739,9 @@ export default function Crm() {
                       description: "Maior valor primeiro (lista e colunas usam a mesma ordenação).",
                     });
                   }}
-                />
-              ))}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </DndContext>
@@ -2037,11 +2039,13 @@ function DraggableNegotiationCard({
       {card.sourceChatPreview ? (
         <p className="mb-2 line-clamp-2 text-xs text-[#6c757d]">{card.sourceChatPreview}</p>
       ) : null}
-      <CrmKanbanCardTasks card={card} onOpenNegotiation={onOpenNegotiation} />
       <div className="mb-3 flex items-center justify-between gap-2 text-[#868e96]">
-        <span className="inline-flex items-center gap-1 text-xs">
-          <Star className="h-3.5 w-3.5 fill-[#ffc107] text-[#ffc107]" aria-hidden />
-          {card.starCount}
+        <span className="inline-flex items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1">
+            <Star className="h-3.5 w-3.5 fill-[#ffc107] text-[#ffc107]" aria-hidden />
+            {card.starCount}
+          </span>
+          <CrmKanbanCardTaskBadge card={card} />
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {card.sourceChatId && onOpenChat ? (
@@ -2164,8 +2168,8 @@ function KanbanColumn({
   });
 
   return (
-    <div className="flex w-[300px] shrink-0 flex-col rounded-lg bg-[#E9ECEF] p-3 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-2">
+    <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col rounded-lg bg-[#E9ECEF] p-3 shadow-sm">
+      <div className="mb-3 flex shrink-0 items-start justify-between gap-2">
         <div>
           <h3 className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[#495057]">
             {stage.title}{" "}
@@ -2197,7 +2201,7 @@ function KanbanColumn({
         ref={setNodeRef}
         data-testid={`crm-column-${stage.id}`}
         className={cn(
-          "flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto rounded-md transition-colors",
+          "scrollbar-hide flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain rounded-md transition-colors",
           isOver && "bg-[#d8ecf7]/90 ring-2 ring-[#5B2FD4] ring-inset",
         )}
       >

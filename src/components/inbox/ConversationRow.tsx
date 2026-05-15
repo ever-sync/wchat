@@ -42,6 +42,38 @@ function formatConversationTime(value?: string | null) {
   return format(date, "dd/MM", { locale: ptBR });
 }
 
+const MAX_TAG_DOTS = 8;
+
+function ConversationTagDots({ tags }: { tags: InboxChat["tags"] }) {
+  const list = tags ?? [];
+  if (list.length === 0) {
+    return null;
+  }
+  const visible = list.slice(0, MAX_TAG_DOTS);
+  const overflow = list.length - visible.length;
+  const label = list.map((t) => t.name).join(", ");
+
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5"
+      title={label}
+      aria-label={`Etiquetas: ${label}`}
+    >
+      {visible.map((tag) => (
+        <span
+          key={tag.tagId}
+          className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+          style={{ backgroundColor: tag.color }}
+          aria-hidden
+        />
+      ))}
+      {overflow > 0 ? (
+        <span className="text-[9px] font-medium leading-none text-muted-foreground">+{overflow}</span>
+      ) : null}
+    </span>
+  );
+}
+
 function AssigneeChip({ name }: { name: string }) {
   const initials = name
     .split(" ")
@@ -74,7 +106,6 @@ export function ConversationRow({
     ? chat.customerName
     : formatPhoneLabel(chat.remotePhoneE164 ?? chat.remotePhoneDigits ?? chat.remoteJid);
 
-  const visibleTags = (chat.tags ?? []).slice(0, 3);
   const snoozed = isChatSnoozed(chat);
   const slaBreached = isChatSlaBreached(chat);
   const slaMinutes = slaMinutesRemaining(chat);
@@ -96,9 +127,12 @@ export function ConversationRow({
         <div className="min-w-0 max-w-full flex-1">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] font-medium leading-4 text-foreground">
-                {chat.displayName}
-              </p>
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="min-w-0 truncate text-[15px] font-medium leading-4 text-foreground">
+                  {chat.displayName}
+                </p>
+                <ConversationTagDots tags={chat.tags} />
+              </div>
               <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">
                 {subtitle}
               </p>
@@ -153,24 +187,6 @@ export function ConversationRow({
           >
             {chat.lastMessagePreview || "Sem mensagens recentes"}
           </p>
-          {visibleTags.length > 0 ? (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {visibleTags.map((tag) => (
-                <span
-                  key={tag.tagId}
-                  className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                  style={{ backgroundColor: `${tag.color}22`, color: tag.color }}
-                >
-                  {tag.name}
-                </span>
-              ))}
-              {(chat.tags?.length ?? 0) > 3 ? (
-                <span className="text-[10px] text-muted-foreground">
-                  +{(chat.tags?.length ?? 0) - 3}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
     </button>

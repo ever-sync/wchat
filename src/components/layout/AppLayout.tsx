@@ -7,12 +7,13 @@ import { cn } from "@/lib/utils";
 export function AppLayout() {
   const { pathname } = useLocation();
   const isInbox = pathname === "/inbox" || pathname.startsWith("/inbox/");
+  const isCrmBoard = pathname === "/crm";
 
   return (
     <div
       className={cn(
         "flex flex-col md:flex-row",
-        isInbox
+        isInbox || isCrmBoard
           ? "h-[100dvh] max-h-[100dvh] overflow-hidden bg-background"
           : "min-h-[100dvh] bg-background",
       )}
