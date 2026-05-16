@@ -505,10 +505,6 @@ function CrmNegotiationDetailContent({
                         sourceColumns: {
                           ...linkedCustomer.sourceColumns,
                           campanha: payload.campanha,
-                          doenca: payload.doenca,
-                          isencao: payload.isencao,
-                          beneficio: payload.beneficio,
-                          qual_sua_renda_mensal: payload.qualSuaRendaMensal,
                         },
                       },
                     });
@@ -785,62 +781,6 @@ function CrmNegotiationDetailContent({
             description: label ? `Etapa: ${label}. Abra um cliente em Clientes para persistir.` : "Etapa alterada.",
           });
         }}
-        legacyDetailPanel={
-          isPersistedRow ? (
-            <div className="space-y-4 rounded-lg border border-dashed border-[#cfd8dc] bg-white p-6 text-sm text-[#546e7a]">
-              <p>
-                Esta negociação está salva em <strong>crm_negotiations</strong>. O funil do card e o funil em{" "}
-                <code className="rounded bg-[#eceff1] px-1">source_columns</code> do cliente permanecem alinhados quando
-                há vínculo.
-              </p>
-              {negotiation.customerId ? (
-                <p>
-                  <Button
-                    type="button"
-                    variant="link"
-                    className="h-auto p-0 text-[#00acc1]"
-                    onClick={() => navigate(`/clientes/${negotiation.customerId}`)}
-                  >
-                    Abrir cadastro completo do cliente
-                  </Button>
-                </p>
-              ) : isSupabaseConfigured ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    className="bg-[#00c1d4] text-white hover:opacity-95"
-                    onClick={() => setLinkDialogOpen(true)}
-                  >
-                    Criar e vincular cliente
-                  </Button>
-                </div>
-              ) : (
-                <p>Configure o Supabase para criar clientes e vincular a esta negociação.</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/crm")}>
-                  Voltar ao quadro
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4 rounded-lg border border-dashed border-[#cfd8dc] bg-white p-6 text-sm text-[#546e7a]">
-              <p>
-                Esta negociação é um <strong>card de demonstração</strong> do quadro CRM. Para abrir o mesmo layout com
-                dados reais (WhatsApp, CRM, edição), cadastre um cliente com o nome <strong>{negotiation.title}</strong> ou
-                defina o campo <code className="rounded bg-[#eceff1] px-1">customerId</code> no mock.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" className="bg-[#00c1d4] text-white hover:opacity-95" onClick={() => navigate("/clientes")}>
-                  Ir para Clientes
-                </Button>
-                <Button type="button" variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/crm")}>
-                  Voltar ao quadro
-                </Button>
-              </div>
-            </div>
-          )
-        }
       />
 
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>

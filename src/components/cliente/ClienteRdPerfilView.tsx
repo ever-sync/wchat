@@ -1,4 +1,4 @@
-import { type ReactNode, useState, type ReactElement } from "react";
+import { type ReactNode, useMemo, useState, type ReactElement } from "react";
 import {
   ArrowLeft,
   Calendar,
@@ -57,8 +57,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { buildPipelineLabels } from "@/lib/crm-pipeline";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
+import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { useToast } from "@/hooks/use-toast";
+import {
+  customFieldValueToString,
+  invalidateCustomerCustomFieldValues,
+  upsertCustomerCustomFieldValues,
+  useCustomerCustomFieldValues,
+  useCustomerCustomFields,
+} from "@/lib/api/customer-custom-fields";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import type { CrmTask, Customer } from "@/types/domain";
 
 /** Paleta wChat */
@@ -88,12 +97,9 @@ export type NegotiationPanelSavePayload = {
   closingForecastLocal: string;
   origem: "" | "organico" | "pago";
   campanha: string;
-  doenca: string;
-  isencao: string;
-  beneficio: string;
-  qualSuaRendaMensal: string;
   telefone: string;
   email: string;
+  customFieldValues: Record<string, string>;
 };
 
 type NegotiationPanelDraft = {
@@ -104,12 +110,9 @@ type NegotiationPanelDraft = {
   closingForecastLocal: string;
   origem: string;
   campanha: string;
-  doenca: string;
-  isencao: string;
-  beneficio: string;
-  qualSuaRendaMensal: string;
   telefone: string;
   email: string;
+  customFieldValues: Record<string, string>;
 };
 
 function sourceColumn(cliente: Customer, ...keys: string[]): string {
@@ -209,9 +212,9 @@ function PipelineChevrons({
 
 function NegField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-b border-[#eceff1] py-2.5 text-[13px] leading-snug last:border-b-0">
-      <span className="text-[#78909c]">{label}</span>
-      <span className="max-w-[58%] break-words text-right font-medium text-[#37474f]">{value || "—"}</span>
+    <div className="border-b border-[#eceff1] py-2.5 text-[13px] leading-snug last:border-b-0">
+      <p className="mb-0.5 text-[#78909c]">{label}</p>
+      <p className="break-words font-medium text-[#37474f]">{value.trim() || "—"}</p>
     </div>
   );
 }
@@ -628,8 +631,6 @@ export type ClienteRdPerfilViewProps = {
   showReleaseNegotiation?: boolean;
   onReleaseNegotiation?: () => void;
   releaseNegotiationPending?: boolean;
-  /** Cadastro completo, CRM e WhatsApp (conteúdo legado) */
-  legacyDetailPanel: ReactNode;
   /** Conteúdo da aba “Arquivos” (ex.: documentos do lead na ficha CRM). */
   negotiationDocumentsSlot?: ReactNode;
   /** Dados da negociação persistida (ficha CRM); habilita edição com lápis. */
@@ -677,7 +678,6 @@ export function ClienteRdPerfilView({
   showReleaseNegotiation,
   onReleaseNegotiation,
   releaseNegotiationPending,
-  legacyDetailPanel,
   negotiationDocumentsSlot,
   negotiationPanelSnapshot,
   onSaveNegotiationPanel,
@@ -686,6 +686,27 @@ export function ClienteRdPerfilView({
   mainTabDefault = "historico",
 }: ClienteRdPerfilViewProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: customFieldDefs = [] } = useCustomerCustomFields();
+  const { data: customFieldValueRows = [], isLoading: customFieldsLoading } = useCustomerCustomFieldValues(
+    cliente.id,
+  );
+  const customFieldsById = useMemo(() => {
+    const values = new Map(customFieldValueRows.map((row) => [row.fieldId, row]));
+    return customFieldDefs.map((field) => ({
+      field,
+      value: customFieldValueToString(
+        field.kind,
+        values.get(field.id) ?? {
+          fieldId: field.id,
+          valueText: null,
+          valueNumeric: null,
+          valueDate: null,
+        },
+      ),
+    }));
+  }, [customFieldDefs, customFieldValueRows]);
+
   const [promoVisible, setPromoVisible] = useState(true);
   const [negoPanelEditing, setNegoPanelEditing] = useState(false);
   const [negoDraft, setNegoDraft] = useState<NegotiationPanelDraft | null>(null);
@@ -724,17 +745,11 @@ export function ClienteRdPerfilView({
       closingForecastLocal: isoToDatetimeLocalValue(negotiationPanelSnapshot.closingForecast),
       origem: cliente.origem ?? "",
       campanha: sourceColumn(cliente, "campanha", "Campanha"),
-      doenca: sourceColumn(cliente, "doenca", "doença", "Doença"),
-      isencao: sourceColumn(cliente, "isencao", "isenção", "Isenção"),
-      beneficio: sourceColumn(cliente, "beneficio", "benefício", "Benefício"),
-      qualSuaRendaMensal: sourceColumn(
-        cliente,
-        "qual_sua_renda_mensal",
-        "renda_mensal",
-        "Qual sua renda mensal",
-      ),
       telefone: cliente.telefone ?? "",
       email: cliente.email ?? "",
+      customFieldValues: Object.fromEntries(
+        customFieldsById.map(({ field, value }) => [field.id, value]),
+      ),
     });
     setNegoPanelEditing(true);
   };
@@ -769,17 +784,22 @@ export function ClienteRdPerfilView({
       origem:
         negoDraft.origem === "organico" || negoDraft.origem === "pago" ? negoDraft.origem : "",
       campanha: negoDraft.campanha.trim(),
-      doenca: negoDraft.doenca.trim(),
-      isencao: negoDraft.isencao.trim(),
-      beneficio: negoDraft.beneficio.trim(),
-      qualSuaRendaMensal: negoDraft.qualSuaRendaMensal.trim(),
       telefone: negoDraft.telefone.trim(),
       email: negoDraft.email.trim(),
+      customFieldValues: { ...negoDraft.customFieldValues },
     };
 
     void (async () => {
       try {
         await onSaveNegotiationPanel(payload);
+        if (cliente.id && customFieldDefs.length > 0) {
+          await upsertCustomerCustomFieldValues(
+            cliente.id,
+            customFieldDefs,
+            payload.customFieldValues,
+          );
+          invalidateCustomerCustomFieldValues(queryClient, cliente.id);
+        }
         setNegoPanelEditing(false);
         setNegoDraft(null);
       } catch {
@@ -998,13 +1018,15 @@ export function ClienteRdPerfilView({
                     <NegField label="Previsão de fechamento" value={prevView} />
                     <NegField label="Fonte" value={fonteView} />
                     <NegField label="Campanha" value={sourceColumn(cliente, "campanha", "Campanha")} />
-                    <NegField label="Doença" value={sourceColumn(cliente, "doenca", "doença", "Doença")} />
-                    <NegField label="Isenção" value={sourceColumn(cliente, "isencao", "isenção", "Isenção")} />
-                    <NegField label="Benefício" value={sourceColumn(cliente, "beneficio", "benefício", "Benefício")} />
-                    <NegField
-                      label="qual_sua_renda_mensal"
-                      value={sourceColumn(cliente, "qual_sua_renda_mensal", "renda_mensal", "Qual sua renda mensal")}
-                    />
+                    {customFieldsLoading && customFieldDefs.length > 0 ? (
+                      <p className="border-b border-[#eceff1] py-2.5 text-[12px] text-[#90a4ae] last:border-b-0">
+                        Carregando campos personalizados…
+                      </p>
+                    ) : (
+                      customFieldsById.map(({ field, value }) => (
+                        <NegField key={field.id} label={field.nome} value={value} />
+                      ))
+                    )}
                     <NegField label="Telefone" value={cliente.telefone ?? ""} />
                     <NegField label="E-mail" value={cliente.email ?? ""} />
                   </>
@@ -1104,40 +1126,25 @@ export function ClienteRdPerfilView({
                         disabled={!negotiationPanelCustomerLinked}
                       />
                     </NegFieldEdit>
-                    <NegFieldEdit label="Doença">
-                      <Input
-                        value={negoDraft.doenca}
-                        onChange={(e) => setNegoDraft({ ...negoDraft, doenca: e.target.value })}
-                        className="h-9 border-[#ced4da]"
-                        disabled={!negotiationPanelCustomerLinked}
-                      />
-                    </NegFieldEdit>
-                    <NegFieldEdit label="Isenção">
-                      <Input
-                        value={negoDraft.isencao}
-                        onChange={(e) => setNegoDraft({ ...negoDraft, isencao: e.target.value })}
-                        className="h-9 border-[#ced4da]"
-                        disabled={!negotiationPanelCustomerLinked}
-                      />
-                    </NegFieldEdit>
-                    <NegFieldEdit label="Benefício">
-                      <Input
-                        value={negoDraft.beneficio}
-                        onChange={(e) => setNegoDraft({ ...negoDraft, beneficio: e.target.value })}
-                        className="h-9 border-[#ced4da]"
-                        disabled={!negotiationPanelCustomerLinked}
-                      />
-                    </NegFieldEdit>
-                    <NegFieldEdit label="qual_sua_renda_mensal">
-                      <Input
-                        value={negoDraft.qualSuaRendaMensal}
-                        onChange={(e) =>
-                          setNegoDraft({ ...negoDraft, qualSuaRendaMensal: e.target.value })
-                        }
-                        className="h-9 border-[#ced4da]"
-                        disabled={!negotiationPanelCustomerLinked}
-                      />
-                    </NegFieldEdit>
+                    {customFieldDefs.map((field) => (
+                      <NegFieldEdit key={field.id} label={field.nome}>
+                        <CustomerCustomFieldInput
+                          field={field}
+                          value={negoDraft.customFieldValues[field.id] ?? ""}
+                          onChange={(value) =>
+                            setNegoDraft({
+                              ...negoDraft,
+                              customFieldValues: {
+                                ...negoDraft.customFieldValues,
+                                [field.id]: value,
+                              },
+                            })
+                          }
+                          inputClassName="h-9 border-[#ced4da]"
+                          labelClassName="sr-only"
+                        />
+                      </NegFieldEdit>
+                    ))}
                     <NegFieldEdit label="Telefone">
                       <Input
                         value={negoDraft.telefone}
@@ -1325,19 +1332,6 @@ export function ClienteRdPerfilView({
               {negotiationDocumentsSlot ?? "Nenhum conteúdo nesta aba ainda."}
             </TabsContent>
           </Tabs>
-
-          <Collapsible
-            className="overflow-hidden border border-[#e8eaed] bg-white"
-            style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
-          >
-            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-[#37474f] hover:bg-[#fafafa]">
-              Cadastro completo, CRM e WhatsApp
-              <ChevronDown className="h-4 w-4 shrink-0 text-[#90a4ae] transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="border-t border-[#eceff1] bg-[#fafafa] px-2 py-4 md:px-4">
-              {legacyDetailPanel}
-            </CollapsibleContent>
-          </Collapsible>
         </main>
       </div>
 

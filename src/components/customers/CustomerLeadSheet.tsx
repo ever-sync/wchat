@@ -1,61 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
-import { Briefcase, Calendar, Home, MessageCircle, Plus, Smartphone } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
 import { useCustomers } from "@/lib/api/customers";
+import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
+import {
+  customFieldValueToString,
+  listCustomFieldValuesForCustomer,
+  upsertCustomerCustomFieldValues,
+  useCustomerCustomFields,
+} from "@/lib/api/customer-custom-fields";
 import { fallbackCustomerDisplayName } from "@/lib/customer-display-name";
 import { normalizePhone } from "@/lib/phone";
 import type { Customer, CustomerUpsertInput } from "@/types/domain";
-import { cn } from "@/lib/utils";
 
 const sheetUi = {
   title: "text-lg font-semibold text-wchat-900",
   label: "text-sm font-semibold text-foreground",
   input:
     "h-10 rounded-[10px] border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-primary",
-  selectTrigger: "h-10 rounded-[10px] border-input bg-card text-foreground",
-  selectContent: "border-border bg-card",
-  selectItem: "focus:bg-muted",
-  linkAdd: "inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline",
   section: "text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
   btnSecondary:
     "h-10 rounded-[10px] border-0 bg-wchat-100 px-5 font-semibold text-primary shadow-none hover:bg-wchat-200",
   btnPrimary:
     "h-10 rounded-[10px] border-0 bg-primary px-5 font-semibold text-primary-foreground shadow-none hover:bg-wchat-700",
 } as const;
-
-const PHONE_KINDS = [
-  { value: "comercial", label: "Comercial", icon: Briefcase },
-  { value: "celular", label: "Celular", icon: Smartphone },
-  { value: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { value: "residencial", label: "Residencial", icon: Home },
-] as const;
-
-type PhoneKind = (typeof PHONE_KINDS)[number]["value"];
-
-type PhoneRow = { kind: PhoneKind; value: string };
-
-const COMUNICACAO_OPTIONS = [
-  "WhatsApp",
-  "E-mail",
-  "Telefone",
-  "SMS",
-  "Todos os canais",
-  "Nao enviar comunicacoes",
-] as const;
-
-function formatPhoneE164(value: string) {
-  return normalizePhone(value).e164 ?? value.trim();
-}
 
 function nextCustomerCode(customers: Array<{ codigo?: string }>) {
   const highestCode = customers.reduce((highest, customer) => {
@@ -112,53 +84,60 @@ function baseLeadInput(): CustomerUpsertInput {
   };
 }
 
-function parseBrDateToIso(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) {
-    return undefined;
-  }
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return undefined;
-  }
-  const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  const date = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-  return iso;
-}
-
-function isoToBrDisplay(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  if (!y || !m || !d) {
-    return "";
-  }
-  return `${d}/${m}/${y}`;
-}
-
-function empresaOptionLabel(c: Customer): string {
-  const rs = c.razaoSocial?.trim();
-  if (rs) {
-    return rs;
-  }
-  const nome = c.nome?.trim();
-  if (nome) {
-    return nome;
-  }
-  return c.id.slice(0, 8);
+function customerToUpsertInput(customer: Customer): CustomerUpsertInput {
+  return {
+    codigo: customer.codigo,
+    tipo:
+      customer.tipo === "pf" || customer.tipo === "pj"
+        ? customer.tipo
+        : customer.cpf && !customer.cnpj
+          ? "pf"
+          : "pj",
+    origem: customer.origem,
+    nome: customer.nome,
+    telefone: customer.telefone,
+    celular: customer.celular,
+    email: customer.email,
+    cnpj: customer.cnpj,
+    endereco: customer.endereco,
+    perfil: customer.perfil,
+    rota: customer.rota,
+    status: customer.status,
+    vendedor: customer.vendedor,
+    ultimoPedido: customer.ultimoPedido,
+    ticketMedio: customer.ticketMedio,
+    frequenciaCompra: customer.frequenciaCompra,
+    totalGasto: customer.totalGasto,
+    cpf: customer.cpf,
+    rg: customer.rg,
+    nascimento: customer.nascimento,
+    nomeSocial: customer.nomeSocial,
+    razaoSocial: customer.razaoSocial,
+    inscricaoEstadual: customer.inscricaoEstadual,
+    inscricaoMunicipal: customer.inscricaoMunicipal,
+    cep: customer.cep,
+    logradouro: customer.logradouro,
+    numero: customer.numero,
+    bairro: customer.bairro,
+    zone: customer.zone,
+    cidade: customer.cidade,
+    estado: customer.estado,
+    complemento: customer.complemento,
+    ativo: customer.ativo,
+    observacoes: customer.observacoes,
+    cadastradoEm: customer.cadastradoEm,
+    fax: customer.fax,
+    canal: customer.canal,
+    sourceColumns: customer.sourceColumns,
+  };
 }
 
 type CustomerLeadSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: CustomerUpsertInput) => Promise<void> | void;
+  /** Retorne o id do contato ao editar ou criar, para salvar campos personalizados. */
+  onSubmit: (input: CustomerUpsertInput) => Promise<string | void> | string | void;
+  customer?: Customer | null;
   initialOverrides?: Partial<CustomerUpsertInput>;
   loading?: boolean;
 };
@@ -167,111 +146,135 @@ export function CustomerLeadSheet({
   open,
   onOpenChange,
   onSubmit,
+  customer,
   initialOverrides,
   loading = false,
 }: CustomerLeadSheetProps) {
+  const { toast } = useToast();
+  const isEdit = Boolean(customer);
   const { data: customers = [] } = useCustomers({}, { enabled: open });
-  const [phoneRows, setPhoneRows] = useState<PhoneRow[]>([{ kind: "comercial", value: "" }]);
-  const [leadNome, setLeadNome] = useState("");
-  const [emails, setEmails] = useState<string[]>([""]);
-  const [empresaId, setEmpresaId] = useState<string>("");
-  const [comunicacao, setComunicacao] = useState<string>("");
-  const [nascimentoDisplay, setNascimentoDisplay] = useState("");
-
-  const empresas = useMemo(
-    () =>
-      [...customers]
-        .filter((c) => c.tipo === "pj" || (c.cnpj ?? "").replace(/\D/g, "").length >= 8)
-        .sort((a, b) => empresaOptionLabel(a).localeCompare(empresaOptionLabel(b), "pt-BR")),
-    [customers],
-  );
+  const { data: fieldDefs = [] } = useCustomerCustomFields({ enabled: open });
+  const [nome, setNome] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false);
+  const [savingCustomFields, setSavingCustomFields] = useState(false);
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    const tel = initialOverrides?.telefone?.trim() ?? "";
-    setPhoneRows([{ kind: "comercial", value: tel }]);
-    setLeadNome(initialOverrides?.nome?.trim() ?? "");
-    const em = initialOverrides?.email?.trim() ?? "";
-    setEmails(em ? [em] : [""]);
-    setEmpresaId("");
-    setComunicacao("");
-    const nasc = initialOverrides?.nascimento?.trim();
-    setNascimentoDisplay(nasc && /^\d{4}-\d{2}-\d{2}$/.test(nasc) ? isoToBrDisplay(nasc) : "");
-  }, [open, initialOverrides]);
 
-  const primaryJid = useMemo(() => {
-    for (const row of phoneRows) {
-      const jid = normalizePhone(row.value).jid;
-      if (jid) {
-        return jid;
-      }
+    if (customer) {
+      setNome(customer.nome?.trim() ?? "");
+      setTelefone(customer.telefone?.trim() ?? "");
+      setEmail(customer.email?.trim() ?? "");
+    } else {
+      setNome(initialOverrides?.nome?.trim() ?? "");
+      setTelefone(initialOverrides?.telefone?.trim() ?? "");
+      setEmail(initialOverrides?.email?.trim() ?? "");
     }
-    return undefined;
-  }, [phoneRows]);
+
+    setCustomValues({});
+
+    if (!customer?.id || fieldDefs.length === 0) {
+      setCustomFieldsLoading(false);
+      return;
+    }
+
+    let active = true;
+    setCustomFieldsLoading(true);
+
+    void listCustomFieldValuesForCustomer(customer.id)
+      .then((rows) => {
+        if (!active) {
+          return;
+        }
+        const byField = new Map(rows.map((row) => [row.fieldId, row]));
+        const next: Record<string, string> = {};
+        for (const field of fieldDefs) {
+          const row = byField.get(field.id);
+          next[field.id] = row ? customFieldValueToString(field.kind, row) : "";
+        }
+        setCustomValues(next);
+      })
+      .catch((error) => {
+        if (active) {
+          toast({
+            title: "Não foi possível carregar campos personalizados",
+            description: error instanceof Error ? error.message : "Tente novamente.",
+            variant: "destructive",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCustomFieldsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [customer, fieldDefs, initialOverrides, open, toast]);
 
   async function handleSubmit() {
-    const base = baseLeadInput();
-    const codigo =
-      customers.length > 0 ? nextCustomerCode(customers) : (base.codigo ?? "");
+    const phone = normalizePhone(telefone);
+    if (!phone.jid) {
+      toast({
+        title: "Telefone inválido",
+        description: "Informe um número de WhatsApp válido.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const normalizedPhones = phoneRows
-      .map((row) => ({ ...row, e164: row.value.trim() ? formatPhoneE164(row.value) : "" }))
-      .filter((row) => row.e164 && normalizePhone(row.e164).jid);
+    const base = customer ? customerToUpsertInput(customer) : baseLeadInput();
+    const codigo = customer?.codigo?.trim()
+      ? customer.codigo
+      : customers.length > 0
+        ? nextCustomerCode(customers)
+        : (base.codigo ?? "");
 
-    const telefone = normalizedPhones[0]?.e164 ?? "";
-    const celular =
-      normalizedPhones.length > 1 && normalizedPhones[1].e164 !== telefone
-        ? normalizedPhones[1].e164
-        : "";
-
-    const emailList = emails.map((e) => e.trim()).filter(Boolean);
-    const email = emailList[0] ?? "";
-
-    const nascimentoIso = parseBrDateToIso(nascimentoDisplay);
-
-    const empresa = empresaId ? customers.find((c) => c.id === empresaId) : undefined;
-    const empresaLabel = empresa ? empresaOptionLabel(empresa) : "";
-
-    const sourceColumns: Record<string, string> = {
-      ...base.sourceColumns,
-      ...(comunicacao ? { contato_envio_comunicacao: comunicacao } : {}),
-      ...(empresa
-        ? {
-            empresa_contato_id: empresa.id,
-            empresa_contato_nome: empresaLabel,
-          }
-        : {}),
-      ...(emailList.length > 1
-        ? { emails_secundarios: JSON.stringify(emailList.slice(1)) }
-        : {}),
-      ...(normalizedPhones.length > 1
-        ? {
-            telefones_lead: JSON.stringify(
-              normalizedPhones.map((p, i) => ({
-                tipo: phoneRows[i]?.kind ?? "comercial",
-                numero: p.e164,
-              })),
-            ),
-          }
-        : {}),
-    };
+    const telefoneE164 = phone.e164 ?? telefone.trim();
+    const nomeTrim = nome.trim();
 
     const payload: CustomerUpsertInput = {
       ...base,
       codigo,
-      telefone,
-      celular: celular && celular !== telefone ? celular : "",
-      email,
-      nome: fallbackCustomerDisplayName(telefone, leadNome.trim() || null),
-      nascimento: nascimentoIso ?? "",
-      tipo: nascimentoIso ? "pf" : base.tipo,
-      sourceColumns,
+      telefone: telefoneE164,
+      email: email.trim(),
+      nome: fallbackCustomerDisplayName(telefoneE164, nomeTrim || null),
     };
 
-    await onSubmit(payload);
+    try {
+      const submitResult = await onSubmit(payload);
+      const customerId =
+        customer?.id ?? (typeof submitResult === "string" ? submitResult : undefined);
+
+      if (customerId && fieldDefs.length > 0) {
+        setSavingCustomFields(true);
+        try {
+          await upsertCustomerCustomFieldValues(customerId, fieldDefs, customValues);
+        } finally {
+          setSavingCustomFields(false);
+        }
+      }
+
+      onOpenChange(false);
+    } catch (error) {
+      toast({
+        title: isEdit ? "Não foi possível salvar" : "Não foi possível criar o contato",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
   }
+
+  const isBusy = loading || savingCustomFields;
+  const hasCustomFields = fieldDefs.length > 0;
+  const phoneValid = Boolean(normalizePhone(telefone).jid);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -282,187 +285,89 @@ export function CustomerLeadSheet({
       >
         <div className="flex min-h-0 flex-1 flex-col bg-white">
           <SheetHeader className="shrink-0 space-y-0 border-b border-[#eeeeee] px-6 pb-4 pt-6 text-left">
-            <SheetTitle className={sheetUi.title}>Criar Contato</SheetTitle>
+            <SheetTitle className={sheetUi.title}>{isEdit ? "Editar contato" : "Criar contato"}</SheetTitle>
           </SheetHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-6 py-5">
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               <div className="space-y-2">
-                <Label className={sheetUi.label}>Telefone</Label>
-                <div className="flex flex-col gap-3">
-                  {phoneRows.map((row, index) => {
-                    const KindIcon =
-                      PHONE_KINDS.find((k) => k.value === row.kind)?.icon ?? Briefcase;
-                    return (
-                      <div key={index} className="flex gap-2">
-                        <Select
-                          value={row.kind}
-                          onValueChange={(value) => {
-                            const kind = value as PhoneKind;
-                            setPhoneRows((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, kind } : r)),
-                            );
-                          }}
-                        >
-                          <SelectTrigger
-                            className={cn(
-                              sheetUi.selectTrigger,
-                              "w-[140px] shrink-0 justify-start gap-2 px-3",
-                            )}
-                          >
-                            <KindIcon className="h-3.5 w-3.5 shrink-0 text-[#546e7a]" />
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className={sheetUi.selectContent}>
-                            {PHONE_KINDS.map((k) => {
-                              const Icon = k.icon;
-                              return (
-                                <SelectItem key={k.value} value={k.value} className={sheetUi.selectItem}>
-                                  <span className="flex items-center gap-2">
-                                    <Icon className="h-3.5 w-3.5 text-[#546e7a]" />
-                                    {k.label}
-                                  </span>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          className={cn(sheetUi.input, "min-w-0 flex-1")}
-                          placeholder="+55 (11) 9999-9999"
-                          value={row.value}
-                          onChange={(event) => {
-                            const v = event.target.value;
-                            setPhoneRows((rows) => rows.map((r, i) => (i === index ? { ...r, value: v } : r)));
-                          }}
-                          onBlur={(event) => {
-                            const v = event.target.value.trim();
-                            if (!v) {
-                              return;
-                            }
-                            const formatted = formatPhoneE164(v);
-                            setPhoneRows((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, value: formatted } : r)),
-                            );
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  className={sheetUi.linkAdd}
-                  onClick={() => setPhoneRows((rows) => [...rows, { kind: "celular", value: "" }])}
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar telefone
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <Label className={sheetUi.label}>Nome do contato</Label>
+                <Label htmlFor="lead-nome" className={sheetUi.label}>
+                  Nome
+                </Label>
                 <Input
+                  id="lead-nome"
                   className={sheetUi.input}
-                  placeholder="Como aparece no WhatsApp ou nome completo"
-                  value={leadNome}
-                  onChange={(event) => setLeadNome(event.target.value)}
+                  placeholder="Nome do contato"
+                  value={nome}
+                  onChange={(event) => setNome(event.target.value)}
                   autoComplete="name"
                 />
-                <p className="text-xs text-[#90a4ae]">
-                  Se ficar em branco, o nome sera gerado a partir do telefone.
-                </p>
               </div>
 
               <div className="space-y-2">
-                <Label className={sheetUi.label}>E-mail</Label>
-                <div className="flex flex-col gap-3">
-                  {emails.map((email, index) => (
-                    <Input
-                      key={index}
-                      type="email"
-                      className={sheetUi.input}
-                      placeholder="seunome@email.com"
-                      value={email}
-                      onChange={(event) => {
-                        const v = event.target.value;
-                        setEmails((list) => list.map((e, i) => (i === index ? v : e)));
-                      }}
-                    />
-                  ))}
+                <Label htmlFor="lead-email" className={sheetUi.label}>
+                  E-mail
+                </Label>
+                <Input
+                  id="lead-email"
+                  type="email"
+                  className={sheetUi.input}
+                  placeholder="email@exemplo.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lead-telefone" className={sheetUi.label}>
+                  Telefone
+                </Label>
+                <Input
+                  id="lead-telefone"
+                  className={sheetUi.input}
+                  placeholder="+55 (11) 99999-9999"
+                  value={telefone}
+                  onChange={(event) => setTelefone(event.target.value)}
+                  onBlur={(event) => {
+                    const v = event.target.value.trim();
+                    if (!v) {
+                      return;
+                    }
+                    const formatted = normalizePhone(v).e164;
+                    if (formatted) {
+                      setTelefone(formatted);
+                    }
+                  }}
+                  autoComplete="tel"
+                />
+              </div>
+
+              {hasCustomFields ? (
+                <div className="space-y-4 border-t border-[#eeeeee] pt-4">
+                  <p className={sheetUi.section}>Campos personalizados</p>
+                  {customFieldsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando…
+                    </div>
+                  ) : (
+                    fieldDefs.map((field) => (
+                      <CustomerCustomFieldInput
+                        key={field.id}
+                        field={field}
+                        value={customValues[field.id] ?? ""}
+                        onChange={(value) =>
+                          setCustomValues((current) => ({ ...current, [field.id]: value }))
+                        }
+                        id={`lead-custom-${field.id}`}
+                        labelClassName={sheetUi.label}
+                        inputClassName={sheetUi.input}
+                      />
+                    ))
+                  )}
                 </div>
-                <button
-                  type="button"
-                  className={sheetUi.linkAdd}
-                  onClick={() => setEmails((list) => [...list, ""])}
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar e-mail
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <Label className={sheetUi.label}>Empresa do contato</Label>
-                <Select value={empresaId || "__none__"} onValueChange={(v) => setEmpresaId(v === "__none__" ? "" : v)}>
-                  <SelectTrigger className={sheetUi.selectTrigger}>
-                    <SelectValue placeholder="Selecionar" />
-                  </SelectTrigger>
-                  <SelectContent className={sheetUi.selectContent}>
-                    <SelectItem value="__none__" className={sheetUi.selectItem}>
-                      Selecionar
-                    </SelectItem>
-                    {empresas.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className={sheetUi.selectItem}>
-                        {empresaOptionLabel(c)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className={sheetUi.label}>Contato e envio de comunicacao</Label>
-                <Select value={comunicacao || "__none__"} onValueChange={(v) => setComunicacao(v === "__none__" ? "" : v)}>
-                  <SelectTrigger className={sheetUi.selectTrigger}>
-                    <SelectValue placeholder="Selecionar" />
-                  </SelectTrigger>
-                  <SelectContent className={sheetUi.selectContent}>
-                    <SelectItem value="__none__" className={sheetUi.selectItem}>
-                      Selecionar
-                    </SelectItem>
-                    {COMUNICACAO_OPTIONS.map((opt) => (
-                      <SelectItem key={opt} value={opt} className={sheetUi.selectItem}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <p className={cn(sheetUi.section, "pt-1")}>Informacoes adicionais</p>
-
-              <div className="space-y-2">
-                <Label className={sheetUi.label}>Data de nascimento</Label>
-                <div className="relative max-w-[200px]">
-                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#90a4ae]" />
-                  <Input
-                    className={cn(sheetUi.input, "pl-10")}
-                    placeholder="DD/MM/AAAA"
-                    inputMode="numeric"
-                    autoComplete="bday"
-                    value={nascimentoDisplay}
-                    onChange={(event) => {
-                      let v = event.target.value.replace(/\D/g, "").slice(0, 8);
-                      if (v.length >= 5) {
-                        v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
-                      } else if (v.length >= 3) {
-                        v = `${v.slice(0, 2)}/${v.slice(2)}`;
-                      }
-                      setNascimentoDisplay(v);
-                    }}
-                  />
-                </div>
-              </div>
+              ) : null}
             </div>
           </div>
 
@@ -471,7 +376,7 @@ export function CustomerLeadSheet({
               type="button"
               variant="ghost"
               className={sheetUi.btnSecondary}
-              disabled={loading}
+              disabled={isBusy}
               onClick={() => onOpenChange(false)}
             >
               Cancelar
@@ -479,10 +384,19 @@ export function CustomerLeadSheet({
             <Button
               type="button"
               className={sheetUi.btnPrimary}
-              disabled={loading || !primaryJid}
+              disabled={isBusy || !phoneValid}
               onClick={() => void handleSubmit()}
             >
-              {loading ? "Salvando..." : "Criar Contato"}
+              {isBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando…
+                </>
+              ) : isEdit ? (
+                "Salvar"
+              ) : (
+                "Criar contato"
+              )}
             </Button>
           </div>
         </div>

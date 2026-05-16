@@ -8,10 +8,10 @@ import {
   RefreshCw,
   Download,
   ListFilter,
-  Sparkles,
   Calendar,
-  Info,
   MoreHorizontal,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -34,14 +44,16 @@ import {
   Pagination, PaginationContent, PaginationItem, PaginationLink,
   PaginationNext, PaginationPrevious, PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { CustomerCustomFieldsDialog } from "@/components/customers/CustomerCustomFieldsDialog";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
 import { useCrmNegotiationCountsByCustomer } from "@/lib/api/crm-negotiations";
 import {
   useCreateCustomer,
   useCustomers,
+  useDeleteCustomers,
   useImportCustomers,
-  useSyncCustomersToRoutes,
+  useUpdateCustomer,
 } from "@/lib/api/customers";
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { useRoutes } from "@/lib/api/routes";
@@ -79,25 +91,7 @@ const ui = {
   paginationBtn: "rounded-[10px] border border-border bg-card text-foreground hover:bg-muted",
 } as const;
 
-function empresaLabel(customer: Customer): string {
-  const rs = customer.razaoSocial?.trim();
-  if (rs) {
-    return rs;
-  }
-  if (customer.tipo === "pj") {
-    return customer.nome?.trim() ?? "";
-  }
-  return "";
-}
-
-function cargoLabel(customer: Customer): string {
-  const sc = customer.sourceColumns;
-  if (!sc) {
-    return "";
-  }
-  const raw = sc.cargo ?? sc.Cargo;
-  return raw != null ? String(raw).trim() : "";
-}
+const TABLE_COLSPAN = 6;
 
 /** Fallback quando o Supabase não está ativo ou a contagem ainda não carregou. */
 function negociacoesCountHeuristic(customer: Customer): number {
@@ -247,6 +241,9 @@ export default function Clientes() {
   const [quickPasteOpen, setQuickPasteOpen] = useState(false);
   const [quickPasteText, setQuickPasteText] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [sheetCustomer, setSheetCustomer] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filters = useMemo(
@@ -285,9 +282,10 @@ export default function Clientes() {
     enabled: isSupabaseConfigured,
   });
   const createCustomer = useCreateCustomer();
+  const updateCustomer = useUpdateCustomer();
+  const deleteCustomers = useDeleteCustomers();
   const linkInboxChat = useLinkWhatsappChatCustomer();
   const importCustomers = useImportCustomers();
-  const syncCustomersToRoutes = useSyncCustomersToRoutes();
 
   const rotas = useMemo(
     () =>
@@ -434,26 +432,6 @@ export default function Clientes() {
     link.download = `${fileLabel}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleSyncRoutes = async (customerIds?: string[]) => {
-    const result = await syncCustomersToRoutes.mutateAsync(customerIds);
-
-    const descricao =
-      `${result.synced} cliente(s) vinculado(s) a rotas automaticamente.` +
-      (result.cepEnriched ? ` ${result.cepEnriched} com endereco reforcado por CEP.` : "") +
-      (result.skipped ? ` ${result.skipped} sem rota compativel.` : "") +
-      (result.failed ? ` ${result.failed} com falha na atualizacao.` : "");
-
-    toast({
-      title: "Sincronizacao concluida",
-      description: descricao,
-    });
-    useAppStore.getState().addNotification({
-      tipo: "sucesso",
-      titulo: "Sincronizacao concluida",
-      descricao,
-    });
   };
 
   function downloadMinimalImportTemplate() {
@@ -748,6 +726,7 @@ export default function Clientes() {
               variant="ghost"
               className={ui.btnPrimary}
               onClick={() => {
+                setSheetCustomer(null);
                 setNewCustomerPrefill(null);
                 setPendingInboxChatId(null);
                 setReturnToInboxAfterCreate(false);
@@ -774,12 +753,7 @@ export default function Clientes() {
                 <DropdownMenuItem onClick={() => downloadMinimalImportTemplate()}>Baixar modelo (telefone)</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => exportCustomers(filtered, "clientes-export")}>Exportar CSV</DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={syncCustomersToRoutes.isPending || filtered.length === 0}
-                  onClick={() => void handleSyncRoutes(filtered.map((customer) => customer.id))}
-                >
-                  Sincronizar rotas
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCustomFieldsOpen(true)}>Campos personalizados</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -843,38 +817,34 @@ export default function Clientes() {
                     className="border-input data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                   />
                 </TableHead>
-                <TableHead className={ui.tableHead}>Contatos</TableHead>
-                <TableHead className={`hidden md:table-cell ${ui.tableHead}`}>Empresa</TableHead>
-                <TableHead className={ui.tableHead}>E-mails</TableHead>
-                <TableHead className={ui.tableHead}>Telefones</TableHead>
-                <TableHead className={`hidden lg:table-cell ${ui.tableHead}`}>Cargo</TableHead>
+                <TableHead className={ui.tableHead}>Nome</TableHead>
+                <TableHead className={ui.tableHead}>Telefone</TableHead>
+                <TableHead className={`hidden sm:table-cell ${ui.tableHead}`}>E-mail</TableHead>
                 <TableHead className={`text-right ${ui.tableHead}`}>Negociações</TableHead>
-                <TableHead className={`w-12 ${ui.tableHead}`} />
+                <TableHead className={`w-14 text-right ${ui.tableHead}`}>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow className={`${ui.tableRow} hover:bg-transparent`}>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={TABLE_COLSPAN} className="h-32 text-center text-muted-foreground">
                     Carregando contatos...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow className={`${ui.tableRow} hover:bg-transparent`}>
-                  <TableCell colSpan={8} className="h-32 text-center text-red-600">
+                  <TableCell colSpan={TABLE_COLSPAN} className="h-32 text-center text-red-600">
                     {error.message}
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow className={`${ui.tableRow} hover:bg-transparent`}>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={TABLE_COLSPAN} className="h-32 text-center text-muted-foreground">
                     Nenhum contato encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((customer) => {
-                  const emp = empresaLabel(customer);
-                  const cargo = cargoLabel(customer);
                   const nNeg =
                     isSupabaseConfigured && negCountsReady
                       ? (negCountsByCustomer?.get(customer.id) ?? 0)
@@ -911,7 +881,7 @@ export default function Clientes() {
                           className="border-input data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                         />
                       </TableCell>
-                      <TableCell className="max-w-[200px] py-4 md:max-w-[280px]">
+                      <TableCell className="max-w-[200px] py-4 md:max-w-[320px]">
                         <button
                           type="button"
                           className={ui.linkName}
@@ -920,29 +890,20 @@ export default function Clientes() {
                             navigate(`/clientes/${customer.id}`);
                           }}
                         >
-                          {customer.nome}
+                          {customer.nome?.trim() || "Sem nome"}
                         </button>
                       </TableCell>
                       <TableCell
-                        className={`hidden max-w-[180px] py-4 text-[13px] md:table-cell ${ui.tableCellMuted}`}
-                        title={emp}
+                        className={`whitespace-nowrap py-4 text-[13px] ${ui.tableCellMuted}`}
+                        title={customer.telefone ?? ""}
                       >
-                        {emp || "—"}
+                        {customer.telefone?.trim() || "—"}
                       </TableCell>
                       <TableCell
-                        className={`max-w-[200px] truncate py-4 text-[13px] ${ui.tableCellMuted}`}
+                        className={`hidden max-w-[220px] truncate py-4 text-[13px] sm:table-cell ${ui.tableCellMuted}`}
                         title={customer.email ?? ""}
                       >
                         {customer.email?.trim() ? customer.email : "—"}
-                      </TableCell>
-                      <TableCell className={`whitespace-nowrap py-4 text-[13px] ${ui.tableCellMuted}`}>
-                        {customer.telefone}
-                      </TableCell>
-                      <TableCell
-                        className={`hidden max-w-[140px] truncate py-4 text-[13px] lg:table-cell ${ui.tableCellMuted}`}
-                        title={cargo}
-                      >
-                        {cargo || "—"}
                       </TableCell>
                       <TableCell className={`py-4 text-right text-[13px] tabular-nums ${ui.tableCellMuted}`}>
                         {nNeg}
@@ -957,16 +918,32 @@ export default function Clientes() {
                               className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted"
                               aria-label={`Ações para ${customer.nome}`}
                             >
-                              <Info className="h-4 w-4" strokeWidth={2} />
+                              <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
                             <DropdownMenuItem onClick={() => navigate(`/clientes/${customer.id}`)}>
                               Abrir negociação
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => navigate(`/clientes/${customer.id}?copoPersonalizado=1`)}>
-                              <Sparkles className="mr-2 h-4 w-4" />
-                              Copo personalizado
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSheetCustomer(customer);
+                                setNewCustomerPrefill(null);
+                                setPendingInboxChatId(null);
+                                setReturnToInboxAfterCreate(false);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteTarget(customer)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Excluir
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -1043,19 +1020,81 @@ export default function Clientes() {
         ) : null}
       </div>
 
+      <CustomerCustomFieldsDialog open={customFieldsOpen} onOpenChange={setCustomFieldsOpen} />
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="rounded-[12px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir contato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `“${deleteTarget.nome}” será removido da base. Esta ação não pode ser desfeita.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCustomers.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCustomers.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!deleteTarget) {
+                  return;
+                }
+                void (async () => {
+                  try {
+                    await deleteCustomers.mutateAsync([deleteTarget.id]);
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(deleteTarget.id);
+                      return next;
+                    });
+                    toast({
+                      title: "Contato excluído",
+                      description: `${deleteTarget.nome} foi removido.`,
+                    });
+                    setDeleteTarget(null);
+                  } catch (err) {
+                    toast({
+                      title: "Não foi possível excluir",
+                      description: err instanceof Error ? err.message : "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  }
+                })();
+              }}
+            >
+              {deleteCustomers.isPending ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <CustomerLeadSheet
         open={dialogOpen}
+        customer={sheetCustomer}
         onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) {
+            setSheetCustomer(null);
             setNewCustomerPrefill(null);
             setPendingInboxChatId(null);
             setReturnToInboxAfterCreate(false);
           }
         }}
         initialOverrides={newCustomerPrefill ?? undefined}
-        loading={createCustomer.isPending || linkInboxChat.isPending}
+        loading={createCustomer.isPending || updateCustomer.isPending || linkInboxChat.isPending}
         onSubmit={async (input) => {
+          if (sheetCustomer) {
+            await updateCustomer.mutateAsync({ id: sheetCustomer.id, input });
+            toast({
+              title: "Contato atualizado",
+              description: `${input.nome} foi salvo.`,
+            });
+            return sheetCustomer.id;
+          }
+
           const goBackToInbox = returnToInboxAfterCreate;
           const inboxChatIdForReturn = pendingInboxChatId;
           const created = await createCustomer.mutateAsync(input);
@@ -1088,7 +1127,6 @@ export default function Clientes() {
             }
           }
 
-          setDialogOpen(false);
           setNewCustomerPrefill(null);
           setPendingInboxChatId(null);
           setReturnToInboxAfterCreate(false);
@@ -1103,6 +1141,8 @@ export default function Clientes() {
               navigate("/inbox");
             }
           }
+
+          return created.id;
         }}
       />
 
