@@ -6,23 +6,17 @@ import { cn } from "@/lib/utils";
 import type { InboxChat } from "@/types/domain";
 import { ConversationAvatar } from "./ConversationAvatar";
 
-function formatPhoneLabel(value?: string | null) {
-  if (!value) {
-    return "";
+const MESSAGE_PREVIEW_MAX_CHARS = 40;
+
+function shortenMessagePreview(text: string, maxChars = MESSAGE_PREVIEW_MAX_CHARS): string {
+  const t = text.trim();
+  if (t.length <= maxChars) {
+    return t;
   }
-
-  const digits = value.replace(/\D/g, "");
-  const localDigits = digits.startsWith("55") ? digits.slice(2) : digits;
-
-  if (localDigits.length === 11) {
-    return `+55 ${localDigits.slice(0, 2)} ${localDigits.slice(2, 7)}-${localDigits.slice(7)}`;
-  }
-
-  if (localDigits.length === 10) {
-    return `+55 ${localDigits.slice(0, 2)} ${localDigits.slice(2, 6)}-${localDigits.slice(6)}`;
-  }
-
-  return value;
+  const slice = t.slice(0, maxChars).trimEnd();
+  const lastSpace = slice.lastIndexOf(" ");
+  const clipped = lastSpace > maxChars * 0.55 ? slice.slice(0, lastSpace) : slice;
+  return `${clipped}...`;
 }
 
 function formatConversationTime(value?: string | null) {
@@ -102,13 +96,20 @@ export function ConversationRow({
   onClick: () => void;
   onPointerEnter?: () => void;
 }) {
-  const subtitle = chat.customerName && chat.customerName !== chat.displayName
-    ? chat.customerName
-    : formatPhoneLabel(chat.remotePhoneE164 ?? chat.remotePhoneDigits ?? chat.remoteJid);
+  const subtitle =
+    chat.customerName && chat.customerName.trim() !== "" && chat.customerName !== chat.displayName
+      ? chat.customerName
+      : null;
 
   const snoozed = isChatSnoozed(chat);
   const slaBreached = isChatSlaBreached(chat);
   const slaMinutes = slaMinutesRemaining(chat);
+
+  const lastPreviewTrimmed = chat.lastMessagePreview?.trim();
+  const messagePreviewDisplay =
+    lastPreviewTrimmed && lastPreviewTrimmed.length > 0
+      ? shortenMessagePreview(lastPreviewTrimmed)
+      : "Sem mensagens recentes";
 
   return (
     <button
@@ -116,11 +117,11 @@ export function ConversationRow({
       onClick={onClick}
       onPointerEnter={onPointerEnter}
       className={cn(
-        "group block w-full min-w-0 max-w-full overflow-hidden rounded-lg px-2 py-2.5 text-left transition-colors duration-150",
+        "group block w-full min-w-0 max-w-full overflow-hidden rounded-lg px-1.5 py-2 text-left transition-colors duration-150",
         active ? "bg-wchat-100 ring-1 ring-primary/20" : "hover:bg-wchat-50",
       )}
     >
-      <div className="flex min-w-0 max-w-full items-start gap-2.5">
+      <div className="flex min-w-0 max-w-full items-start gap-2">
         <span className="shrink-0 rounded-full">
           <ConversationAvatar name={chat.displayName} avatarUrl={chat.avatarUrl} size="xs" />
         </span>
@@ -128,19 +129,19 @@ export function ConversationRow({
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1">
-                <p className="min-w-0 truncate text-[15px] font-medium leading-4 text-foreground">
+                <p className="min-w-0 truncate text-sm font-medium leading-snug text-foreground">
                   {chat.displayName}
                 </p>
                 <ConversationTagDots tags={chat.tags} />
               </div>
-              <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">
-                {subtitle}
-              </p>
+              {subtitle ? (
+                <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">{subtitle}</p>
+              ) : null}
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
               <p
                 className={cn(
-                  "text-[11px]",
+                  "text-[10px] tabular-nums",
                   active ? "text-muted-foreground" : chat.unreadCount > 0 ? "text-primary" : "text-muted-foreground",
                 )}
               >
@@ -181,11 +182,11 @@ export function ConversationRow({
           </div>
           <p
             className={cn(
-              "mt-0.5 truncate text-[13px] leading-4 text-muted-foreground",
+              "mt-0.5 line-clamp-1 min-w-0 text-[12px] leading-snug text-muted-foreground",
               chat.unreadCount > 0 && !active && "text-foreground",
             )}
           >
-            {chat.lastMessagePreview || "Sem mensagens recentes"}
+            {messagePreviewDisplay}
           </p>
         </div>
       </div>

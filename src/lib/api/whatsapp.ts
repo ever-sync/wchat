@@ -13,8 +13,10 @@ import { useEffect, useMemo } from "react";
 import { invokeAuthedFunction } from "@/lib/api/functions";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type {
+  ChatResolution,
   InboxChat,
   InboxChatFilters,
+  InboxListScope,
   SendWhatsappMessageInput,
   WhatsappInstance,
   WhatsappInstanceConnectInput,
@@ -22,6 +24,31 @@ import type {
 } from "@/types/domain";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { sanitizeCustomerSearchForPostgrestOrIlike } from "@/lib/customer-search-sanitize";
+
+const CHAT_RESOLUTION_VALUES = new Set<ChatResolution>([
+  "open",
+  "pending",
+  "resolved",
+  "waiting_customer",
+  "lost",
+]);
+
+export function inboxChatFiltersFromListScope(
+  scope: InboxListScope,
+): Pick<InboxChatFilters, "status" | "resolution" | "hideLost"> {
+  switch (scope) {
+    case "all":
+      return { status: "all", hideLost: true };
+    case "open":
+      return { status: "open", hideLost: true };
+    case "closed":
+      return { status: "closed", hideLost: true };
+    case "resolved":
+      return { status: "all", resolution: "resolved" };
+    case "lost":
+      return { status: "all", resolution: "lost" };
+  }
+}
 
 type InstanceRow = {
   id: string;
@@ -152,7 +179,9 @@ function mapChat(row: ChatRow): InboxChat {
     lastMessageAt: row.last_message_at,
     unreadCount: row.unread_count,
     status: row.status,
-    resolution: row.resolution ?? "open",
+    resolution: CHAT_RESOLUTION_VALUES.has(row.resolution as ChatResolution)
+      ? (row.resolution as ChatResolution)
+      : "open",
     aiMode: row.ai_mode ?? "off",
     primaryNegotiationId: row.primary_negotiation_id ?? null,
     assigneeId: row.assignee_id ?? null,
@@ -358,6 +387,10 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     query = query.eq("status", filters.status);
   }
 
+  if (filters.resolution) {
+    query = query.eq("resolution", filters.resolution);
+  }
+
   if (filters.search?.trim()) {
     const search = sanitizeCustomerSearchForPostgrestOrIlike(filters.search);
     if (search.length > 0) {
@@ -390,6 +423,10 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     rows = rows.filter((row) =>
       row.whatsapp_chat_tags?.some((t) => tagSet.has(t.tag_id)),
     );
+  }
+
+  if (filters.hideLost) {
+    rows = rows.filter((row) => (row.resolution ?? "open") !== "lost");
   }
 
   const now = Date.now();
@@ -1037,6 +1074,12 @@ function chatMatchesInboxFilters(chat: InboxChat, filters: InboxChatFilters | un
   if (f.status && f.status !== "all" && chat.status !== f.status) {
     return false;
   }
+  if (f.resolution && chat.resolution !== f.resolution) {
+    return false;
+  }
+  if (f.hideLost && (chat.resolution ?? "open") === "lost") {
+    return false;
+  }
   const search = sanitizeCustomerSearchForPostgrestOrIlike(f.search ?? "").toLowerCase();
   if (search) {
     const name = (chat.displayName ?? "").toLowerCase();
@@ -1067,6 +1110,11 @@ function chatMatchesInboxFilters(chat: InboxChat, filters: InboxChatFilters | un
 }
 
 function mergeInboxChatFromRealtimeRow(existing: InboxChat, row: ChatRow): InboxChat {
+  const nextResolution =
+    row.resolution != null && CHAT_RESOLUTION_VALUES.has(row.resolution as ChatResolution)
+      ? (row.resolution as ChatResolution)
+      : (existing.resolution ?? "open");
+
   const merged: InboxChat = {
     ...existing,
     instanceId: row.instance_id,
@@ -1079,6 +1127,7 @@ function mergeInboxChatFromRealtimeRow(existing: InboxChat, row: ChatRow): Inbox
     lastMessageAt: row.last_message_at,
     unreadCount: row.unread_count,
     status: row.status,
+    resolution: nextResolution,
   };
 
   const synthetic: ChatRow = {

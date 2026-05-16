@@ -38,6 +38,7 @@ import {
   moveStage,
   removeFunnel,
   removeStage,
+  setExclusiveSaleStage,
   slugifyFunnelKey,
   uniqueKey,
   updateFunnel,
@@ -352,6 +353,39 @@ export function CrmFunnelConfigEditor({
                             );
                           })}
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label
+                          className="flex cursor-pointer items-start gap-2 text-sm"
+                          title={
+                            stage.isSaleStage
+                              ? "Negócios vão para esta etapa ao registrar venda pelo chat ou marcar vendido."
+                              : "Só pode existir uma etapa de venda por funil; ao marcar, as outras desmarcam."
+                          }
+                        >
+                          <Checkbox
+                            checked={Boolean(stage.isSaleStage)}
+                            disabled={disabled}
+                            onCheckedChange={(value) =>
+                              onChange(
+                                setExclusiveSaleStage(
+                                  funnels,
+                                  activeFunnel.id,
+                                  stage.id,
+                                  value === true,
+                                ),
+                              )
+                            }
+                            className="mt-0.5"
+                          />
+                          <span>
+                            <span className="font-medium">Etapa de venda automática</span>
+                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                              Ao registrar uma venda, o negócio passa para esta coluna (máximo uma por funil).
+                            </span>
+                          </span>
+                        </label>
                       </div>
                     </div>
 

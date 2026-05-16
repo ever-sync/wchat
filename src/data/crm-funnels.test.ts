@@ -36,6 +36,35 @@ describe("parseTenantCrmFunnelsJson", () => {
     expect(parseTenantCrmFunnelsJson(null)).toBeNull();
   });
 
+  it("rejeita mais de uma etapa de venda no mesmo funil", () => {
+    const raw = [
+      {
+        id: "a",
+        listName: "Funil A",
+        stages: [
+          { id: "s1", title: "Etapa 1", isSaleStage: true },
+          { id: "s2", title: "Etapa 2", isSaleStage: true },
+        ],
+      },
+    ];
+    expect(parseTenantCrmFunnelsJson(raw)).toBeNull();
+  });
+
+  it("preserva isSaleStage quando unica", () => {
+    const raw = [
+      {
+        id: "a",
+        listName: "Funil A",
+        stages: [
+          { id: "s1", title: "Etapa 1" },
+          { id: "fechado", title: "FECHADO", isSaleStage: true },
+        ],
+      },
+    ];
+    const out = parseTenantCrmFunnelsJson(raw);
+    expect(out?.[0].stages[1].isSaleStage).toBe(true);
+  });
+
   it("aceita requiredFields por etapa", () => {
     const raw = [
       {

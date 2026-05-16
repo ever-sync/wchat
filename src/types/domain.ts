@@ -61,7 +61,10 @@ export type TaskStatus = "aberta" | "em_andamento" | "concluida";
 export type ProductStatus = "ativo" | "inativo";
 export type WhatsappInstanceStatus = "connected" | "connecting" | "disconnected" | "error";
 export type InboxChatStatus = "open" | "closed";
-export type ChatResolution = "open" | "pending" | "resolved" | "waiting_customer";
+export type ChatResolution = "open" | "pending" | "resolved" | "waiting_customer" | "lost";
+
+/** Filtro da lista lateral: alinha com categorias úteis de resolução + aberto/fechado. */
+export type InboxListScope = "all" | "open" | "closed" | "resolved" | "lost";
 export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
 export type MessageActorType = "human" | "ai" | "system";
 export type MessageDirection = "inbound" | "outbound";
@@ -690,6 +693,10 @@ export interface InboxChatFilters {
   instanceId?: string;
   unreadOnly?: boolean;
   status?: InboxChatStatus | "all";
+  /** Subconjunto pela resolução operacional da conversa (ex.: apenas perdidas). */
+  resolution?: ChatResolution;
+  /** Quando true, exclui conversas com `resolution === "lost"` (ex.: listas Todas / Encerradas). */
+  hideLost?: boolean;
   assigneeId?: string | "unassigned" | "mine";
   tagIds?: string[];
   snoozedOnly?: boolean;

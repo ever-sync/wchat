@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { stageRequiredFields, validateNegotiationForStage } from "./stage-requirements";
+import type { CrmFunnel } from "@/data/crm-funnels";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
+import { stageRequiredFields, validateNegotiationForStage } from "./stage-requirements";
 
 describe("stage-requirements", () => {
   it("validateNegotiationForStage exige valor quando configurado", () => {
@@ -26,5 +27,16 @@ describe("stage-requirements", () => {
     expect(
       validateNegotiationForStage({ ...mockCard, totalValue: 5000 }, required),
     ).toBeNull();
+  });
+
+  it("usa etapa marcada como venda (slug customizado)", () => {
+    const funnels: CrmFunnel[] = [
+      {
+        id: "custom",
+        listName: "Custom",
+        stages: [{ id: "ganhou", title: "GANHOU", isSaleStage: true }],
+      },
+    ];
+    expect(stageRequiredFields(funnels, "custom", "ganhou")).toEqual(["total_value"]);
   });
 });

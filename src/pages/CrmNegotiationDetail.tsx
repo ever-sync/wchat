@@ -63,7 +63,9 @@ import {
   getPipelineStateForCustomer,
   pipelineStageKeyFromIndex,
 } from "@/lib/crm-pipeline";
+import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useInboxChats } from "@/lib/api/whatsapp";
+import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 import { isE2eMockAuth } from "@/lib/e2e";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
@@ -223,6 +225,8 @@ function CrmNegotiationDetailContent({
   const createCrmTask = useCreateCrmTask();
   const updateCrmTask = useUpdateCrmTask();
   const deleteCrmTask = useDeleteCrmTask();
+
+  const { data: effectiveCrmFunnels } = useEffectiveCrmFunnels();
 
   const taskIntegration = isPersistedRow && isSupabaseConfigured;
   const { data: crmTasksByNegotiation = [], isLoading: crmTasksNegLoading } = useCrmTasksForNegotiation(
@@ -1056,9 +1060,13 @@ function CrmNegotiationDetailContent({
               toast({ title: "Marcar venda", description: "Negociação atualizada." });
               return;
             }
+            const saleStageId = resolveConfiguredSaleStageId(
+              effectiveCrmFunnels,
+              negotiation.funnelId,
+            );
             await updateNegotiation.mutateAsync({
               id: negotiation.id,
-              patch: { status: "vendido", stageId: "venda", totalValue },
+              patch: { status: "vendido", stageId: saleStageId, totalValue },
             });
             setPipelineActiveIndex(4);
             if (linkedCustomer) {
@@ -1066,7 +1074,7 @@ function CrmNegotiationDetailContent({
                 linkedCustomer.status === "bloqueado" ? "ativo" : linkedCustomer.status;
               await syncLinkedCustomer(linkedCustomer, {
                 status: nextStatus,
-                stageKey: "venda",
+                stageKey: saleStageId,
                 funnelId: negotiation.funnelId,
               });
             }

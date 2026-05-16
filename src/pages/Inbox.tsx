@@ -34,6 +34,7 @@ import { ConversationList } from "@/components/inbox/ConversationList";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
 import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
+import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
 import { INBOX_TEMPLATE_OPTIONS } from "@/components/inbox/inboxComposerOptions";
 import { MessageInput } from "@/components/inbox/MessageInput";
 import { MessageThread } from "@/components/inbox/MessageThread";
@@ -61,6 +62,7 @@ import {
   useSendWhatsappMessage,
   useSyncInbox,
   useWhatsappInstances,
+  inboxChatFiltersFromListScope,
 } from "@/lib/api/whatsapp";
 import {
   useAssignChat,
@@ -72,8 +74,13 @@ import {
   useSnoozeChat,
   useUnassignChat,
 } from "@/lib/api/chat-tags";
-import { useClaimCrmNegotiation, useReleaseCrmNegotiationToPool } from "@/lib/api/crm-negotiations";
-import { useChatNegotiation } from "@/lib/api/crm-lead";
+import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
+import {
+  useClaimCrmNegotiation,
+  useReleaseCrmNegotiationToPool,
+  useUpdateCrmNegotiation,
+} from "@/lib/api/crm-negotiations";
+import { useChatNegotiation, useSetChatResolution } from "@/lib/api/crm-lead";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
@@ -83,6 +90,8 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import {
   SALE_PAYMENT_METHOD_LABELS,
   type InboxChat,
+  type InboxChatFilters,
+  type InboxListScope,
   type MessageType,
   type SalePaymentMethod,
   type WhatsappMessage,
@@ -95,6 +104,7 @@ import {
 import { useInboxTitleBadge } from "@/hooks/useInboxTitleBadge";
 import { clearInboxChatDraft, useInboxChatDraft } from "@/hooks/useInboxChatDraft";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 
 /** Limite de vendas do cliente carregadas no fluxo de devolucao (API listSales). */
 const SALE_RETURN_HISTORY_LIMIT = 200;
@@ -223,7 +233,7 @@ export default function Inbox() {
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [instanceId, setInstanceId] = useState<string>("all");
-  const [status, setStatus] = useState<InboxChat["status"] | "all">("open");
+  const [listScope, setListScope] = useState<InboxListScope>("open");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [snoozedFilter, setSnoozedFilter] = useState<"active" | "snoozed">("active");
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
@@ -259,6 +269,7 @@ export default function Inbox() {
   const attachmentAbortRef = useRef<AbortController | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [saleFlowOpen, setSaleFlowOpen] = useState(false);
+  const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
   const [saleStep, setSaleStep] = useState<1 | 2 | 3>(1);
   const [saleFlowType, setSaleFlowType] = useState<"venda" | "devolucao" | "">("");
   const [saleSeller, setSaleSeller] = useState("operador-atual");
@@ -315,6 +326,9 @@ export default function Inbox() {
     { enabled: saleFlowOpen, staleTime: 60_000 },
   );
   const registerSaleFlow = useRegisterSaleFlow();
+  const updateCrmNegotiationMutation = useUpdateCrmNegotiation();
+  const setChatResolutionMutation = useSetChatResolution();
+  const { data: effectiveCrmFunnels } = useEffectiveCrmFunnels();
   const { data: availableTags = [], isLoading: tagsLoading } = useChatTags();
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
@@ -328,15 +342,19 @@ export default function Inbox() {
   const snoozeChatMutation = useSnoozeChat();
   const clearSnoozeMutation = useClearChatSnooze();
 
-  const { data: chats = [], isLoading: chatsLoading } = useInboxChats({
-    search: debouncedSearch,
-    instanceId: instanceId === "all" ? undefined : instanceId,
-    status,
-    assigneeId: assigneeFilter === "all" ? undefined : assigneeFilter,
-    tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-    hideSnoozed: snoozedFilter === "active",
-    snoozedOnly: snoozedFilter === "snoozed",
-  }, {
+  const inboxChatsFilter = useMemo((): InboxChatFilters => {
+    return {
+      search: debouncedSearch,
+      instanceId: instanceId === "all" ? undefined : instanceId,
+      assigneeId: assigneeFilter === "all" ? undefined : assigneeFilter,
+      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      hideSnoozed: snoozedFilter === "active",
+      snoozedOnly: snoozedFilter === "snoozed",
+      ...inboxChatFiltersFromListScope(listScope),
+    };
+  }, [debouncedSearch, instanceId, assigneeFilter, selectedTagIds, snoozedFilter, listScope]);
+
+  const { data: chats = [], isLoading: chatsLoading } = useInboxChats(inboxChatsFilter, {
     // Realtime ja cobre updates em whatsapp_chats (ver useInboxChatsRealtime).
     // Mantemos um polling longo apenas como fallback em caso de WebSocket cair.
     refetchInterval: 20_000,
@@ -577,14 +595,6 @@ export default function Inbox() {
     };
   }, [activeChat?.id]);
 
-  const pinnedChats = useMemo(
-    () => chats.filter((chat) => chat.unreadCount > 0).slice(0, 3),
-    [chats],
-  );
-  const regularChats = useMemo(() => {
-    const pinnedIds = new Set(pinnedChats.map((chat) => chat.id));
-    return chats.filter((chat) => !pinnedIds.has(chat.id));
-  }, [chats, pinnedChats]);
   const messageGroups = useMemo(() => groupMessagesByDay(messages), [messages]);
   const productOptions = useMemo(
     () =>
@@ -786,6 +796,14 @@ export default function Inbox() {
     if (!activeChat) {
       return;
     }
+    setMarkQuickSaleDialogOpen(true);
+  }
+
+  function openFullSaleStockFlow() {
+    if (!activeChat) {
+      return;
+    }
+    setMarkQuickSaleDialogOpen(false);
     resetSaleFlow();
     setSaleFlowOpen(true);
   }
@@ -1731,14 +1749,14 @@ export default function Inbox() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="grid min-h-0 flex-1 grid-rows-[1fr] gap-0 lg:grid-cols-[minmax(280px,min(100%,420px))_1fr]">
+      <div className="grid min-h-0 flex-1 grid-rows-[1fr] gap-0 lg:grid-cols-[minmax(260px,min(100%,336px))_1fr]">
         <ConversationList
           search={search}
           onSearchChange={setSearch}
           instanceId={instanceId}
           onInstanceChange={setInstanceId}
-          status={status}
-          onStatusChange={setStatus}
+          listScope={listScope}
+          onListScopeChange={setListScope}
           assigneeFilter={assigneeFilter}
           onAssigneeFilterChange={setAssigneeFilter}
           snoozedFilter={snoozedFilter}
@@ -1755,8 +1773,6 @@ export default function Inbox() {
           instances={instances}
           chatsLoading={chatsLoading}
           chats={chats}
-          pinnedChats={pinnedChats}
-          regularChats={regularChats}
           activeChatId={activeChat?.id ?? null}
           onSelectChat={handleSelectChat}
           onPrefetchChat={prefetchChatMessages}
@@ -2177,6 +2193,109 @@ export default function Inbox() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <MarkWinDialog
+        open={Boolean(activeChat) && markQuickSaleDialogOpen}
+        onOpenChange={(open) => {
+          setMarkQuickSaleDialogOpen(open);
+        }}
+        initialValue={linkedNegotiation?.totalValue ?? 0}
+        pending={
+          updateCrmNegotiationMutation.isPending ||
+          setChatResolutionMutation.isPending ||
+          (Boolean(activeChat?.primaryNegotiationId) &&
+            linkedNegotiationLoading &&
+            markQuickSaleDialogOpen)
+        }
+        footerExtra={
+          <button
+            type="button"
+            className="text-left text-xs font-medium text-primary hover:underline"
+            onClick={openFullSaleStockFlow}
+          >
+            Registrar com produtos, estoque e pagamento…
+          </button>
+        }
+        onConfirm={async (totalValue) => {
+          if (!activeChat) return;
+          if (!isSupabaseConfigured) {
+            toast({
+              title: "Supabase não configurado",
+              description: "Configure o Supabase para marcar vendas no CRM.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (activeChat.primaryNegotiationId && linkedNegotiationLoading) {
+            toast({
+              title: "Aguarde",
+              description: "Carregando o negócio vinculado ao chat…",
+            });
+            return;
+          }
+          if (!linkedNegotiation) {
+            toast({
+              title: "Negócio não vinculado",
+              description:
+                "Use “Criar lead no CRM” ou “Vincular ao CRM” no cabeçalho da conversa antes de marcar a venda.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (linkedNegotiation.status === "vendido") {
+            toast({
+              title: "Já marcado como venda",
+              description: "Este negócio já está como vendido no CRM.",
+            });
+            return;
+          }
+          if (linkedNegotiation.status === "perdido") {
+            toast({
+              title: "Não foi possível",
+              description:
+                "Negócios marcados como perdidos não podem ser convertidos em venda por aqui.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const saleStageId = resolveConfiguredSaleStageId(
+            effectiveCrmFunnels,
+            linkedNegotiation.funnelId,
+          );
+
+          try {
+            await updateCrmNegotiationMutation.mutateAsync({
+              id: linkedNegotiation.id,
+              patch: {
+                status: "vendido",
+                stageId: saleStageId,
+                totalValue,
+              },
+            });
+            await setChatResolutionMutation.mutateAsync({
+              chatId: activeChat.id,
+              resolution: "resolved",
+            });
+            toast({
+              title: "Venda registrada",
+              description: `Negócio atualizado (${formatMoney(totalValue)}). A conversa foi marcada como resolvida.`,
+            });
+            useAppStore.getState().addNotification({
+              tipo: "sucesso",
+              titulo: "CRM atualizado",
+              descricao: "Negócio como vendido e conversa resolvida.",
+            });
+          } catch (err) {
+            toast({
+              title: "Não foi possível salvar",
+              description: err instanceof Error ? err.message : "Tente novamente.",
+              variant: "destructive",
+            });
+            throw err;
+          }
+        }}
+      />
 
       <Dialog
         open={saleFlowOpen}

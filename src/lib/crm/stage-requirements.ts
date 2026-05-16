@@ -1,4 +1,4 @@
-import type { CrmFunnel } from "@/data/crm-funnels";
+import { isLegacyContractOrSaleSlug, type CrmFunnel } from "@/data/crm-funnels";
 export type CrmStageRequiredField =
   | "total_value"
   | "qualification"
@@ -45,7 +45,7 @@ export function stageRequiredFields(
   if (stage?.requiredFields?.length) {
     return stage.requiredFields;
   }
-  if (stageId === "contrato" || stageId === "venda") {
+  if (stage?.isSaleStage || isLegacyContractOrSaleSlug(stageId)) {
     return ["total_value"];
   }
   return [];

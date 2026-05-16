@@ -43,14 +43,14 @@ export function ConversationAvatar({
     <Avatar
       className={cn(
         "border border-white/90 shadow-[0_10px_24px_rgba(37,63,51,0.10)]",
-        size === "xs" ? "h-10 w-10" : size === "sm" ? "h-11 w-11" : "h-12 w-12",
+        size === "xs" ? "h-9 w-9" : size === "sm" ? "h-11 w-11" : "h-12 w-12",
       )}
     >
       {safeAvatarUrl ? <AvatarImage src={safeAvatarUrl} alt={name} /> : null}
       <AvatarFallback
         className={cn(
           `bg-gradient-to-br ${getConversationTone(name)} font-semibold`,
-          size === "xs" ? "text-[11px]" : size === "sm" ? "text-xs" : "text-sm",
+          size === "xs" ? "text-[10px]" : size === "sm" ? "text-xs" : "text-sm",
         )}
       >
         {getInitials(name)}

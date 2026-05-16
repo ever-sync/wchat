@@ -11,7 +11,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
-import { funnelStageTitleIn } from "@/data/crm-funnels";
+import {
+  funnelStageTitleIn,
+  resolveConfiguredSaleStageId,
+} from "@/data/crm-funnels";
 import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import {
@@ -24,10 +27,11 @@ import { useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
 import type { ChatResolution, InboxChat } from "@/types/domain";
 
 const RESOLUTION_LABELS: Record<ChatResolution, string> = {
-  open: "Aberta",
+  open: "Em aberto",
   pending: "Pendente",
   resolved: "Resolvida",
   waiting_customer: "Aguardando cliente",
+  lost: "Perdido",
 };
 
 type ChatCrmHeaderProps = {
@@ -115,7 +119,7 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             });
           }}
         >
-          <SelectTrigger className="h-7 w-[140px] text-xs">
+          <SelectTrigger className="h-7 w-[min(100%,11rem)] min-w-[8.5rem] max-w-[200px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -136,7 +140,10 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             onClick={() => {
               void updateNegotiation.mutateAsync({
                 id: negotiation.id,
-                patch: { status: "vendido", stageId: "venda" },
+                patch: {
+                  status: "vendido",
+                  stageId: resolveConfiguredSaleStageId(funnels, negotiation.funnelId),
+                },
               });
               void setResolution.mutateAsync({ chatId: chat.id, resolution: "resolved" });
             }}

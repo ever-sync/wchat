@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,8 @@ type MarkWinDialogProps = {
   initialValue?: number;
   onConfirm: (totalValue: number) => void | Promise<void>;
   pending?: boolean;
+  /** Conteudo extra entre o campo e os botoes (ex.: link para outro fluxo). */
+  footerExtra?: ReactNode;
 };
 
 export function MarkWinDialog({
@@ -37,6 +39,7 @@ export function MarkWinDialog({
   initialValue = 0,
   onConfirm,
   pending,
+  footerExtra,
 }: MarkWinDialogProps) {
   const [valueText, setValueText] = useState("");
 
@@ -96,6 +99,9 @@ export function MarkWinDialog({
             <p className="text-xs text-destructive">Informe um valor maior que zero.</p>
           ) : null}
         </div>
+        {footerExtra ? (
+          <div className="border-t border-border/60 pt-3 text-muted-foreground">{footerExtra}</div>
+        ) : null}
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar

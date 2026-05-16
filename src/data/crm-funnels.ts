@@ -9,6 +9,11 @@ export type CrmStageDef = {
   title: string;
   /** Campos obrigatórios ao mover o card para esta etapa. */
   requiredFields?: CrmStageRequiredField[];
+  /**
+   * Etapa onde o CRM move o negócio ao registrar venda (apenas uma por funil).
+   * Fallback legado quando ausente: id `venda`.
+   */
+  isSaleStage?: boolean;
 };
 
 export type CrmFunnel = {
@@ -27,7 +32,12 @@ export const DEFAULT_CRM_FUNNELS: CrmFunnel[] = [
       { id: "contato", title: "CONTATO FEITO" },
       { id: "andamento", title: "EM ANDAMENTO" },
       { id: "contrato", title: "ENVIO CONTRATO", requiredFields: ["total_value"] },
-      { id: "venda", title: "VENDA", requiredFields: ["total_value"] },
+      {
+        id: "venda",
+        title: "VENDA",
+        requiredFields: ["total_value"],
+        isSaleStage: true,
+      },
     ],
   },
   {
@@ -38,7 +48,12 @@ export const DEFAULT_CRM_FUNNELS: CrmFunnel[] = [
       { id: "contato", title: "CONTATO FEITO" },
       { id: "andamento", title: "EM ANDAMENTO" },
       { id: "contrato", title: "ENVIO CONTRATO", requiredFields: ["total_value"] },
-      { id: "venda", title: "VENDA", requiredFields: ["total_value"] },
+      {
+        id: "venda",
+        title: "VENDA",
+        requiredFields: ["total_value"],
+        isSaleStage: true,
+      },
     ],
   },
   {
@@ -48,7 +63,12 @@ export const DEFAULT_CRM_FUNNELS: CrmFunnel[] = [
       { id: "lead", title: "LEAD QUALIFICADA" },
       { id: "contato", title: "CONTATO FEITO" },
       { id: "andamento", title: "EM ANDAMENTO" },
-      { id: "venda", title: "VENDA", requiredFields: ["total_value"] },
+      {
+        id: "venda",
+        title: "VENDA",
+        requiredFields: ["total_value"],
+        isSaleStage: true,
+      },
     ],
   },
   {
@@ -59,7 +79,12 @@ export const DEFAULT_CRM_FUNNELS: CrmFunnel[] = [
       { id: "contato", title: "CONTATO FEITO" },
       { id: "andamento", title: "EM ANDAMENTO" },
       { id: "contrato", title: "ENVIO CONTRATO", requiredFields: ["total_value"] },
-      { id: "venda", title: "VENDA", requiredFields: ["total_value"] },
+      {
+        id: "venda",
+        title: "VENDA",
+        requiredFields: ["total_value"],
+        isSaleStage: true,
+      },
     ],
   },
 ];
@@ -108,9 +133,21 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
           .filter((v) => allowed.has(v));
         if (requiredFields.length === 0) requiredFields = undefined;
       }
-      stages.push({ id: sid, title, ...(requiredFields ? { requiredFields } : {}) });
+      const rawSale = sr.isSaleStage;
+      const isSaleStage =
+        rawSale === true || rawSale === "true" || rawSale === 1 || rawSale === "1";
+      stages.push({
+        id: sid,
+        title,
+        ...(requiredFields ? { requiredFields } : {}),
+        ...(isSaleStage ? { isSaleStage: true } : {}),
+      });
     }
     if (stages.length === 0) {
+      return null;
+    }
+    const saleMarks = stages.filter((s) => s.isSaleStage).length;
+    if (saleMarks > 1) {
       return null;
     }
     out.push({ id, listName, stages });
@@ -143,4 +180,19 @@ export function funnelStageTitleIn(funnels: CrmFunnel[], funnelId: string, stage
   const list = Array.isArray(funnels) ? funnels : DEFAULT_CRM_FUNNELS;
   const funnel = list.find((f) => f.id === funnelId);
   return funnel?.stages.find((s) => s.id === stageId)?.title ?? stageId;
+}
+
+/** Id da etapa de destino ao registrar/marcar venda (`venda` se nada estiver marcado). */
+export function resolveConfiguredSaleStageId(funnels: CrmFunnel[], funnelId: string): string {
+  const funnel = funnels.find((f) => f.id === funnelId);
+  const marked = funnel?.stages.find((s) => s.isSaleStage);
+  if (marked) {
+    return marked.id;
+  }
+  return "venda";
+}
+
+/** Etapa tratada como coluna comercial histórica (valor obrigatório se não há config própria). */
+export function isLegacyContractOrSaleSlug(stageId: string): boolean {
+  return stageId === "contrato" || stageId === "venda";
 }

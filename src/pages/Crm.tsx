@@ -2036,9 +2036,6 @@ function DraggableNegotiationCard({
       </div>
       <p className="mb-2 text-[15px] font-bold leading-snug text-[#212529]">{card.title}</p>
       <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" />
-      {card.sourceChatPreview ? (
-        <p className="mb-2 line-clamp-2 text-xs text-[#6c757d]">{card.sourceChatPreview}</p>
-      ) : null}
       <div className="mb-3 flex items-center justify-between gap-2 text-[#868e96]">
         <span className="inline-flex items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1">
