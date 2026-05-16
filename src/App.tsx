@@ -27,7 +27,6 @@ const Crm = lazy(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
 const Relatorios = lazy(() => import("./pages/Relatorios"));
 const Produtos = lazy(() => import("./pages/Produtos"));
-
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando…

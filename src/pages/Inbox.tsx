@@ -255,12 +255,8 @@ export default function Inbox() {
   const [microphoneState, setMicrophoneState] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationSec, setRecordingDurationSec] = useState(0);
-  const [productOpen, setProductOpen] = useState(false);
-  const [productPickerQuery, setProductPickerQuery] = useState("");
-  const debouncedProductPickerQuery = useDebouncedValue(productPickerQuery, 300);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
-  const [selectedProductHighlightId, setSelectedProductHighlightId] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedAttachmentName, setSelectedAttachmentName] = useState<string | null>(null);
   const [attachmentMimeType, setAttachmentMimeType] = useState<string | null>(null);
@@ -303,24 +299,7 @@ export default function Inbox() {
     });
   };
 
-  useEffect(() => {
-    if (!productOpen) {
-      setProductPickerQuery("");
-    }
-  }, [productOpen]);
-
   const { data: instances = [] } = useWhatsappInstances();
-  const { data: products = [], isLoading: productsLoading } = useProducts(
-    {
-      status: "ativo",
-      search: debouncedProductPickerQuery.trim() || undefined,
-      limit: 90,
-    },
-    {
-      enabled: productOpen,
-      staleTime: 60_000,
-    },
-  );
   const { data: saleProducts = [] } = useProducts(
     { status: "ativo", limit: 500 },
     { enabled: saleFlowOpen, staleTime: 60_000 },
@@ -596,15 +575,6 @@ export default function Inbox() {
   }, [activeChat?.id]);
 
   const messageGroups = useMemo(() => groupMessagesByDay(messages), [messages]);
-  const productOptions = useMemo(
-    () =>
-      products.map((product) => ({
-        id: product.id,
-        name: product.nome,
-        subtitle: `${formatMoney(product.precoVenda)} • estoque ${product.qtdEstoque} ${product.unidade}`,
-      })),
-    [products],
-  );
   const saleProductOptions = useMemo(
     () =>
       saleProducts.map((product) => ({
@@ -1305,31 +1275,6 @@ export default function Inbox() {
     setPayloadText("{}");
     setSelectedAttachmentName(null);
     setAttachmentMimeType(null);
-    focusBodyComposer();
-  }
-
-  function applyProducts(productIds: string[]) {
-    if (!productIds.length) {
-      return;
-    }
-
-    setBodyText((current) => {
-      let next = current.trim();
-      for (const productId of productIds) {
-        const product = products.find((p) => p.id === productId);
-        if (!product) {
-          continue;
-        }
-        const chunk = `📦 ${product.nome}\n💰 ${formatMoney(product.precoVenda)}`;
-        if (next.includes(chunk)) {
-          continue;
-        }
-        next = next ? `${next}\n\n${chunk}` : chunk;
-      }
-      return next;
-    });
-
-    setSelectedProductHighlightId(productIds[productIds.length - 1] ?? null);
     focusBodyComposer();
   }
 
@@ -2051,13 +1996,6 @@ export default function Inbox() {
             showEmojiPicker={showEmojiPicker}
             onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
             onAppendEmoji={appendEmoji}
-            productOpen={productOpen}
-            onProductOpenChange={setProductOpen}
-            selectedProductHighlightId={selectedProductHighlightId}
-            productOptions={productOptions}
-            productsLoading={productsLoading}
-            onSelectProducts={applyProducts}
-            onProductSearchQueryChange={setProductPickerQuery}
             templateOpen={templateOpen}
             onTemplateOpenChange={setTemplateOpen}
             selectedTemplateId={selectedTemplateId}

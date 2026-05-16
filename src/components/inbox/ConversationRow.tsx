@@ -138,56 +138,56 @@ export function ConversationRow({
                 <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">{subtitle}</p>
               ) : null}
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-              <p
-                className={cn(
-                  "text-[10px] tabular-nums",
-                  active ? "text-muted-foreground" : chat.unreadCount > 0 ? "text-primary" : "text-muted-foreground",
-                )}
-              >
-                {formatConversationTime(chat.lastMessageAt)}
-              </p>
-              <div className="flex items-center gap-1">
-                {snoozed ? (
-                  <span
-                    title={`Adiada até ${format(new Date(chat.snoozeUntil!), "dd/MM HH:mm", { locale: ptBR })}`}
-                    className="inline-flex h-5 items-center rounded-full bg-amber-100 px-1.5 text-[9px] font-semibold text-amber-800"
-                  >
-                    <AlarmClock className="mr-0.5 h-3 w-3" />
-                  </span>
-                ) : null}
-                {slaBreached ? (
-                  <span
-                    title="SLA de primeira resposta estourado"
-                    className="inline-flex h-5 items-center rounded-full bg-red-100 px-1.5 text-[9px] font-semibold text-red-700"
-                  >
-                    SLA
-                  </span>
-                ) : slaMinutes != null && slaMinutes <= 5 && slaMinutes > 0 ? (
-                  <span
-                    title={`${slaMinutes} min para 1ª resposta`}
-                    className="inline-flex h-5 items-center rounded-full bg-orange-100 px-1.5 text-[9px] font-semibold text-orange-800"
-                  >
-                    <Clock className="h-3 w-3" />
-                  </span>
-                ) : null}
-                {chat.assigneeName ? <AssigneeChip name={chat.assigneeName} /> : null}
-                {chat.unreadCount > 0 ? (
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">
-                    {chat.unreadCount}
-                  </span>
-                ) : null}
-              </div>
+            <p
+              className={cn(
+                "shrink-0 pt-0.5 text-[10px] tabular-nums leading-snug",
+                active ? "text-muted-foreground" : chat.unreadCount > 0 ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              {formatConversationTime(chat.lastMessageAt)}
+            </p>
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <p
+              className={cn(
+                "min-w-0 flex-1 line-clamp-1 text-[12px] leading-snug text-muted-foreground",
+                chat.unreadCount > 0 && !active && "font-medium text-foreground",
+              )}
+            >
+              {messagePreviewDisplay}
+            </p>
+            <div className="flex shrink-0 items-center gap-1">
+              {snoozed ? (
+                <span
+                  title={`Adiada até ${format(new Date(chat.snoozeUntil!), "dd/MM HH:mm", { locale: ptBR })}`}
+                  className="inline-flex h-5 items-center rounded-full bg-amber-100 px-1.5 text-[9px] font-semibold text-amber-800"
+                >
+                  <AlarmClock className="mr-0.5 h-3 w-3" />
+                </span>
+              ) : null}
+              {slaBreached ? (
+                <span
+                  title="SLA de primeira resposta estourado"
+                  className="inline-flex h-5 items-center rounded-full bg-red-100 px-1.5 text-[9px] font-semibold text-red-700"
+                >
+                  SLA
+                </span>
+              ) : slaMinutes != null && slaMinutes <= 5 && slaMinutes > 0 ? (
+                <span
+                  title={`${slaMinutes} min para 1ª resposta`}
+                  className="inline-flex h-5 items-center rounded-full bg-orange-100 px-1.5 text-[9px] font-semibold text-orange-800"
+                >
+                  <Clock className="h-3 w-3" />
+                </span>
+              ) : null}
+              {chat.assigneeName ? <AssigneeChip name={chat.assigneeName} /> : null}
+              {chat.unreadCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                </span>
+              ) : null}
             </div>
           </div>
-          <p
-            className={cn(
-              "mt-0.5 line-clamp-1 min-w-0 text-[12px] leading-snug text-muted-foreground",
-              chat.unreadCount > 0 && !active && "text-foreground",
-            )}
-          >
-            {messagePreviewDisplay}
-          </p>
         </div>
       </div>
     </button>

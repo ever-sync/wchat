@@ -1,5 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 import {
+  Calculator,
   FileText,
   Loader2,
   Mic,
@@ -16,11 +17,10 @@ import { WHATSAPP_MEDIA_MAX_BYTES } from "@/lib/api/whatsapp-media";
 import { resolveComposerAttachmentPreview } from "@/lib/inboxComposerPreview";
 import { cn } from "@/lib/utils";
 import type { MessageType, QuickReply } from "@/types/domain";
+import { useCalculadora } from "@/contexts/CalculadoraContext";
 import { QUICK_EMOJIS } from "./inboxComposerOptions";
-import { ProductQuickSelector } from "./ProductQuickSelector";
 import { QuickReplyPicker } from "./QuickReplyPicker";
 import { TemplatePicker } from "./TemplatePicker";
-import type { SearchSelectOption } from "./SearchSelect";
 
 export type MessageInputProps = {
   bodyTextareaRef: RefObject<HTMLTextAreaElement>;
@@ -47,13 +47,6 @@ export type MessageInputProps = {
   showEmojiPicker: boolean;
   onToggleEmojiPicker: () => void;
   onAppendEmoji: (emoji: string) => void;
-  productOpen: boolean;
-  onProductOpenChange: (open: boolean) => void;
-  selectedProductHighlightId: string | null;
-  productOptions: SearchSelectOption[];
-  productsLoading: boolean;
-  onSelectProducts: (ids: string[]) => void;
-  onProductSearchQueryChange?: (query: string) => void;
   templateOpen: boolean;
   onTemplateOpenChange: (open: boolean) => void;
   selectedTemplateId: string | null;
@@ -100,13 +93,6 @@ export function MessageInput({
   showEmojiPicker,
   onToggleEmojiPicker,
   onAppendEmoji,
-  productOpen,
-  onProductOpenChange,
-  selectedProductHighlightId,
-  productOptions,
-  productsLoading,
-  onSelectProducts,
-  onProductSearchQueryChange,
   templateOpen,
   onTemplateOpenChange,
   selectedTemplateId,
@@ -126,6 +112,7 @@ export function MessageInput({
   noteMode = false,
   onNoteModeChange,
 }: MessageInputProps) {
+  const { openCalculadora } = useCalculadora();
   const previewKind = resolveComposerAttachmentPreview(
     messageType,
     mediaUrl,
@@ -281,15 +268,15 @@ export function MessageInput({
               <Paperclip className="h-4 w-4" />
             )}
           </button>
-          <ProductQuickSelector
-            open={productOpen}
-            onOpenChange={onProductOpenChange}
-            selectedHighlightId={selectedProductHighlightId}
-            options={productOptions}
-            productsLoading={productsLoading}
-            onSelectProducts={onSelectProducts}
-            onSearchQueryChange={onProductSearchQueryChange}
-          />
+          <button
+            type="button"
+            onClick={openCalculadora}
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground"
+            title="Calculadora"
+            aria-label="Abrir calculadora"
+          >
+            <Calculator className="h-4 w-4" />
+          </button>
           <TemplatePicker
             open={templateOpen}
             onOpenChange={onTemplateOpenChange}

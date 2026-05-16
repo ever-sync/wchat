@@ -1,4 +1,12 @@
-import { BarChart3, Briefcase, LogOut, MessageCircle, Package, Settings2, Users2 } from "lucide-react";
+import {
+  BarChart3,
+  Briefcase,
+  LogOut,
+  MessageCircle,
+  Package,
+  Settings2,
+  Users2,
+} from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
