@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
+import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
 import { Button } from "@/components/ui/button";
@@ -457,6 +458,72 @@ function CrmNegotiationDetailContent({
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
         qualificationStars={qualificationStars}
+        negotiationPanelSnapshot={
+          taskIntegration && isPersistedCrmNegotiationId(negotiation.id)
+            ? {
+                assigneeId: negotiation.assigneeId ?? "",
+                qualification: negotiation.qualification,
+                totalValue: negotiation.totalValue,
+                closingForecast: negotiation.closingForecast ?? null,
+                createdAt: negotiation.createdAt,
+              }
+            : undefined
+        }
+        onSaveNegotiationPanel={
+          taskIntegration && isPersistedCrmNegotiationId(negotiation.id)
+            ? async (payload) => {
+                try {
+                  const closingIso =
+                    payload.closingForecastLocal.trim() &&
+                    !Number.isNaN(new Date(payload.closingForecastLocal).getTime())
+                      ? new Date(payload.closingForecastLocal).toISOString()
+                      : null;
+                  await updateNegotiation.mutateAsync({
+                    id: negotiation.id,
+                    patch: {
+                      title: payload.nome.trim(),
+                      assigneeId: payload.assigneeId,
+                      qualification: payload.qualification,
+                      totalValue: payload.totalValue,
+                      closingForecast: closingIso,
+                    },
+                  });
+                  if (linkedCustomer) {
+                    await updateCustomer.mutateAsync({
+                      id: linkedCustomer.id,
+                      input: {
+                        ...toCustomerUpsertInput(linkedCustomer),
+                        nome: payload.nome.trim(),
+                        telefone: payload.telefone.trim(),
+                        email: payload.email.trim(),
+                        origem: payload.origem === "" ? undefined : payload.origem,
+                        totalGasto: payload.totalValue,
+                        sourceColumns: {
+                          ...linkedCustomer.sourceColumns,
+                          campanha: payload.campanha,
+                          doenca: payload.doenca,
+                          isencao: payload.isencao,
+                          beneficio: payload.beneficio,
+                          qual_sua_renda_mensal: payload.qualSuaRendaMensal,
+                        },
+                      },
+                    });
+                  }
+                  toast({ title: "Negociação", description: "Dados salvos." });
+                } catch (e) {
+                  toast({
+                    title: "Não foi possível salvar",
+                    description: e instanceof Error ? e.message : "Tente novamente.",
+                    variant: "destructive",
+                  });
+                  throw e;
+                }
+              }
+            : undefined
+        }
+        negotiationPanelCustomerLinked={Boolean(linkedCustomer)}
+        negotiationPanelSavePending={updateNegotiation.isPending || updateCustomer.isPending}
+        mainTabDefault={searchParams.get("criarTarefa") === "1" ? "tarefas" : "historico"}
         onBack={() => navigate("/crm")}
         onRefresh={() => {
           if (isPersistedRow) {
@@ -660,6 +727,11 @@ function CrmNegotiationDetailContent({
         showReleaseNegotiation={showReleaseNegotiation}
         onReleaseNegotiation={() => void handleReleaseNegotiation()}
         releaseNegotiationPending={releaseCrmNegotiation.isPending}
+        negotiationDocumentsSlot={
+          isPersistedRow && isSupabaseConfigured && isPersistedCrmNegotiationId(negotiation.id) ? (
+            <CrmNegotiationDocumentsSection negotiationId={negotiation.id} enabled={taskIntegration} />
+          ) : undefined
+        }
         onPipelineStageChange={(idx) => {
           setPipelineActiveIndex(idx);
           const label = buildPipelineLabels(daysContact)[idx]?.label;

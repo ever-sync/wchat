@@ -199,6 +199,22 @@ export interface CrmTask {
   updatedAt: string;
 }
 
+/** Linha `public.crm_negotiation_documents` (anexos do lead / negociação). */
+export interface CrmNegotiationDocument {
+  id: string;
+  tenantId: string;
+  negotiationId: string;
+  /** Nome exibido escolhido ao anexar. */
+  displayName: string;
+  /** Caminho no bucket `crm-lead-documents`. */
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
 export interface CrmNegotiationRecord {
   id: string;
   tenantId: string;

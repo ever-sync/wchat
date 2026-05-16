@@ -1,4 +1,4 @@
-import { Briefcase, LogOut, MessageSquare, Settings2, Users2 } from "lucide-react";
+import { Briefcase, LogOut, MessageSquare, Package, Settings2, Users2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +10,7 @@ const linkItems: { title: string; url: string; icon: NavIcon }[] = [
   { title: "Chat", url: "/inbox", icon: MessageSquare },
   { title: "CRM", url: "/crm", icon: Briefcase },
   { title: "Clientes", url: "/clientes", icon: Users2 },
+  { title: "Produtos", url: "/produtos", icon: Package },
   { title: "Ajustes", url: "/configuracoes", icon: Settings2 },
 ];
 
