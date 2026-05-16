@@ -44,6 +44,8 @@ export type MessageInputProps = {
   onSend: () => void;
   sendPending: boolean;
   sendDisabled: boolean;
+  /** Bloqueia anexo, template, áudio e emoji (ex.: lead não assumido). */
+  composerActionsDisabled?: boolean;
   showEmojiPicker: boolean;
   onToggleEmojiPicker: () => void;
   onAppendEmoji: (emoji: string) => void;
@@ -90,6 +92,7 @@ export function MessageInput({
   onSend,
   sendPending,
   sendDisabled,
+  composerActionsDisabled = false,
   showEmojiPicker,
   onToggleEmojiPicker,
   onAppendEmoji,
@@ -258,9 +261,9 @@ export function MessageInput({
           <button
             type="button"
             onClick={onAttachmentButtonClick}
-            disabled={attachmentUploading}
+            disabled={attachmentUploading || composerActionsDisabled}
             className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 ${messageType === "document" ? "bg-wchat-200 text-primary" : ""}`}
-            title="Anexar documento"
+            title={composerActionsDisabled ? "Assuma a conversa e o negócio para anexar" : "Anexar documento"}
           >
             {attachmentUploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -282,6 +285,7 @@ export function MessageInput({
             onOpenChange={onTemplateOpenChange}
             value={selectedTemplateId}
             onSelect={onSelectTemplate}
+            disabled={composerActionsDisabled}
           />
           {onSelectQuickReply ? (
             <QuickReplyPicker
@@ -289,6 +293,7 @@ export function MessageInput({
               onOpenChange={onQuickReplyOpenChange ?? (() => {})}
               replies={quickReplies}
               onSelect={onSelectQuickReply}
+              disabled={composerActionsDisabled}
             />
           ) : null}
           {onNoteModeChange ? (
@@ -304,7 +309,8 @@ export function MessageInput({
           <button
             type="button"
             onClick={onToggleEmojiPicker}
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground ${showEmojiPicker ? "bg-wchat-200 text-primary" : ""}`}
+            disabled={composerActionsDisabled}
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 ${showEmojiPicker ? "bg-wchat-200 text-primary" : ""}`}
             title="Inserir emoji"
           >
             <Smile className="h-4 w-4" />
@@ -341,6 +347,7 @@ export function MessageInput({
             onClick={() => {
               void onMicrophoneClick();
             }}
+            disabled={composerActionsDisabled}
             className={cn(
               "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
               isRecording

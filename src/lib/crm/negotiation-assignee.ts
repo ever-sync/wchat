@@ -48,6 +48,22 @@ export function chatAssigneeBlockedMessage(): string {
   return "Assuma a conversa para interagir. Só é possível trabalhar em conversas atribuídas a você.";
 }
 
+/** Perfil do cliente: bloqueia CRM se houver negócio em andamento não assumido pelo atendente. */
+export function isClientePerfilCrmLocked(
+  role: UserRole | undefined,
+  profileId: string | null | undefined,
+  negotiations: Array<{ status: string; assigneeId?: string | null }>,
+): boolean {
+  if (role !== "atendimento") {
+    return false;
+  }
+  const active = negotiations.filter((n) => n.status === "em_andamento");
+  if (active.length === 0) {
+    return false;
+  }
+  return !active.every((n) => isNegotiationAssignedToProfile(n.assigneeId, profileId));
+}
+
 /** Inbox: atendente precisa da conversa e do negócio CRM assumidos para ações no lead. */
 export function isInboxLeadLocked(
   role: UserRole | undefined,

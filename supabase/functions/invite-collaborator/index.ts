@@ -4,28 +4,129 @@ import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts"
 
 const allowedRoles = new Set(["admin", "operacao", "financeiro", "atendimento"]);
 
-function resolveAppUrl(request: Request) {
-  const envUrl =
-    Deno.env.get("APP_SITE_URL") ??
-    Deno.env.get("PUBLIC_APP_URL") ??
-    Deno.env.get("VITE_APP_URL");
+type InviteEmailPayload = {
+  email: string;
+  nome: string;
+  empresa: string | null;
+  tenantId: string;
+  role: string;
+  appUrl?: string;
+};
 
-  if (envUrl?.trim()) {
-    return envUrl.trim().replace(/\/+$/, "");
+type SendInviteEmailResult = {
+  emailSent: boolean;
+  warning: string | null;
+};
+
+function normalizePublicOrigin(raw: string | null | undefined) {
+  if (!raw?.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(raw.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    return parsed.origin.replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function resolveAppUrl(request: Request, bodyAppUrl?: unknown) {
+  const envCandidates = [
+    Deno.env.get("APP_SITE_URL"),
+    Deno.env.get("PUBLIC_APP_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ];
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizePublicOrigin(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const origin = normalizePublicOrigin(request.headers.get("origin"));
+  const fromBody = normalizePublicOrigin(typeof bodyAppUrl === "string" ? bodyAppUrl : null);
+
+  if (fromBody) {
+    if (origin && fromBody !== origin) {
+      throw new Error("URL publica do app nao confere com a origem da requisicao.");
+    }
+
+    return fromBody;
+  }
+
+  const referer = request.headers.get("referer");
+  const fromReferer = referer ? normalizePublicOrigin(referer) : null;
+  if (fromReferer) {
+    return fromReferer;
+  }
+
+  if (origin) {
+    return origin;
   }
 
   const forwardedHost = request.headers.get("x-forwarded-host");
   if (forwardedHost?.trim()) {
     const forwardedProto = request.headers.get("x-forwarded-proto")?.trim() || "https";
-    return `${forwardedProto}://${forwardedHost.trim()}`.replace(/\/+$/, "");
+    return normalizePublicOrigin(`${forwardedProto}://${forwardedHost.trim()}`);
   }
 
-  const origin = request.headers.get("origin");
-  if (origin?.trim()) {
-    return origin.trim().replace(/\/+$/, "");
+  throw new Error(
+    "Nao foi possivel resolver a URL publica do app para o convite. Defina APP_SITE_URL nos secrets da Edge Function.",
+  );
+}
+
+async function sendInviteEmail(
+  service: ReturnType<typeof createAdminClient>,
+  request: Request,
+  payload: InviteEmailPayload,
+): Promise<SendInviteEmailResult> {
+  const redirectTo = `${resolveAppUrl(request, payload.appUrl)}/ativar-acesso`;
+  const { error: inviteError } = await service.auth.admin.inviteUserByEmail(payload.email, {
+    redirectTo,
+    data: {
+      nome: payload.nome,
+      empresa: payload.empresa,
+      tenant_id: payload.tenantId,
+      role: payload.role,
+      plano: "colaborador",
+    },
+  });
+
+  if (!inviteError) {
+    return { emailSent: true, warning: null };
   }
 
-  throw new Error("Nao foi possivel resolver a URL publica do app para o convite.");
+  const message = inviteError.message.toLowerCase();
+  const isEmailLimit = message.includes("email rate limit exceeded") || message.includes("rate limit");
+
+  if (isEmailLimit) {
+    return {
+      emailSent: false,
+      warning:
+        "Limite de envio de e-mails do Supabase atingido. Aguarde alguns minutos e use Reenviar e-mail no convite pendente.",
+    };
+  }
+
+  const alreadyExists =
+    message.includes("already been registered") ||
+    message.includes("already registered") ||
+    message.includes("user already registered");
+
+  if (alreadyExists) {
+    return {
+      emailSent: false,
+      warning:
+        "Este e-mail ja possui conta. Peça para usar Recuperar senha na tela de login ou confira a caixa de spam do convite anterior.",
+    };
+  }
+
+  throw new Error(inviteError.message);
 }
 
 Deno.serve(async (request) => {
@@ -44,6 +145,7 @@ Deno.serve(async (request) => {
     const nome = String(body.nome ?? "").trim();
     const email = String(body.email ?? "").trim().toLowerCase();
     const role = String(body.role ?? "operacao").trim().toLowerCase();
+    const resend = body.resend === true;
 
     if (!nome || !email) {
       throw new Error("nome e email sao obrigatorios.");
@@ -100,6 +202,9 @@ Deno.serve(async (request) => {
         { onConflict: "tenant_id,email" },
       );
 
+    let emailSent = false;
+    let inviteWarning: string | null = null;
+
     if (existingProfile?.id) {
       const { error: profileUpdateError } = await service
         .from("profiles")
@@ -116,27 +221,21 @@ Deno.serve(async (request) => {
         throw new Error(profileUpdateError.message);
       }
     } else {
-      if (existingInvite?.status !== "pending") {
-        const redirectTo = `${resolveAppUrl(request)}/ativar-acesso`;
-        const { error: inviteError } = await service.auth.admin.inviteUserByEmail(email, {
-          redirectTo,
-          data: {
-            nome,
-            empresa: inviterProfile.empresa,
-            tenant_id: tenantId,
-            role,
-            plano: "colaborador",
-          },
+      const shouldSendEmail = resend || existingInvite?.status !== "pending";
+
+      if (shouldSendEmail) {
+        const sendResult = await sendInviteEmail(service, request, {
+          email,
+          nome,
+          empresa: inviterProfile.empresa,
+          tenantId,
+          role,
+          appUrl: typeof body.appUrl === "string" ? body.appUrl : undefined,
         });
-
-        if (inviteError) {
-          const message = inviteError.message.toLowerCase();
-          const isEmailLimit = message.includes("email rate limit exceeded") || message.includes("rate limit");
-
-          if (!isEmailLimit) {
-            throw new Error(inviteError.message);
-          }
-        }
+        emailSent = sendResult.emailSent;
+        inviteWarning = sendResult.warning;
+      } else {
+        inviteWarning = "Este convite ja existia e o e-mail nao foi reenviado. Use Reenviar e-mail.";
       }
     }
 
@@ -153,10 +252,8 @@ Deno.serve(async (request) => {
 
     return jsonResponse({
       invite,
-      warning:
-        existingInvite?.status === "pending"
-          ? "Este convite já existia e o e-mail não foi reenviado."
-          : null,
+      emailSent,
+      warning: inviteWarning,
     });
   } catch (error) {
     return jsonResponse(

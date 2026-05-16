@@ -16,11 +16,13 @@ export function QuickReplyPicker({
   onOpenChange,
   replies,
   onSelect,
+  disabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   replies: QuickReply[];
   onSelect: (reply: QuickReply) => void;
+  disabled?: boolean;
 }) {
   const globalReplies = replies.filter((r) => r.scope === "global");
   const privateReplies = replies.filter((r) => r.scope === "private");
@@ -31,8 +33,9 @@ export function QuickReplyPicker({
         <Button
           variant="outline"
           size="icon"
+          disabled={disabled}
           title="Respostas rápidas (ou digite /)"
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent px-0 text-muted-foreground shadow-none hover:bg-wchat-200 hover:text-foreground ${open ? "bg-wchat-200 text-primary" : ""}`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent px-0 text-muted-foreground shadow-none hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 ${open ? "bg-wchat-200 text-primary" : ""}`}
         >
           <Zap className="h-4 w-4" />
         </Button>

@@ -65,6 +65,9 @@ export type ChatResolution = "open" | "pending" | "resolved" | "waiting_customer
 
 /** Filtro da lista lateral: alinha com categorias úteis de resolução + aberto/fechado. */
 export type InboxListScope = "all" | "open" | "closed" | "resolved" | "lost";
+
+/** Chips rápidos na lista de conversas (Inbox). */
+export type InboxQuickFilter = "mine" | "unread" | "unassigned" | "hidden";
 export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
 export type MessageActorType = "human" | "ai" | "system";
 export type MessageDirection = "inbound" | "outbound";
@@ -698,6 +701,8 @@ export interface InboxChatFilters {
   /** Quando true, exclui conversas com `resolution === "lost"` (ex.: listas Todas / Encerradas). */
   hideLost?: boolean;
   assigneeId?: string | "unassigned" | "mine";
+  /** Usado com `assigneeId: "mine"` no cache/realtime. */
+  currentUserId?: string;
   tagIds?: string[];
   snoozedOnly?: boolean;
   hideSnoozed?: boolean;

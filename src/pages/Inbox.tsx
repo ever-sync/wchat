@@ -101,6 +101,7 @@ import {
   type InboxChat,
   type InboxChatFilters,
   type InboxListScope,
+  type InboxQuickFilter,
   type MessageType,
   type SalePaymentMethod,
   type WhatsappMessage,
@@ -114,6 +115,10 @@ import { useInboxTitleBadge } from "@/hooks/useInboxTitleBadge";
 import { clearInboxChatDraft, useInboxChatDraft } from "@/hooks/useInboxChatDraft";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
+import {
+  inboxFiltersFromQuickFilter,
+  inboxScopeFiltersForQuickFilter,
+} from "@/lib/inbox-quick-filters";
 
 /** Limite de vendas do cliente carregadas no fluxo de devolucao (API listSales). */
 const SALE_RETURN_HISTORY_LIMIT = 200;
@@ -245,6 +250,7 @@ export default function Inbox() {
   const [listScope, setListScope] = useState<InboxListScope>("open");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [snoozedFilter, setSnoozedFilter] = useState<"active" | "snoozed">("active");
+  const [quickFilter, setQuickFilter] = useState<InboxQuickFilter | null>(null);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -330,17 +336,37 @@ export default function Inbox() {
   const snoozeChatMutation = useSnoozeChat();
   const clearSnoozeMutation = useClearChatSnooze();
 
+  const profileId = profile?.id;
+
   const inboxChatsFilter = useMemo((): InboxChatFilters => {
+    const quick = inboxFiltersFromQuickFilter(quickFilter, profileId);
+    const useAdvancedAssignee = quickFilter === null;
+    const useAdvancedSnooze = quickFilter === null;
+
     return {
       search: debouncedSearch,
       instanceId: instanceId === "all" ? undefined : instanceId,
-      assigneeId: assigneeFilter === "all" ? undefined : assigneeFilter,
       tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-      hideSnoozed: snoozedFilter === "active",
-      snoozedOnly: snoozedFilter === "snoozed",
-      ...inboxChatFiltersFromListScope(listScope),
+      ...inboxScopeFiltersForQuickFilter(quickFilter, listScope),
+      ...quick,
+      assigneeId: useAdvancedAssignee
+        ? assigneeFilter === "all"
+          ? undefined
+          : assigneeFilter
+        : quick.assigneeId,
+      hideSnoozed: useAdvancedSnooze ? snoozedFilter === "active" : quick.hideSnoozed,
+      snoozedOnly: useAdvancedSnooze ? snoozedFilter === "snoozed" : quick.snoozedOnly,
     };
-  }, [debouncedSearch, instanceId, assigneeFilter, selectedTagIds, snoozedFilter, listScope]);
+  }, [
+    debouncedSearch,
+    instanceId,
+    assigneeFilter,
+    selectedTagIds,
+    snoozedFilter,
+    listScope,
+    quickFilter,
+    profileId,
+  ]);
 
   const { data: chats = [], isLoading: chatsLoading } = useInboxChats(inboxChatsFilter, {
     // Realtime ja cobre updates em whatsapp_chats (ver useInboxChatsRealtime).
@@ -349,10 +375,12 @@ export default function Inbox() {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
-  const activeChat = useMemo(
-    () => chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null,
-    [activeChatId, chats],
-  );
+  const activeChat = useMemo(() => {
+    if (!activeChatId) {
+      return null;
+    }
+    return chats.find((chat) => chat.id === activeChatId) ?? null;
+  }, [activeChatId, chats]);
   const { data: linkedNegotiation, isLoading: linkedNegotiationLoading } = useChatNegotiation(
     activeChat?.id ?? null,
   );
@@ -500,9 +528,17 @@ export default function Inbox() {
         return current;
       }
 
+      if (current && quickFilter === "unread") {
+        return null;
+      }
+
+      if (quickFilter === "unread") {
+        return null;
+      }
+
       return chats[0].id;
     });
-  }, [chats, requestedChatId, requestedCustomerId]);
+  }, [chats, requestedChatId, requestedCustomerId, quickFilter]);
 
   useEffect(() => {
     if (!requestedSearch) {
@@ -513,6 +549,10 @@ export default function Inbox() {
   }, [requestedSearch]);
 
   useEffect(() => {
+    if (quickFilter === "unread") {
+      return;
+    }
+
     if (!activeChat?.id || !activeChat.unreadCount) {
       return;
     }
@@ -535,7 +575,7 @@ export default function Inbox() {
 
     lastMarkReadAttemptRef.current[activeChat.id] = activeChat.unreadCount;
     void markChatAsRead.mutateAsync(activeChat.id).catch(() => undefined);
-  }, [activeChat?.id, activeChat?.unreadCount, markChatAsRead]);
+  }, [activeChat?.id, activeChat?.unreadCount, markChatAsRead, quickFilter]);
 
   useEffect(() => {
     setShowEmojiPicker(false);
@@ -771,7 +811,6 @@ export default function Inbox() {
     setSaleNotes("");
   }
 
-  const profileId = profile?.id;
   const canActOnChat = canAtendimentoActOnChat(profile?.role, activeChat?.assigneeId, profileId);
   const canModifyLinkedNegotiation = canAtendimentoModifyNegotiation(
     profile?.role,
@@ -1031,6 +1070,22 @@ export default function Inbox() {
   }
 
   async function handleConfirmSaleFlow() {
+    if (!canActOnChat) {
+      toast({
+        title: "Assuma a conversa",
+        description: chatAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!canModifyLinkedNegotiation) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     const error = resolveStepError();
     if (error) {
       toast({
@@ -1573,6 +1628,14 @@ export default function Inbox() {
   function handleSelectChat(chatId: string) {
     setActiveChatId(chatId);
     forceScrollToLatestMessage();
+
+    if (quickFilter === "unread") {
+      const chat = chats.find((c) => c.id === chatId);
+      if (chat?.unreadCount) {
+        lastMarkReadAttemptRef.current[chatId] = chat.unreadCount;
+        void markChatAsRead.mutateAsync(chatId).catch(() => undefined);
+      }
+    }
   }
 
   const handleLoadOlderMessages = useCallback(async () => {
@@ -1691,10 +1754,12 @@ export default function Inbox() {
       return;
     }
 
-    if (!canActOnChat) {
+    if (inboxLeadLocked) {
       toast({
-        title: "Assuma a conversa",
-        description: chatAssigneeBlockedMessage(),
+        title: linkedNegotiation ? "Assuma o negócio" : "Assuma a conversa",
+        description: linkedNegotiation
+          ? negotiationAssigneeBlockedMessage()
+          : chatAssigneeBlockedMessage(),
         variant: "destructive",
       });
       return;
@@ -1785,9 +1850,39 @@ export default function Inbox() {
           listScope={listScope}
           onListScopeChange={setListScope}
           assigneeFilter={assigneeFilter}
-          onAssigneeFilterChange={setAssigneeFilter}
+          onAssigneeFilterChange={(value) => {
+            setAssigneeFilter(value);
+            if (value !== "all") {
+              setQuickFilter(null);
+            }
+          }}
           snoozedFilter={snoozedFilter}
-          onSnoozedFilterChange={setSnoozedFilter}
+          onSnoozedFilterChange={(value) => {
+            setSnoozedFilter(value);
+            if (value !== "active") {
+              setQuickFilter(null);
+            }
+          }}
+          quickFilter={quickFilter}
+          onQuickFilterChange={(value) => {
+            setQuickFilter(value);
+            if (value === "hidden") {
+              setSnoozedFilter("active");
+              setAssigneeFilter("all");
+            } else if (value === "mine") {
+              setAssigneeFilter("mine");
+              setSnoozedFilter("active");
+            } else if (value === "unassigned") {
+              setAssigneeFilter("unassigned");
+              setSnoozedFilter("active");
+            } else if (value === "unread") {
+              setAssigneeFilter("all");
+              setSnoozedFilter("active");
+            } else {
+              setAssigneeFilter("all");
+              setSnoozedFilter("active");
+            }
+          }}
           selectedTagIds={selectedTagIds}
           onTagToggle={(tagId) =>
             setSelectedTagIds((prev) =>
@@ -2108,11 +2203,12 @@ export default function Inbox() {
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
-              !canActOnChat ||
+              inboxLeadLocked ||
               (messageType === "text"
                 ? !bodyText.trim()
                 : !bodyText.trim() && !mediaUrl.trim())
             }
+            composerActionsDisabled={inboxLeadLocked}
             showEmojiPicker={showEmojiPicker}
             onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
             onAppendEmoji={appendEmoji}

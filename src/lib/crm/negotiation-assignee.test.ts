@@ -3,6 +3,7 @@ import {
   canAtendimentoActOnChat,
   canAtendimentoModifyNegotiation,
   canReleaseCrmNegotiationToPool,
+  isClientePerfilCrmLocked,
   isInboxLeadLocked,
 } from "./negotiation-assignee";
 
@@ -37,6 +38,24 @@ describe("canAtendimentoActOnChat", () => {
     expect(canAtendimentoActOnChat("atendimento", "u1", "u1")).toBe(true);
     expect(canAtendimentoActOnChat("atendimento", null, "u1")).toBe(false);
     expect(canAtendimentoActOnChat("admin", null, "u1")).toBe(true);
+  });
+});
+
+describe("isClientePerfilCrmLocked", () => {
+  it("bloqueia quando há negócio em andamento não assumido", () => {
+    expect(
+      isClientePerfilCrmLocked("atendimento", "u1", [
+        { status: "em_andamento", assigneeId: null },
+      ]),
+    ).toBe(true);
+    expect(
+      isClientePerfilCrmLocked("atendimento", "u1", [
+        { status: "em_andamento", assigneeId: "u1" },
+      ]),
+    ).toBe(false);
+    expect(isClientePerfilCrmLocked("admin", "u1", [{ status: "em_andamento", assigneeId: null }])).toBe(
+      false,
+    );
   });
 });
 

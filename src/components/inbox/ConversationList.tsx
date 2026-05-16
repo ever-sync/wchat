@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { ChatTag, InboxChat, InboxListScope, WhatsappInstance } from "@/types/domain";
+import { INBOX_QUICK_FILTER_OPTIONS, inboxQuickFilterLabel } from "@/lib/inbox-quick-filters";
+import type { ChatTag, InboxChat, InboxListScope, InboxQuickFilter, WhatsappInstance } from "@/types/domain";
 import { ConversationRow } from "./ConversationRow";
 
 export type ConversationListProps = {
@@ -20,6 +21,8 @@ export type ConversationListProps = {
   onAssigneeFilterChange: (value: string) => void;
   snoozedFilter: "active" | "snoozed";
   onSnoozedFilterChange: (value: "active" | "snoozed") => void;
+  quickFilter: InboxQuickFilter | null;
+  onQuickFilterChange: (value: InboxQuickFilter | null) => void;
   selectedTagIds: string[];
   onTagToggle: (tagId: string) => void;
   onClearTags: () => void;
@@ -201,6 +204,8 @@ export function ConversationList({
   onAssigneeFilterChange,
   snoozedFilter,
   onSnoozedFilterChange,
+  quickFilter,
+  onQuickFilterChange,
   selectedTagIds,
   onTagToggle,
   onClearTags,
@@ -222,11 +227,14 @@ export function ConversationList({
       ? `${activeTagCount} etiqueta${activeTagCount > 1 ? "s" : ""}`
       : "Etiquetas";
 
+  const listHeading = inboxQuickFilterLabel(quickFilter);
+
   const hasCustomFilters =
     instanceId !== "all" ||
     listScope !== "open" ||
     assigneeFilter !== "all" ||
     snoozedFilter !== "active" ||
+    quickFilter !== null ||
     activeTagCount > 0;
 
   return (
@@ -337,6 +345,33 @@ export function ConversationList({
             </PopoverContent>
           </Popover>
 
+          <div
+            className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
+            role="tablist"
+            aria-label="Filtros rápidos de conversas"
+          >
+            {INBOX_QUICK_FILTER_OPTIONS.map(({ id, label }) => {
+              const active = quickFilter === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => onQuickFilterChange(active ? null : id)}
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-wchat-50 text-muted-foreground hover:bg-wchat-100 hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           {selectedTagIds.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {selectedTagIds.map((tagId) => {
@@ -369,7 +404,9 @@ export function ConversationList({
           ) : (
             <section>
               <div className="mb-2 flex items-center justify-between px-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Todas</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {listHeading}
+                </p>
                 <span className="text-[11px] tabular-nums text-muted-foreground">{chats.length}</span>
               </div>
               <div className="space-y-0.5">

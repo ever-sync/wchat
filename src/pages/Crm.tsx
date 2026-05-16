@@ -1084,6 +1084,16 @@ export default function Crm() {
     async (lostReason: string) => {
       const pending = pendingLostDrag;
       if (!pending) return;
+      const dragAssigneeId =
+        dbRecords.find((r) => r.id === pending.negId)?.assigneeId ?? pending.card.assigneeId;
+      if (!canAtendimentoModifyNegotiation(profile?.role, dragAssigneeId, profileId)) {
+        toast({
+          title: "Assuma o negócio",
+          description: negotiationAssigneeBlockedMessage(),
+          variant: "destructive",
+        });
+        throw new Error("negotiation_not_owned");
+      }
       try {
         await updateCrmNegotiation.mutateAsync({
           id: pending.negId,
@@ -1124,7 +1134,17 @@ export default function Crm() {
         throw e;
       }
     },
-    [customers, funnelId, pendingLostDrag, toast, updateCrmNegotiation, updateCustomer],
+    [
+      customers,
+      dbRecords,
+      funnelId,
+      pendingLostDrag,
+      profile?.role,
+      profileId,
+      toast,
+      updateCrmNegotiation,
+      updateCustomer,
+    ],
   );
 
   return (

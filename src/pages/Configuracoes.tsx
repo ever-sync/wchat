@@ -126,6 +126,7 @@ export default function Configuracoes() {
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("operacao");
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const [funnelDraft, setFunnelDraft] = useState<CrmFunnel[]>(DEFAULT_CRM_FUNNELS);
   const [funnelJsonDraft, setFunnelJsonDraft] = useState("");
   const [funnelJsonOpen, setFunnelJsonOpen] = useState(false);
@@ -879,14 +880,24 @@ export default function Configuracoes() {
 
                     try {
                       const result = await inviteCollaborator.mutateAsync({ nome: inviteName, email: inviteEmail, role: inviteRole });
-                      const createdDesc = result.warning ?? "Convite preparado para o colaborador.";
+                      const createdTitle = result.warning
+                        ? "Convite salvo com aviso"
+                        : result.emailSent
+                          ? "E-mail de ativacao enviado"
+                          : "Acesso criado";
+                      const createdDesc =
+                        result.warning ??
+                        (result.emailSent
+                          ? `Enviamos o link para ${result.invite.email}. Peça para checar spam e lixo eletronico.`
+                          : "Convite registrado para o colaborador.");
                       toast({
-                        title: "Acesso criado",
+                        title: createdTitle,
                         description: createdDesc,
+                        variant: result.warning ? "destructive" : "default",
                       });
                       useAppStore.getState().addNotification({
-                        tipo: "sucesso",
-                        titulo: "Acesso criado",
+                        tipo: result.warning ? "aviso" : "sucesso",
+                        titulo: createdTitle,
                         descricao: createdDesc,
                       });
                       setInviteName(""); setInviteEmail(""); setInviteRole("operacao");
@@ -931,6 +942,66 @@ export default function Configuracoes() {
                         <Badge className="bg-secondary text-secondary-foreground">{roleLabels[invite.role]}</Badge>
                         <Badge className={invite.status === "accepted" ? "bg-success/20 text-success" : invite.status === "revoked" ? "bg-destructive/20 text-destructive" : "bg-warning/20 text-warning"}>{invite.status === "accepted" ? "Aceito" : invite.status === "revoked" ? "Revogado" : "Pendente"}</Badge>
                         {invite.status === "pending" ? (
+                          <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              resendingInviteId === invite.id ||
+                              inviteCollaborator.isPending ||
+                              !canUseAuthenticatedActions
+                            }
+                            onClick={async () => {
+                              if (!canUseAuthenticatedActions) {
+                                toast({
+                                  title: "Sessao indisponivel",
+                                  description: "Faca login novamente antes de reenviar convites.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
+                              setResendingInviteId(invite.id);
+                              try {
+                                const result = await inviteCollaborator.mutateAsync({
+                                  nome: invite.nome,
+                                  email: invite.email,
+                                  role: invite.role,
+                                  resend: true,
+                                });
+                                const resendTitle = result.warning
+                                  ? "Nao foi possivel reenviar"
+                                  : result.emailSent
+                                    ? "E-mail reenviado"
+                                    : "Convite atualizado";
+                                const resendDesc =
+                                  result.warning ??
+                                  `Novo link enviado para ${invite.email}. Peça para checar spam.`;
+                                toast({
+                                  title: resendTitle,
+                                  description: resendDesc,
+                                  variant: result.warning ? "destructive" : "default",
+                                });
+                                useAppStore.getState().addNotification({
+                                  tipo: result.warning ? "aviso" : "sucesso",
+                                  titulo: resendTitle,
+                                  descricao: resendDesc,
+                                });
+                              } catch (e) {
+                                const desc = e instanceof Error ? e.message : "Tente novamente.";
+                                toast({ title: "Nao foi possivel reenviar", description: desc, variant: "destructive" });
+                              } finally {
+                                setResendingInviteId(null);
+                              }
+                            }}
+                          >
+                            {resendingInviteId === invite.id ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Mail className="mr-1 h-3 w-3" />
+                            )}
+                            Reenviar e-mail
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -972,6 +1043,7 @@ export default function Configuracoes() {
                           >
                             Revogar
                           </Button>
+                          </>
                         ) : null}
                       </div>
                     </div>

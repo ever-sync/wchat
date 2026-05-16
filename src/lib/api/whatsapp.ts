@@ -404,7 +404,10 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     if (filters.assigneeId === "unassigned") {
       query = query.is("assignee_id", null);
     } else if (filters.assigneeId === "mine") {
-      // resolved client-side after fetch using auth.uid(); server still filters by tenant RLS
+      const mineId = filters.currentUserId?.trim();
+      if (mineId) {
+        query = query.eq("assignee_id", mineId);
+      }
     } else {
       query = query.eq("assignee_id", filters.assigneeId);
     }
@@ -1078,6 +1081,18 @@ function chatMatchesInboxFilters(chat: InboxChat, filters: InboxChatFilters | un
     return false;
   }
   if (f.hideLost && (chat.resolution ?? "open") === "lost") {
+    return false;
+  }
+  if (f.assigneeId === "unassigned") {
+    if (chat.assigneeId != null) {
+      return false;
+    }
+  } else if (f.assigneeId === "mine") {
+    const uid = f.currentUserId?.trim();
+    if (!uid || chat.assigneeId !== uid) {
+      return false;
+    }
+  } else if (f.assigneeId && chat.assigneeId !== f.assigneeId) {
     return false;
   }
   const search = sanitizeCustomerSearchForPostgrestOrIlike(f.search ?? "").toLowerCase();

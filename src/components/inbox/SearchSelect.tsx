@@ -28,6 +28,7 @@ export function SearchSelect({
   onSearchQueryChange,
   searchInputPlaceholder,
   triggerClassName,
+  disabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -38,6 +39,7 @@ export function SearchSelect({
   options: SearchSelectOption[];
   onSelect: (id: string) => void;
   compact?: boolean;
+  disabled?: boolean;
   /** `server`: sem filtro local — a lista vem da API conforme o texto digitado. */
   filterMode?: "client" | "server";
   onSearchQueryChange?: (query: string) => void;
@@ -54,6 +56,7 @@ export function SearchSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           title={placeholder}
           className={cn(
             compact

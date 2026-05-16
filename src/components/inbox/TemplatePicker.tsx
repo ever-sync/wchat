@@ -9,11 +9,13 @@ export function TemplatePicker({
   onOpenChange,
   value,
   onSelect,
+  disabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   value: string | null;
   onSelect: (id: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <SearchSelect
@@ -26,6 +28,7 @@ export function TemplatePicker({
       options={TEMPLATE_OPTIONS}
       onSelect={onSelect}
       compact
+      disabled={disabled}
     />
   );
 }

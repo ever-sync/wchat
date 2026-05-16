@@ -377,11 +377,19 @@ function CrmNegotiationDetailContent({
     if (searchParams.get("criarTarefa") !== "1") {
       return;
     }
-    setTaskDialogOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("criarTarefa");
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+    if (!canModifyNegotiation) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+    setTaskDialogOpen(true);
+  }, [canModifyNegotiation, searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     if (taskDialogOpen) {

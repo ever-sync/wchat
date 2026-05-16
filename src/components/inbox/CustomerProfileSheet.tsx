@@ -311,9 +311,11 @@ const FUNNEL_NONE = "__funnel_none__";
 function ProfileTagsPicker({
   customer,
   suggestionTags,
+  disabled = false,
 }: {
   customer: Customer;
   suggestionTags: string[];
+  disabled?: boolean;
 }) {
   const { toast } = useToast();
   const updateCustomer = useUpdateCustomer();
@@ -325,7 +327,12 @@ function ProfileTagsPicker({
     [suggestionTags, tags],
   );
 
+  const isBusy = disabled || updateCustomer.isPending;
+
   const commit = async (next: string[]) => {
+    if (disabled) {
+      return;
+    }
     try {
       await updateCustomer.mutateAsync({
         id: customer.id,
@@ -360,6 +367,7 @@ function ProfileTagsPicker({
               type="button"
               className="rounded-full p-0.5 hover:bg-violet-200/80"
               aria-label={`Remover tag ${t}`}
+              disabled={isBusy}
               onClick={() => void commit(tags.filter((x) => x !== t))}
             >
               <X className="h-3 w-3" />
@@ -374,6 +382,7 @@ function ProfileTagsPicker({
           <p className="text-xs text-[#8a9690]">Nenhuma outra tag conhecida além das já aplicadas.</p>
         ) : (
           <Select
+            disabled={isBusy}
             onValueChange={(v) => {
               if (tags.includes(v)) {
                 return;
@@ -399,6 +408,7 @@ function ProfileTagsPicker({
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ou criar tag nova (Enter)"
             className="h-9 flex-1 rounded-xl border-[#dfe6d8] bg-white"
+            disabled={isBusy}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -417,7 +427,7 @@ function ProfileTagsPicker({
             size="icon"
             variant="secondary"
             className="h-9 w-9 shrink-0 rounded-xl"
-            disabled={!input.trim() || tags.includes(input.trim())}
+            disabled={isBusy || !input.trim() || tags.includes(input.trim())}
             aria-label="Adicionar tag nova"
             onClick={() => {
               const v = input.trim();
@@ -854,7 +864,7 @@ export function CustomerProfileSheet({
 
             {chat && !customer && isSupabaseConfigured ? (
               <div className="mb-5">
-                <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} />
+                <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
               </div>
             ) : null}
 
@@ -862,9 +872,13 @@ export function CustomerProfileSheet({
               <div className="space-y-5">
                 <CustomerQuickFacts customer={customer} chat={chat} messageCount={totalMessages} />
                 {isSupabaseConfigured ? (
-                  <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} />
+                  <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
                 ) : (
-                  <ProfileTagsPicker customer={customer} suggestionTags={tagSuggestions} />
+                  <ProfileTagsPicker
+                    customer={customer}
+                    suggestionTags={tagSuggestions}
+                    disabled={crmActionsLocked}
+                  />
                 )}
                 {isSupabaseConfigured ? (
                   <ProfilePipelineSelects

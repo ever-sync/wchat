@@ -24,9 +24,10 @@ import { useToast } from "@/hooks/use-toast";
 type ChatTagsPickerProps = {
   chatId: string;
   tags: ChatTagOnChat[];
+  disabled?: boolean;
 };
 
-export function ChatTagsPicker({ chatId, tags }: ChatTagsPickerProps) {
+export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPickerProps) {
   const { toast } = useToast();
   const { data: catalog = [], isLoading: catalogLoading } = useChatTags();
   const createTag = useCreateChatTag();
@@ -43,7 +44,7 @@ export function ChatTagsPicker({ chatId, tags }: ChatTagsPickerProps) {
     [appliedIds, catalog],
   );
 
-  const isBusy = createTag.isPending || addTag.isPending || removeTag.isPending;
+  const isBusy = disabled || createTag.isPending || addTag.isPending || removeTag.isPending;
 
   const applyExisting = async (tagId: string) => {
     try {

@@ -36,6 +36,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 import { CrmSaleItemsPreview } from "@/components/crm/CrmSaleItemsPreview";
 import { useCustomer, useUpdateCustomer } from "@/lib/api/customers";
+import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
+import {
+  isClientePerfilCrmLocked,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import { useCrmActivitiesForCustomer } from "@/lib/api/crm-activities";
 import {
   useCreateCrmTask,
@@ -313,6 +318,15 @@ export default function ClientePerfil() {
   }, [taskDialogOpen]);
 
   const crmEnabled = Boolean(id && isSupabaseConfigured);
+  const profileId = profile?.id;
+  const { data: customerNegotiations = [] } = useCrmNegotiationsForCustomer(id, {
+    enabled: crmEnabled,
+  });
+  const clientePerfilCrmLocked = isClientePerfilCrmLocked(
+    profile?.role,
+    profileId,
+    customerNegotiations,
+  );
   const { data: tenantCollaborators = [] } = useTenantCollaborators({ enabled: crmEnabled });
   const crmTaskAssignees = useMemo(
     () => tenantCollaborators.map((p) => ({ id: p.id, nome: p.nome })),
@@ -437,6 +451,14 @@ export default function ClientePerfil() {
   const { activeIndex: pipelineActiveIndex, daysContact } = getPipelineStateForCustomer(cliente);
 
   const handlePipelineStageChange = async (stageIndex: number) => {
+    if (clientePerfilCrmLocked) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     const key = pipelineStageKeyFromIndex(stageIndex);
     if (!key) {
       return;
@@ -460,6 +482,14 @@ export default function ClientePerfil() {
   };
 
   const handleMarkLoss = async () => {
+    if (clientePerfilCrmLocked) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     if (cliente.status === "bloqueado") {
       toast({
         title: "Negociação",
@@ -488,6 +518,7 @@ export default function ClientePerfil() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <ClienteRdPerfilView
         cliente={cliente}
+        negotiationReadOnly={clientePerfilCrmLocked}
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
         qualificationStars={qualificationFromPerfil(cliente.perfil)}
@@ -607,11 +638,29 @@ export default function ClientePerfil() {
             description: "Registre a venda na aba CRM (área expandida) ou pelo Inbox.",
           });
         }}
-        onEdit={() => setDialogOpen(true)}
+        onEdit={() => {
+          if (clientePerfilCrmLocked) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
+          setDialogOpen(true);
+        }}
         onOpenInbox={openCustomerInbox}
         onBlock={() => void handleMarkLoss()}
         onCreateNote={() => setDialogOpen(true)}
         onCreateTask={() => {
+          if (clientePerfilCrmLocked) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (crmEnabled) {
             setTaskDialogOpen(true);
             return;
