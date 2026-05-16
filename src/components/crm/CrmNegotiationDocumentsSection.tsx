@@ -49,9 +49,11 @@ function formatDocDate(iso: string): string {
 export function CrmNegotiationDocumentsSection({
   negotiationId,
   enabled,
+  readOnly = false,
 }: {
   negotiationId: string;
   enabled: boolean;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -162,8 +164,12 @@ export function CrmNegotiationDocumentsSection({
       </div>
       <div className="space-y-4 px-4 py-4 md:px-6">
         <p className="text-xs text-[#78909c]">
-          Dê um nome ao documento e selecione o arquivo. Os anexos ficam no seu espaço seguro e vinculados a esta negociação.
+          {readOnly
+            ? "Assuma o negócio para anexar ou excluir documentos deste lead."
+            : "Dê um nome ao documento e selecione o arquivo. Os anexos ficam no seu espaço seguro e vinculados a esta negociação."}
         </p>
+        {!readOnly ? (
+        <>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <div className="space-y-1">
             <Label htmlFor="lead-doc-display-name">Nome do documento</Label>
@@ -213,6 +219,8 @@ export function CrmNegotiationDocumentsSection({
             Anexar ao lead
           </Button>
         </div>
+        </>
+        ) : null}
 
         {isLoading ? (
           <div className="space-y-2">
@@ -248,17 +256,19 @@ export function CrmNegotiationDocumentsSection({
                   >
                     <Download className="h-4 w-4" />
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-[#90a4ae] hover:bg-[#ffebee] hover:text-[#c62828]"
-                    disabled={busy}
-                    aria-label={`Excluir ${d.displayName}`}
-                    onClick={() => setDeleteTarget(d)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {!readOnly ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-[#90a4ae] hover:bg-[#ffebee] hover:text-[#c62828]"
+                      disabled={busy}
+                      aria-label={`Excluir ${d.displayName}`}
+                      onClick={() => setDeleteTarget(d)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
               </li>
             ))}

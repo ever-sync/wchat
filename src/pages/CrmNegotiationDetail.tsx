@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
+import { ClienteRdPerfilProductsTab } from "@/components/cliente/ClienteRdPerfilProductsTab";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -66,9 +67,20 @@ import {
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useInboxChats } from "@/lib/api/whatsapp";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
+import {
+  LEGACY_PIPELINE_SALE_INDEX,
+  negotiationHasCompletedSale,
+  saleAttendantBlockedMessage,
+  validateMarkWinLines,
+} from "@/lib/crm/sale-rules";
+import { invalidateSalesQueries, persistMarkWinSale } from "@/lib/crm/persist-mark-win-sale";
 import { isE2eMockAuth } from "@/lib/e2e";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
-import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
+import {
+  canAtendimentoModifyNegotiation,
+  canReleaseCrmNegotiationToPool,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
 import type {
@@ -263,6 +275,12 @@ function CrmNegotiationDetailContent({
         nome: (p.nome?.trim() || p.email?.trim() || "Sem nome").trim(),
       })),
     [tenantCollaborators],
+  );
+
+  const canModifyNegotiation = canAtendimentoModifyNegotiation(
+    profile?.role,
+    negotiation.assigneeId,
+    profileId,
   );
 
   const showClaimNegotiation =
@@ -523,6 +541,7 @@ function CrmNegotiationDetailContent({
         }
         negotiationPanelCustomerLinked={Boolean(linkedCustomer)}
         negotiationPanelSavePending={updateNegotiation.isPending || updateCustomer.isPending}
+        negotiationReadOnly={!canModifyNegotiation}
         mainTabDefault={searchParams.get("criarTarefa") === "1" ? "tarefas" : "historico"}
         onBack={() => navigate("/crm")}
         onRefresh={() => {
@@ -545,7 +564,14 @@ function CrmNegotiationDetailContent({
         crmTasksLoading={taskIntegration ? crmTasksLoading : false}
         crmTaskAssignees={taskIntegration ? crmTaskAssignees : undefined}
         onCompleteCrmTask={(taskId) => {
-          if (!taskIntegration) {
+          if (!taskIntegration || !canModifyNegotiation) {
+            if (!canModifyNegotiation) {
+              toast({
+                title: "Assuma o negócio",
+                description: negotiationAssigneeBlockedMessage(),
+                variant: "destructive",
+              });
+            }
             return;
           }
           void (async () => {
@@ -569,7 +595,7 @@ function CrmNegotiationDetailContent({
           })();
         }}
         onReopenCrmTask={
-          taskIntegration
+          taskIntegration && canModifyNegotiation
             ? (taskId) => {
                 void (async () => {
                   const merged = [...crmTasksByNegotiation, ...crmTasksCustomerUnlinked];
@@ -596,7 +622,7 @@ function CrmNegotiationDetailContent({
         crmCompleteTaskPending={updateCrmTask.isPending}
         crmDeleteTaskPending={deleteCrmTask.isPending}
         onDeleteCrmTask={
-          taskIntegration
+          taskIntegration && canModifyNegotiation
             ? (taskId) => {
                 void (async () => {
                   try {
@@ -615,7 +641,7 @@ function CrmNegotiationDetailContent({
         }
         crmEditTaskPending={updateCrmTask.isPending}
         onSaveCrmTaskEdit={
-          taskIntegration
+          taskIntegration && canModifyNegotiation
             ? async ({ id: taskId, patch }) => {
                 const merged = [...crmTasksByNegotiation, ...crmTasksCustomerUnlinked];
                 const t = merged.find((x) => x.id === taskId);
@@ -639,6 +665,14 @@ function CrmNegotiationDetailContent({
             : undefined
         }
         onMarkLoss={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (!isPersistedRow && !isE2eMockAuth) {
             toast({
               title: "Marcar perda",
@@ -657,6 +691,14 @@ function CrmNegotiationDetailContent({
           setLostDialogOpen(true);
         }}
         onMarkWin={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (!isPersistedRow && !isE2eMockAuth) {
             toast({
               title: "Marcar venda",
@@ -664,9 +706,25 @@ function CrmNegotiationDetailContent({
             });
             return;
           }
+          if (isNegotiationUnassigned(negotiation.assigneeId)) {
+            toast({
+              title: "Sem responsável",
+              description: saleAttendantBlockedMessage("crm"),
+              variant: "destructive",
+            });
+            return;
+          }
           setWinDialogOpen(true);
         }}
         onEdit={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (linkedCustomer) {
             navigate(`/clientes/${linkedCustomer.id}`);
             return;
@@ -677,8 +735,26 @@ function CrmNegotiationDetailContent({
           }
           navigate("/clientes");
         }}
-        onOpenInbox={openCustomerInbox}
+        onOpenInbox={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
+          openCustomerInbox();
+        }}
         onBlock={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (!isPersistedRow || !linkedCustomer) {
             toast({
               title: "Bloquear",
@@ -694,6 +770,14 @@ function CrmNegotiationDetailContent({
           setLostDialogOpen(true);
         }}
         onCreateNote={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (linkedCustomer) {
             navigate(`/clientes/${linkedCustomer.id}`);
             return;
@@ -704,6 +788,14 @@ function CrmNegotiationDetailContent({
           });
         }}
         onCreateTask={() => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (taskIntegration) {
             setTaskDialogOpen(true);
             return;
@@ -712,13 +804,6 @@ function CrmNegotiationDetailContent({
             title: "Tarefas",
             description: "Salve a negociação no Supabase para criar tarefas vinculadas.",
           });
-        }}
-        onCreateCup={() => {
-          if (linkedCustomer) {
-            navigate({ pathname: `/clientes/${linkedCustomer.id}`, search: "?copoPersonalizado=1" });
-            return;
-          }
-          navigate("/clientes");
         }}
         negotiationAssigneeLabel={negotiationAssigneeLabel}
         showClaimNegotiation={showClaimNegotiation}
@@ -729,10 +814,52 @@ function CrmNegotiationDetailContent({
         releaseNegotiationPending={releaseCrmNegotiation.isPending}
         negotiationDocumentsSlot={
           isPersistedRow && isSupabaseConfigured && isPersistedCrmNegotiationId(negotiation.id) ? (
-            <CrmNegotiationDocumentsSection negotiationId={negotiation.id} enabled={taskIntegration} />
+            <CrmNegotiationDocumentsSection
+              negotiationId={negotiation.id}
+              enabled={taskIntegration}
+              readOnly={!canModifyNegotiation}
+            />
+          ) : undefined
+        }
+        negotiationProductsSlot={
+          isPersistedRow && isSupabaseConfigured ? (
+            <ClienteRdPerfilProductsTab
+              customerId={negotiation.customerId}
+              sourceChatId={sourceChatId}
+              negotiationTotalValue={negotiation.totalValue}
+              negotiationStatus={negotiation.status}
+            />
           ) : undefined
         }
         onPipelineStageChange={(idx) => {
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
+          if (idx === LEGACY_PIPELINE_SALE_INDEX) {
+            if (isNegotiationUnassigned(negotiation.assigneeId)) {
+              toast({
+                title: "Sem responsável",
+                description: saleAttendantBlockedMessage("crm"),
+                variant: "destructive",
+              });
+              return;
+            }
+            if (
+              !negotiationHasCompletedSale({
+                status: negotiation.status,
+                totalValue: negotiation.totalValue,
+              })
+            ) {
+              setWinDialogOpen(true);
+              return;
+            }
+          }
+
           setPipelineActiveIndex(idx);
           const label = buildPipelineLabels(daysContact)[idx]?.label;
           if (isPersistedRow) {
@@ -948,6 +1075,14 @@ function CrmNegotiationDetailContent({
               className="bg-[#4E1BB1] hover:bg-[#3C1494]"
               disabled={createCustomer.isPending || updateNegotiation.isPending}
               onClick={() => {
+                if (!canModifyNegotiation) {
+                  toast({
+                    title: "Assuma o negócio",
+                    description: negotiationAssigneeBlockedMessage(),
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 void (async () => {
                   const phone = linkPhone.trim();
                   if (!phone) {
@@ -993,7 +1128,28 @@ function CrmNegotiationDetailContent({
         onOpenChange={setWinDialogOpen}
         initialValue={negotiation.totalValue}
         pending={updateNegotiation.isPending || updateCustomer.isPending}
-        onConfirm={async (totalValue) => {
+        onConfirm={async ({ lines, totalValue }) => {
+          const lineError = validateMarkWinLines(lines);
+          if (lineError) {
+            toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
+            return;
+          }
+          if (!canModifyNegotiation) {
+            toast({
+              title: "Assuma o negócio",
+              description: negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
+          if (isNegotiationUnassigned(negotiation.assigneeId)) {
+            toast({
+              title: "Sem responsável",
+              description: saleAttendantBlockedMessage("crm"),
+              variant: "destructive",
+            });
+            return;
+          }
           try {
             if (isE2eMockAuth && !isPersistedRow) {
               setPipelineActiveIndex(4);
@@ -1008,6 +1164,18 @@ function CrmNegotiationDetailContent({
               id: negotiation.id,
               patch: { status: "vendido", stageId: saleStageId, totalValue },
             });
+            if (isSupabaseConfigured) {
+              const soldBy = negotiation.assigneeId?.trim() || profileId;
+              if (soldBy) {
+                await persistMarkWinSale({
+                  chatId: sourceChatId ?? null,
+                  customerId: negotiation.customerId ?? null,
+                  soldBy,
+                  lines,
+                });
+                invalidateSalesQueries(queryClient, negotiation.customerId);
+              }
+            }
             setPipelineActiveIndex(4);
             if (linkedCustomer) {
               const nextStatus: CustomerStatus =
@@ -1018,11 +1186,21 @@ function CrmNegotiationDetailContent({
                 funnelId: negotiation.funnelId,
               });
             }
+            const money = new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(totalValue);
+            const itemsLabel =
+              lines.length === 1 ? lines[0]?.productName : `${lines.length} itens`;
             toast({
               title: "Marcar venda",
-              description: linkedCustomer
-                ? "Negociação e funil do cliente atualizados. Registre itens na aba CRM do cadastro."
-                : "Negociação marcada como vendida.",
+              description: itemsLabel
+                ? `${itemsLabel} — ${money}. ${
+                    linkedCustomer ? "Funil do cliente atualizado." : "Negociação marcada como vendida."
+                  }`
+                : linkedCustomer
+                  ? "Negociação e funil do cliente atualizados."
+                  : "Negociação marcada como vendida.",
             });
           } catch (e) {
             toast({

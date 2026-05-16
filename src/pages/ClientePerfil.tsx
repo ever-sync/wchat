@@ -621,9 +621,6 @@ export default function ClientePerfil() {
             description: "Configure o Supabase para criar tarefas neste cadastro.",
           });
         }}
-        onCreateCup={() => {
-          navigate({ pathname: `/clientes/${cliente.id}`, search: "?copoPersonalizado=1" });
-        }}
         onPipelineStageChange={(idx) => void handlePipelineStageChange(idx)}
       />
 

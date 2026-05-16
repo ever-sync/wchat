@@ -16,10 +16,17 @@ import {
   customFieldKindHasInputMask,
   getCustomFieldInputMaxLength,
 } from "@/lib/custom-field-masks";
-import type { CustomerCustomFieldDefinition } from "@/lib/api/customer-custom-fields";
+import type { CustomFieldKind } from "@/lib/custom-field-kinds";
+
+export type CustomFieldDefinitionLike = {
+  id: string;
+  nome: string;
+  kind: CustomFieldKind;
+  options?: string[];
+};
 
 type CustomerCustomFieldInputProps = {
-  field: CustomerCustomFieldDefinition;
+  field: CustomFieldDefinitionLike;
   value: string;
   onChange: (value: string) => void;
   id?: string;
@@ -120,7 +127,7 @@ export function CustomerCustomFieldInput({
 }: CustomerCustomFieldInputProps) {
   const inputId = id ?? `customer-custom-${field.id}`;
   const { kind } = field;
-  const options = parseCustomFieldOptions(field.options);
+  const options = parseCustomFieldOptions(field.options ?? []);
   const isMasked = customFieldKindHasInputMask(kind);
   const maxLength = getCustomFieldInputMaxLength(kind);
 

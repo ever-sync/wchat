@@ -57,6 +57,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { buildPipelineLabels } from "@/lib/crm-pipeline";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
+import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -321,9 +322,9 @@ function ClienteRdPerfilTasksTabBody({
   onSaveCrmTaskEdit,
   taskMutationBusy,
   onCreateTask,
-  onCreateCup,
   openTaskEdit,
   onRequestDeleteTask,
+  readOnly = false,
 }: {
   crmOpenTasks: CrmTask[] | undefined;
   crmCompletedTasks: CrmTask[] | undefined;
@@ -336,9 +337,9 @@ function ClienteRdPerfilTasksTabBody({
   onSaveCrmTaskEdit?: (payload: { id: string; patch: CrmTaskPatch }) => void | Promise<void>;
   taskMutationBusy: boolean;
   onCreateTask: () => void;
-  onCreateCup: () => void;
   openTaskEdit: (t: CrmTask) => void;
   onRequestDeleteTask: (task: { id: string; title: string }) => void;
+  readOnly?: boolean;
 }) {
   return (
     <>
@@ -346,6 +347,11 @@ function ClienteRdPerfilTasksTabBody({
         <h2 className="text-sm font-semibold text-[#37474f]">Próximas tarefas</h2>
         <Calendar className="h-4 w-4 text-[#90a4ae]" aria-hidden />
       </div>
+      {readOnly ? (
+        <p className="border-b border-[#eceff1] px-4 py-3 text-sm text-[#78909c] md:px-6">
+          {negotiationAssigneeBlockedMessage()}
+        </p>
+      ) : null}
       {crmOpenTasks !== undefined ? (
         <div className="px-4 py-4 md:px-6">
           {crmTasksLoading ? (
@@ -363,6 +369,7 @@ function ClienteRdPerfilTasksTabBody({
                 className="shrink-0 border-0 px-5 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
                 style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
                 onClick={onCreateTask}
+                disabled={readOnly}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Criar tarefa
@@ -381,7 +388,7 @@ function ClienteRdPerfilTasksTabBody({
                     <Checkbox
                       className="mt-0.5 border-[#90a4ae] data-[state=checked]:border-[#4E1BB1] data-[state=checked]:bg-[#4E1BB1]"
                       checked={false}
-                      disabled={!onCompleteCrmTask || taskMutationBusy}
+                      disabled={readOnly || !onCompleteCrmTask || taskMutationBusy}
                       aria-label={`Marcar como concluída: ${t.title}`}
                       onCheckedChange={(c) => {
                         if (c === true) {
@@ -405,7 +412,7 @@ function ClienteRdPerfilTasksTabBody({
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-start gap-0.5">
-                      {onSaveCrmTaskEdit ? (
+                      {onSaveCrmTaskEdit && !readOnly ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -418,7 +425,7 @@ function ClienteRdPerfilTasksTabBody({
                           <Pencil className="h-4 w-4" />
                         </Button>
                       ) : null}
-                      {onDeleteCrmTask ? (
+                      {onDeleteCrmTask && !readOnly ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -437,7 +444,7 @@ function ClienteRdPerfilTasksTabBody({
               })}
             </ul>
           )}
-          {!crmTasksLoading && crmOpenTasks.length > 0 ? (
+          {!readOnly && !crmTasksLoading && crmOpenTasks.length > 0 ? (
             <div className="mt-4 flex justify-end">
               <Button
                 type="button"
@@ -487,7 +494,7 @@ function ClienteRdPerfilTasksTabBody({
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-start gap-0.5">
-                          {onReopenCrmTask ? (
+                          {onReopenCrmTask && !readOnly ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -500,7 +507,7 @@ function ClienteRdPerfilTasksTabBody({
                               <RotateCcw className="h-4 w-4" />
                             </Button>
                           ) : null}
-                          {onSaveCrmTaskEdit ? (
+                          {onSaveCrmTaskEdit && !readOnly ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -513,7 +520,7 @@ function ClienteRdPerfilTasksTabBody({
                               <Pencil className="h-4 w-4" />
                             </Button>
                           ) : null}
-                          {onDeleteCrmTask ? (
+                          {onDeleteCrmTask && !readOnly ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -560,24 +567,13 @@ function ClienteRdPerfilTasksTabBody({
             className="shrink-0 border-0 px-5 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
             style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
             onClick={onCreateTask}
+            disabled={readOnly}
           >
             <Plus className="mr-2 h-4 w-4" />
             Criar tarefa
           </Button>
         </div>
       )}
-      <div className="border-t border-[#eceff1] px-4 py-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full border-[#e0e0e0] bg-[#f5f5f5] py-2.5 font-medium text-[#424242] hover:bg-[#eeeeee] sm:w-auto"
-          style={{ borderRadius: RD_RADIUS }}
-          onClick={onCreateCup}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Criar copo personalizado
-        </Button>
-      </div>
     </>
   );
 }
@@ -596,7 +592,6 @@ export type ClienteRdPerfilViewProps = {
   onBlock: () => void;
   onCreateNote: () => void;
   onCreateTask: () => void;
-  onCreateCup: () => void;
   /** Quando definido, troca o bloco ilustrado por tarefas reais (lista pode ser vazia). */
   crmOpenTasks?: CrmTask[];
   /** Tarefas concluídas (ex.: histórico); exibidas em bloco recolhível quando houver itens. */
@@ -633,6 +628,8 @@ export type ClienteRdPerfilViewProps = {
   releaseNegotiationPending?: boolean;
   /** Conteúdo da aba “Arquivos” (ex.: documentos do lead na ficha CRM). */
   negotiationDocumentsSlot?: ReactNode;
+  /** Conteúdo da aba “Produtos” (vendas vinculadas à negociação). */
+  negotiationProductsSlot?: ReactNode;
   /** Dados da negociação persistida (ficha CRM); habilita edição com lápis. */
   negotiationPanelSnapshot?: NegotiationPanelSnapshot;
   onSaveNegotiationPanel?: (payload: NegotiationPanelSavePayload) => Promise<void>;
@@ -641,6 +638,8 @@ export type ClienteRdPerfilViewProps = {
   negotiationPanelCustomerLinked?: boolean;
   /** Aba inicial das tabs inferiores (ex.: `tarefas` com `?criarTarefa=1`). */
   mainTabDefault?: string;
+  /** Bloqueia alterações no lead até assumir (atendimento sem responsável). */
+  negotiationReadOnly?: boolean;
 };
 
 export function ClienteRdPerfilView({
@@ -657,7 +656,6 @@ export function ClienteRdPerfilView({
   onBlock,
   onCreateNote,
   onCreateTask,
-  onCreateCup,
   crmOpenTasks,
   crmCompletedTasks,
   crmTaskScopeLabelMode,
@@ -679,11 +677,13 @@ export function ClienteRdPerfilView({
   onReleaseNegotiation,
   releaseNegotiationPending,
   negotiationDocumentsSlot,
+  negotiationProductsSlot,
   negotiationPanelSnapshot,
   onSaveNegotiationPanel,
   negotiationPanelSavePending,
   negotiationPanelCustomerLinked,
   mainTabDefault = "historico",
+  negotiationReadOnly = false,
 }: ClienteRdPerfilViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -719,6 +719,14 @@ export function ClienteRdPerfilView({
   const [crmTaskDelete, setCrmTaskDelete] = useState<{ id: string; title: string } | null>(null);
 
   const openTaskEdit = (t: CrmTask) => {
+    if (negotiationReadOnly) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     setTaskEditTarget(t);
     setTaskEditTitle(t.title);
     setTaskEditDueLocal(isoToDatetimeLocalValue(t.dueAt));
@@ -734,6 +742,14 @@ export function ClienteRdPerfilView({
   const negoSaveBusy = Boolean(negotiationPanelSavePending);
 
   const startNegoPanelEdit = () => {
+    if (negotiationReadOnly) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     if (!negotiationPanelSnapshot || !onSaveNegotiationPanel) return;
     setNegoDraft({
       nome: cliente.nome,
@@ -877,10 +893,54 @@ export function ClienteRdPerfilView({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
-                    <DropdownMenuItem onClick={onEdit}>Editar cadastro</DropdownMenuItem>
-                    <DropdownMenuItem onClick={onOpenInbox}>Abrir no Inbox</DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={negotiationReadOnly}
+                      onClick={() => {
+                        if (negotiationReadOnly) {
+                          toast({
+                            title: "Assuma o negócio",
+                            description: negotiationAssigneeBlockedMessage(),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        onEdit();
+                      }}
+                    >
+                      Editar cadastro
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={negotiationReadOnly}
+                      onClick={() => {
+                        if (negotiationReadOnly) {
+                          toast({
+                            title: "Assuma o negócio",
+                            description: negotiationAssigneeBlockedMessage(),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        onOpenInbox();
+                      }}
+                    >
+                      Abrir no Inbox
+                    </DropdownMenuItem>
                     {cliente.status !== "bloqueado" ? (
-                      <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={onBlock}>
+                      <DropdownMenuItem
+                        className="text-red-600 focus:text-red-600"
+                        disabled={negotiationReadOnly}
+                        onClick={() => {
+                          if (negotiationReadOnly) {
+                            toast({
+                              title: "Assuma o negócio",
+                              description: negotiationAssigneeBlockedMessage(),
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          onBlock();
+                        }}
+                      >
                         Bloquear cliente
                       </DropdownMenuItem>
                     ) : null}
@@ -937,7 +997,9 @@ export function ClienteRdPerfilView({
             <Button
               type="button"
               data-testid="crm-mark-loss"
-              className="rounded-[10px] border-0 bg-red-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-red-700"
+              className="rounded-[10px] border-0 bg-red-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-red-700 disabled:opacity-50"
+              disabled={negotiationReadOnly}
+              title={negotiationReadOnly ? "Assuma o negócio para marcar perda" : undefined}
               onClick={onMarkLoss}
             >
               <ThumbsDown className="mr-2 h-4 w-4" />
@@ -945,7 +1007,9 @@ export function ClienteRdPerfilView({
             </Button>
             <Button
               type="button"
-              className="rounded-[10px] border-0 bg-emerald-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-emerald-700"
+              className="rounded-[10px] border-0 bg-emerald-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-emerald-700 disabled:opacity-50"
+              disabled={negotiationReadOnly}
+              title={negotiationReadOnly ? "Assuma o negócio para marcar venda" : undefined}
               onClick={onMarkWin}
             >
               <ThumbsUp className="mr-2 h-4 w-4" />
@@ -955,10 +1019,16 @@ export function ClienteRdPerfilView({
         </div>
       </header>
 
+      {negotiationReadOnly ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950 md:px-6">
+          {negotiationAssigneeBlockedMessage()}
+        </div>
+      ) : null}
+
       <PipelineChevrons
         activeIndex={pipelineActiveIndex}
         daysContact={daysContact}
-        onStageSelect={onPipelineStageChange}
+        onStageSelect={negotiationReadOnly ? undefined : onPipelineStageChange}
       />
 
       <div className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 md:px-6 lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start">
@@ -971,7 +1041,7 @@ export function ClienteRdPerfilView({
             <div className="flex items-center justify-between border-b border-[#eceff1] bg-[#f5f5f5] px-2 py-2 pl-4 md:px-3">
               <span className="text-sm font-semibold text-[#37474f]">Negociação</span>
               <div className="flex shrink-0 items-center">
-                {onSaveNegotiationPanel && negotiationPanelSnapshot ? (
+                {onSaveNegotiationPanel && negotiationPanelSnapshot && !negotiationReadOnly ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -1248,8 +1318,10 @@ export function ClienteRdPerfilView({
                 </div>
                 <Button
                   type="button"
-                  className="border-0 py-2.5 font-semibold text-white shadow-none hover:opacity-95"
+                  className="border-0 py-2.5 font-semibold text-white shadow-none hover:opacity-95 disabled:opacity-50"
                   style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
+                  disabled={negotiationReadOnly}
+                  title={negotiationReadOnly ? "Assuma o negócio para criar anotação" : undefined}
                   onClick={onCreateNote}
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -1287,16 +1359,30 @@ export function ClienteRdPerfilView({
               </div>
             </TabsContent>
 
-            {(["email", "questionarios", "produtos", "propostas"] as const).map((value) => (
+            {(["email", "questionarios", "propostas"] as const).map((value) => (
               <TabsContent
                 key={value}
                 value={value}
                 className="mt-0 border border-t-0 border-[#e8eaed] bg-white p-8 text-center text-sm text-[#78909c]"
                 style={{ boxShadow: RD_CARD_SHADOW }}
               >
-                Nenhum conteúdo nesta aba ainda.
+                {negotiationReadOnly
+                  ? negotiationAssigneeBlockedMessage()
+                  : "Nenhum conteúdo nesta aba ainda."}
               </TabsContent>
             ))}
+            <TabsContent
+              value="produtos"
+              className={cn(
+                "mt-0 border border-t-0 border-[#e8eaed] bg-white",
+                negotiationProductsSlot
+                  ? "p-4 md:p-5 text-left"
+                  : "p-8 text-center text-sm text-[#78909c]",
+              )}
+              style={{ boxShadow: RD_CARD_SHADOW }}
+            >
+              {negotiationProductsSlot ?? "Nenhum conteúdo nesta aba ainda."}
+            </TabsContent>
             <TabsContent
               value="tarefas"
               className="mt-0 overflow-hidden border border-t-0 border-[#e8eaed] bg-white p-0"
@@ -1314,9 +1400,9 @@ export function ClienteRdPerfilView({
                 onSaveCrmTaskEdit={onSaveCrmTaskEdit}
                 taskMutationBusy={taskMutationBusy}
                 onCreateTask={onCreateTask}
-                onCreateCup={onCreateCup}
                 openTaskEdit={openTaskEdit}
                 onRequestDeleteTask={(t) => setCrmTaskDelete(t)}
+                readOnly={negotiationReadOnly}
               />
             </TabsContent>
             <TabsContent

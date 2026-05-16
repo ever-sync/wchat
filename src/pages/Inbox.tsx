@@ -82,6 +82,15 @@ import {
 } from "@/lib/api/crm-negotiations";
 import { useChatNegotiation, useSetChatResolution } from "@/lib/api/crm-lead";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
+import { hasSaleAttendant, validateMarkWinLines } from "@/lib/crm/sale-rules";
+import { invalidateSalesQueries, persistMarkWinSale } from "@/lib/crm/persist-mark-win-sale";
+import {
+  canAtendimentoActOnChat,
+  canAtendimentoModifyNegotiation,
+  chatAssigneeBlockedMessage,
+  isInboxLeadLocked,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
 import { isChatSnoozed } from "@/lib/inbox-chat-rules";
@@ -762,20 +771,84 @@ export default function Inbox() {
     setSaleNotes("");
   }
 
+  const profileId = profile?.id;
+  const canActOnChat = canAtendimentoActOnChat(profile?.role, activeChat?.assigneeId, profileId);
+  const canModifyLinkedNegotiation = canAtendimentoModifyNegotiation(
+    profile?.role,
+    linkedNegotiation?.assigneeId,
+    profileId,
+  );
+  const inboxLeadLocked = isInboxLeadLocked(
+    profile?.role,
+    activeChat?.assigneeId,
+    linkedNegotiation?.assigneeId,
+    profileId,
+    { hasLinkedNegotiation: Boolean(linkedNegotiation) },
+  );
+  const canMarkSaleFromChat =
+    Boolean(activeChat) &&
+    Boolean(linkedNegotiation) &&
+    !linkedNegotiationLoading &&
+    hasSaleAttendant({
+      chatAssigneeId: activeChat?.assigneeId,
+      negotiationAssigneeId: linkedNegotiation?.assigneeId,
+      profileId,
+      role: profile?.role,
+    });
+
   function handleOpenSaleFlow() {
     if (!activeChat) {
       return;
     }
-    setMarkQuickSaleDialogOpen(true);
-  }
-
-  function openFullSaleStockFlow() {
-    if (!activeChat) {
+    if (!canActOnChat) {
+      toast({
+        title: "Assuma a conversa",
+        description: chatAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
       return;
     }
-    setMarkQuickSaleDialogOpen(false);
-    resetSaleFlow();
-    setSaleFlowOpen(true);
+    if (!canModifyLinkedNegotiation) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!activeChat.assigneeId?.trim()) {
+      toast({
+        title: "Sem atendente",
+        description: "Atribua esta conversa a um atendente antes de registrar a venda.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (activeChat.primaryNegotiationId && linkedNegotiationLoading) {
+      toast({
+        title: "Aguarde",
+        description: "Carregando o negócio vinculado ao chat…",
+      });
+      return;
+    }
+    if (!linkedNegotiation) {
+      toast({
+        title: "Negócio não vinculado",
+        description:
+          "Use “Criar lead no CRM” ou “Vincular ao CRM” no cabeçalho da conversa antes de marcar a venda.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isNegotiationUnassigned(linkedNegotiation.assigneeId)) {
+      toast({
+        title: "Assuma o negócio",
+        description: "O negócio precisa de um responsável no CRM antes da venda.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setMarkQuickSaleDialogOpen(true);
   }
 
   function resolveStepError() {
@@ -1618,6 +1691,15 @@ export default function Inbox() {
       return;
     }
 
+    if (!canActOnChat) {
+      toast({
+        title: "Assuma a conversa",
+        description: chatAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (sendMessage.isPending) {
       return;
     }
@@ -1820,8 +1902,18 @@ export default function Inbox() {
                   {isChatSnoozed(activeChat) ? (
                     <button
                       type="button"
-                      onClick={() => void clearSnoozeMutation.mutateAsync(activeChat.id)}
-                      disabled={clearSnoozeMutation.isPending}
+                      onClick={() => {
+                        if (!canActOnChat) {
+                          toast({
+                            title: "Assuma a conversa",
+                            description: chatAssigneeBlockedMessage(),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        void clearSnoozeMutation.mutateAsync(activeChat.id);
+                      }}
+                      disabled={clearSnoozeMutation.isPending || !canActOnChat}
                       className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-amber-800 transition-colors hover:bg-amber-100"
                       title="Remover adiamento"
                     >
@@ -1830,9 +1922,20 @@ export default function Inbox() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setSnoozeDialogOpen(true)}
-                      className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                      title="Adiar conversa"
+                      onClick={() => {
+                        if (!canActOnChat) {
+                          toast({
+                            title: "Assuma a conversa",
+                            description: chatAssigneeBlockedMessage(),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        setSnoozeDialogOpen(true);
+                      }}
+                      disabled={!canActOnChat}
+                      className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
+                      title={canActOnChat ? "Adiar conversa" : chatAssigneeBlockedMessage()}
                     >
                       <AlarmClock className="h-4 w-4" />
                     </button>
@@ -1840,6 +1943,14 @@ export default function Inbox() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (!canActOnChat && activeChat.assigneeId) {
+                        toast({
+                          title: "Assuma a conversa",
+                          description: chatAssigneeBlockedMessage(),
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       setAssignDialogChatId(activeChat.id);
                       setAssignDialogSelectedUser(activeChat.assigneeId ?? "");
                       setAssignDialogOpen(true);
@@ -1886,7 +1997,15 @@ export default function Inbox() {
                   <button
                     type="button"
                     onClick={handleOpenSaleFlow}
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-wchat-100 px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-wchat-200"
+                    disabled={!canMarkSaleFromChat}
+                    title={
+                      !canActOnChat
+                        ? chatAssigneeBlockedMessage()
+                        : !canModifyLinkedNegotiation
+                          ? negotiationAssigneeBlockedMessage()
+                          : "Registrar venda"
+                    }
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-wchat-100 px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-wchat-200 disabled:pointer-events-none disabled:opacity-45"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <span className="hidden sm:inline">Venda</span>
@@ -1989,6 +2108,7 @@ export default function Inbox() {
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
+              !canActOnChat ||
               (messageType === "text"
                 ? !bodyText.trim()
                 : !bodyText.trim() && !mediaUrl.trim())
@@ -2025,6 +2145,7 @@ export default function Inbox() {
         onOpenChange={setProfileOpen}
         chat={activeChat}
         messages={messages}
+        crmActionsLocked={inboxLeadLocked}
       />
 
       {/* Diálogo de atribuição/transferência de conversa */}
@@ -2145,17 +2266,30 @@ export default function Inbox() {
             linkedNegotiationLoading &&
             markQuickSaleDialogOpen)
         }
-        footerExtra={
-          <button
-            type="button"
-            className="text-left text-xs font-medium text-primary hover:underline"
-            onClick={openFullSaleStockFlow}
-          >
-            Registrar com produtos, estoque e pagamento…
-          </button>
-        }
-        onConfirm={async (totalValue) => {
+        onConfirm={async ({ lines, totalValue }) => {
+          const lineError = validateMarkWinLines(lines);
+          if (lineError) {
+            toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
+            return;
+          }
           if (!activeChat) return;
+          if (
+            !hasSaleAttendant({
+              chatAssigneeId: activeChat.assigneeId,
+              negotiationAssigneeId: linkedNegotiation?.assigneeId,
+              profileId,
+              role: profile?.role,
+            })
+          ) {
+            toast({
+              title: "Assuma o negócio",
+              description: !canActOnChat
+                ? chatAssigneeBlockedMessage()
+                : negotiationAssigneeBlockedMessage(),
+              variant: "destructive",
+            });
+            return;
+          }
           if (!isSupabaseConfigured) {
             toast({
               title: "Supabase não configurado",
@@ -2211,13 +2345,35 @@ export default function Inbox() {
                 totalValue,
               },
             });
+            const soldBy =
+              activeChat.assigneeId?.trim() ||
+              linkedNegotiation.assigneeId?.trim() ||
+              profile?.id?.trim();
+            if (soldBy) {
+              await persistMarkWinSale({
+                chatId: activeChat.id,
+                customerId: activeChat.customerId ?? linkedNegotiation.customerId ?? null,
+                soldBy,
+                lines,
+              });
+              invalidateSalesQueries(
+                queryClient,
+                activeChat.customerId ?? linkedNegotiation.customerId,
+              );
+            }
             await setChatResolutionMutation.mutateAsync({
               chatId: activeChat.id,
               resolution: "resolved",
             });
+            const itemsLabel =
+              lines.length === 1
+                ? lines[0]?.productName
+                : `${lines.length} itens`;
             toast({
               title: "Venda registrada",
-              description: `Negócio atualizado (${formatMoney(totalValue)}). A conversa foi marcada como resolvida.`,
+              description: itemsLabel
+                ? `${itemsLabel} — ${formatMoney(totalValue)}. Conversa marcada como resolvida.`
+                : `Negócio atualizado (${formatMoney(totalValue)}). A conversa foi marcada como resolvida.`,
             });
             useAppStore.getState().addNotification({
               tipo: "sucesso",

@@ -44,6 +44,7 @@ import {
 import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
+import { MarkWinDialog, type MarkWinConfirm } from "@/components/crm/MarkWinDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -98,11 +99,22 @@ import {
   negotiationMatchesAlertsFilter,
   normalizeStaleNegotiationDays,
 } from "@/lib/crm/negotiation-alerts";
+import {
+  isSaleDestinationStage,
+  negotiationHasCompletedSale,
+  saleAttendantBlockedMessage,
+  validateMarkWinLines,
+} from "@/lib/crm/sale-rules";
+import { invalidateSalesQueries, persistMarkWinSale } from "@/lib/crm/persist-mark-win-sale";
+import {
+  canAtendimentoModifyNegotiation,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type { CrmFunnel, CrmStageDef } from "@/data/crm-funnels";
-import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
+import { DEFAULT_CRM_FUNNELS, resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 import { E2E_POOL_NEGOTIATION } from "@/data/crm-e2e-fixtures";
 import { MOCK_NEGOTIATIONS } from "@/data/crm-mock-negotiations";
 import { isE2eMockAuth } from "@/lib/e2e";
@@ -414,8 +426,16 @@ export default function Crm() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newNegotiationTitle, setNewNegotiationTitle] = useState("");
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
+  const [winDialogOpen, setWinDialogOpen] = useState(false);
   const [e2eAssigneeOverrides, setE2eAssigneeOverrides] = useState<Record<string, string>>({});
   const [pendingLostDrag, setPendingLostDrag] = useState<{
+    negId: string;
+    card: CrmNegotiation;
+    stageDropId: string;
+    cid: string | null;
+    stageTitle: string;
+  } | null>(null);
+  const [pendingWinDrag, setPendingWinDrag] = useState<{
     negId: string;
     card: CrmNegotiation;
     stageDropId: string;
@@ -829,6 +849,16 @@ export default function Crm() {
         return;
       }
 
+      const dragAssigneeId = dbRecords.find((r) => r.id === negId)?.assigneeId ?? card.assigneeId;
+      if (!canAtendimentoModifyNegotiation(profile?.role, dragAssigneeId, profileId)) {
+        toast({
+          title: "Assuma o negócio",
+          description: negotiationAssigneeBlockedMessage(),
+          variant: "destructive",
+        });
+        return;
+      }
+
       const cid = resolveCustomerIdForNegotiation(card, customers);
       const stageTitle = funnelDef.stages.find((s) => s.id === stageDropId)?.title ?? stageDropId;
 
@@ -867,6 +897,38 @@ export default function Crm() {
         setPendingLostDrag({ negId, card, stageDropId, cid, stageTitle });
         setLostDialogOpen(true);
         return;
+      }
+
+      if (isSaleDestinationStage(funnels, funnelId, stageDropId)) {
+        const persistedRow = isPersistedCrmNegotiationId(negId);
+        if (!persistedRow) {
+          toast({
+            title: "Marcar venda",
+            description: "Crie a negociação no banco antes de registrar a venda.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const row = dbRecords.find((r) => r.id === negId);
+        const assigneeId = row?.assigneeId ?? card.assigneeId;
+        if (isNegotiationUnassigned(assigneeId)) {
+          toast({
+            title: "Sem responsável",
+            description: saleAttendantBlockedMessage("crm"),
+            variant: "destructive",
+          });
+          return;
+        }
+        if (
+          !negotiationHasCompletedSale({
+            status: row?.status ?? card.status,
+            totalValue: row?.totalValue ?? card.totalValue,
+          })
+        ) {
+          setPendingWinDrag({ negId, card, stageDropId, cid, stageTitle });
+          setWinDialogOpen(true);
+          return;
+        }
       }
 
       try {
@@ -917,11 +979,104 @@ export default function Crm() {
       dbRecords,
       funnelId,
       funnels,
+      profile?.role,
+      profileId,
       sourceNegotiations,
       toast,
       updateCrmNegotiation,
       updateCustomer,
       upsertStageOverride,
+    ],
+  );
+
+  const completeWinDrag = useCallback(
+    async ({ lines, totalValue }: MarkWinConfirm) => {
+      const pending = pendingWinDrag;
+      if (!pending) {
+        return;
+      }
+      const lineError = validateMarkWinLines(lines);
+      if (lineError) {
+        toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
+        throw new Error(lineError);
+      }
+      if (
+        !canAtendimentoModifyNegotiation(
+          profile?.role,
+          pending.card.assigneeId,
+          profileId,
+        )
+      ) {
+        toast({
+          title: "Assuma o negócio",
+          description: negotiationAssigneeBlockedMessage(),
+          variant: "destructive",
+        });
+        throw new Error("negotiation_not_owned");
+      }
+      try {
+        const saleStageId = resolveConfiguredSaleStageId(funnels, funnelId);
+        await updateCrmNegotiation.mutateAsync({
+          id: pending.negId,
+          patch: {
+            status: "vendido",
+            stageId: saleStageId,
+            funnelId,
+            totalValue,
+          },
+        });
+        if (isSupabaseConfigured) {
+          const soldBy = pending.card.assigneeId?.trim() || profileId;
+          if (soldBy) {
+            await persistMarkWinSale({
+              chatId: pending.card.sourceChatId ?? null,
+              customerId: pending.cid,
+              soldBy,
+              lines,
+            });
+            invalidateSalesQueries(queryClient, pending.cid);
+          }
+        }
+        if (pending.cid) {
+          const customer = customers.find((c) => c.id === pending.cid);
+          if (customer) {
+            await updateCustomer.mutateAsync({
+              id: pending.cid,
+              input: {
+                ...toCustomerUpsertInput(customer),
+                sourceColumns: {
+                  ...customer.sourceColumns,
+                  [CRM_PIPELINE_STAGE_KEY]: saleStageId,
+                  [CRM_FUNNEL_ID_KEY]: funnelId,
+                },
+              },
+            });
+          }
+        }
+        toast({
+          title: "Venda registrada",
+          description: `${pending.card.title} → ${pending.stageTitle}`,
+        });
+        setPendingWinDrag(null);
+      } catch (e) {
+        toast({
+          title: "Não foi possível salvar",
+          description: e instanceof Error ? e.message : "Tente novamente.",
+          variant: "destructive",
+        });
+        throw e;
+      }
+    },
+    [
+      customers,
+      funnelId,
+      funnels,
+      pendingWinDrag,
+      profileId,
+      queryClient,
+      toast,
+      updateCrmNegotiation,
+      updateCustomer,
     ],
   );
 
@@ -1943,6 +2098,19 @@ export default function Crm() {
         pending={updateCrmNegotiation.isPending}
         onConfirm={completeLostDrag}
       />
+
+      <MarkWinDialog
+        open={winDialogOpen}
+        onOpenChange={(open) => {
+          setWinDialogOpen(open);
+          if (!open) {
+            setPendingWinDrag(null);
+          }
+        }}
+        initialValue={pendingWinDrag?.card.totalValue ?? 0}
+        pending={updateCrmNegotiation.isPending}
+        onConfirm={completeWinDrag}
+      />
     </div>
   );
 }
@@ -1988,8 +2156,13 @@ function DraggableNegotiationCard({
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
 }) {
+  const { profile } = useAuth();
+  const profileId = profile?.id;
+  const canDrag = canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `neg-${card.id}`,
+    disabled: !canDrag,
   });
   const alerts = useMemo(
     () => getNegotiationAlerts(card, undefined, staleNegotiationDays),

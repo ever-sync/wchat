@@ -6,6 +6,16 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from "@tanstack/react-query";
+import {
+  customFieldStorageColumn,
+  parseCustomFieldOptions,
+  type CustomFieldKind,
+} from "@/lib/custom-field-kinds";
+import {
+  formatCustomFieldStoredValueForInput,
+  normalizeCustomFieldInputForSave,
+  parseCustomFieldNumericForSave,
+} from "@/lib/custom-field-masks";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 
@@ -16,13 +26,14 @@ export type ProductCategory = {
   updatedAt: string | null;
 };
 
-export type ProductCustomFieldKind = "texto" | "numero" | "data";
+export type ProductCustomFieldKind = CustomFieldKind;
 
 export type ProductCustomFieldDefinition = {
   id: string;
   nome: string;
   kind: ProductCustomFieldKind;
   sortOrder: number;
+  options: string[];
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -35,7 +46,7 @@ export type ProductCustomFieldValueRow = {
 };
 
 const CAT_SELECT = "id, nome, created_at, updated_at";
-const FIELD_SELECT = "id, nome, kind, sort_order, created_at, updated_at";
+const FIELD_SELECT = "id, nome, kind, sort_order, options, created_at, updated_at";
 
 function mapCategory(row: {
   id: string;
@@ -56,6 +67,7 @@ function mapField(row: {
   nome: string;
   kind: ProductCustomFieldKind;
   sort_order: number;
+  options?: unknown;
   created_at: string | null;
   updated_at: string | null;
 }): ProductCustomFieldDefinition {
@@ -64,6 +76,7 @@ function mapField(row: {
     nome: row.nome,
     kind: row.kind,
     sortOrder: row.sort_order,
+    options: parseCustomFieldOptions(row.options),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -177,9 +190,16 @@ export async function listProductCustomFields(): Promise<ProductCustomFieldDefin
 export async function createProductCustomField(input: {
   nome: string;
   kind: ProductCustomFieldKind;
+  options?: string[];
 }): Promise<ProductCustomFieldDefinition> {
   if (!isSupabaseConfigured) {
     throw new Error("Configure o Supabase para campos personalizados.");
+  }
+  if (input.kind === "lista") {
+    const opts = (input.options ?? []).map((o) => o.trim()).filter(Boolean);
+    if (opts.length === 0) {
+      throw new Error("Informe ao menos uma opção para o campo de lista.");
+    }
   }
   const supabase = requireSupabase();
   const tenantId = await getCurrentTenantId();
@@ -192,6 +212,8 @@ export async function createProductCustomField(input: {
 
   const top = ordRows?.[0] as { sort_order?: number } | undefined;
   const nextOrder = typeof top?.sort_order === "number" ? top.sort_order + 1 : 0;
+  const options =
+    input.kind === "lista" ? (input.options ?? []).map((o) => o.trim()).filter(Boolean) : [];
 
   const { data, error } = await supabase
     .from("product_custom_fields")
@@ -200,12 +222,24 @@ export async function createProductCustomField(input: {
       nome: input.nome.trim(),
       kind: input.kind,
       sort_order: nextOrder,
+      options,
     })
     .select(FIELD_SELECT)
     .single();
 
   if (error) throw new Error(error.message);
   return mapField(data as never);
+}
+
+export function customFieldValueToString(
+  kind: ProductCustomFieldKind,
+  row: ProductCustomFieldValueRow,
+): string {
+  return formatCustomFieldStoredValueForInput(kind, {
+    text: row.valueText,
+    numeric: row.valueNumeric,
+    date: row.valueDate,
+  });
 }
 
 export async function deleteProductCustomField(id: string): Promise<void> {
@@ -237,6 +271,19 @@ export async function listCustomFieldValuesForProduct(productId: string): Promis
   }));
 }
 
+async function clearCustomFieldValue(
+  supabase: ReturnType<typeof requireSupabase>,
+  productId: string,
+  fieldId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("product_custom_field_values")
+    .delete()
+    .eq("product_id", productId)
+    .eq("field_id", fieldId);
+  if (error) throw new Error(error.message);
+}
+
 export async function upsertCustomFieldValue(
   productId: string,
   fieldId: string,
@@ -247,40 +294,33 @@ export async function upsertCustomFieldValue(
     throw new Error("Configure o Supabase para salvar valores.");
   }
   const supabase = requireSupabase();
+  const normalized = normalizeCustomFieldInputForSave(kind, raw);
+  const storage = customFieldStorageColumn(kind);
 
-  const trimmed = raw.trim();
+  if (kind === "moeda" && !raw.trim()) {
+    await clearCustomFieldValue(supabase, productId, fieldId);
+    return;
+  }
+
+  if (!normalized && kind !== "booleano") {
+    await clearCustomFieldValue(supabase, productId, fieldId);
+    return;
+  }
+
   let value_text: string | null = null;
   let value_numeric: number | null = null;
   let value_date: string | null = null;
 
-  if (kind === "texto") {
-    value_text = trimmed || null;
-  } else if (kind === "numero") {
-    if (!trimmed) {
-      const { error } = await supabase
-        .from("product_custom_field_values")
-        .delete()
-        .eq("product_id", productId)
-        .eq("field_id", fieldId);
-      if (error) throw new Error(error.message);
-      return;
+  if (storage === "text") {
+    value_text = kind === "booleano" ? normalized || "0" : normalized;
+  } else if (storage === "numeric") {
+    if (kind === "moeda") {
+      value_numeric = parseCustomFieldNumericForSave(kind, raw.trim());
+    } else {
+      value_numeric = parseCustomFieldNumericForSave(kind, normalized);
     }
-    const n = Number(trimmed.replace(",", "."));
-    if (!Number.isFinite(n)) {
-      throw new Error("Valor numérico inválido.");
-    }
-    value_numeric = n;
-  } else if (kind === "data") {
-    if (!trimmed) {
-      const { error } = await supabase
-        .from("product_custom_field_values")
-        .delete()
-        .eq("product_id", productId)
-        .eq("field_id", fieldId);
-      if (error) throw new Error(error.message);
-      return;
-    }
-    value_date = trimmed.slice(0, 10);
+  } else if (storage === "date") {
+    value_date = normalized.slice(0, 10);
   }
 
   const { error } = await supabase.from("product_custom_field_values").upsert(
@@ -295,6 +335,18 @@ export async function upsertCustomFieldValue(
   );
 
   if (error) throw new Error(error.message);
+}
+
+export async function upsertProductCustomFieldValues(
+  productId: string,
+  fields: ProductCustomFieldDefinition[],
+  values: Record<string, string>,
+): Promise<void> {
+  await Promise.all(
+    fields.map((field) =>
+      upsertCustomFieldValue(productId, field.id, field.kind, values[field.id] ?? ""),
+    ),
+  );
 }
 
 export function useProductCategories(options?: Omit<UseQueryOptions<ProductCategory[], Error>, "queryKey" | "queryFn">) {
@@ -378,7 +430,7 @@ export function useCreateProductCustomField(
   options?: UseMutationOptions<
     ProductCustomFieldDefinition,
     Error,
-    { nome: string; kind: ProductCustomFieldKind }
+    { nome: string; kind: ProductCustomFieldKind; options?: string[] }
   >,
 ) {
   const qc = useQueryClient();

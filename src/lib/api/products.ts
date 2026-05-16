@@ -239,6 +239,35 @@ export async function updateProduct(id: string, input: ProductUpsertInput) {
   return mapRowToProduct(data as unknown as ProductRow);
 }
 
+export async function deleteProducts(ids: string[]) {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+  if (!uniqueIds.length) {
+    return 0;
+  }
+
+  if (!isSupabaseConfigured) {
+    const products = readLocalProducts();
+    const idsToDelete = new Set(uniqueIds);
+    const nextProducts = products.filter((product) => !idsToDelete.has(product.id));
+    writeLocalProducts(nextProducts);
+    return products.length - nextProducts.length;
+  }
+
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { error, count } = await supabase
+    .from("products")
+    .delete({ count: "exact" })
+    .eq("tenant_id", tenantId)
+    .in("id", uniqueIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return count ?? uniqueIds.length;
+}
+
 export async function importProducts(inputs: ProductUpsertInput[]) {
   if (!inputs.length) {
     return [];
@@ -336,6 +365,20 @@ export function useImportProducts(
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useDeleteProducts(options?: UseMutationOptions<number, Error, string[]>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteProducts,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["product-catalog"] });
       await options?.onSuccess?.(data, variables, context);
     },
   });

@@ -11,6 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import {
   funnelStageTitleIn,
   resolveConfiguredSaleStageId,
@@ -24,6 +26,12 @@ import {
   useSetChatResolution,
 } from "@/lib/api/crm-lead";
 import { useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
+import {
+  canAtendimentoActOnChat,
+  canAtendimentoModifyNegotiation,
+  chatAssigneeBlockedMessage,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import type { ChatResolution, InboxChat } from "@/types/domain";
 
 const RESOLUTION_LABELS: Record<ChatResolution, string> = {
@@ -39,8 +47,18 @@ type ChatCrmHeaderProps = {
 };
 
 export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
+  const { toast } = useToast();
+  const { profile } = useAuth();
+  const profileId = profile?.id;
+  const canActOnChat = canAtendimentoActOnChat(profile?.role, chat.assigneeId, profileId);
+
   const { data: funnels } = useEffectiveCrmFunnels();
   const { data: negotiation } = useChatNegotiation(chat.id);
+  const canModifyNegotiation = canAtendimentoModifyNegotiation(
+    profile?.role,
+    negotiation?.assigneeId,
+    profileId,
+  );
   const { data: customerNegotiations = [] } = useCrmNegotiationsForCustomer(
     chat.customerId ?? undefined,
     { enabled: Boolean(chat.customerId) },
@@ -65,6 +83,14 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
 
   const handleEnsureLead = () => {
     if (!chat.customerId) return;
+    if (!canActOnChat) {
+      toast({
+        title: "Assuma a conversa",
+        description: chatAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     if (needsDealChoice) {
       setDealChoiceOpen(true);
       return;
@@ -112,7 +138,16 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
 
         <Select
           value={resolution}
+          disabled={!canActOnChat}
           onValueChange={(value) => {
+            if (!canActOnChat) {
+              toast({
+                title: "Assuma a conversa",
+                description: chatAssigneeBlockedMessage(),
+                variant: "destructive",
+              });
+              return;
+            }
             void setResolution.mutateAsync({
               chatId: chat.id,
               resolution: value as ChatResolution,
@@ -137,7 +172,25 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-emerald-700"
+            disabled={!canActOnChat || !canModifyNegotiation}
+            title={
+              !canActOnChat
+                ? chatAssigneeBlockedMessage()
+                : !canModifyNegotiation
+                  ? negotiationAssigneeBlockedMessage()
+                  : undefined
+            }
             onClick={() => {
+              if (!canActOnChat || !canModifyNegotiation) {
+                toast({
+                  title: !canActOnChat ? "Assuma a conversa" : "Assuma o negócio",
+                  description: !canActOnChat
+                    ? chatAssigneeBlockedMessage()
+                    : negotiationAssigneeBlockedMessage(),
+                  variant: "destructive",
+                });
+                return;
+              }
               void updateNegotiation.mutateAsync({
                 id: negotiation.id,
                 patch: {
@@ -161,11 +214,27 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
           negotiations={customerNegotiations}
           pending={ensureLead.isPending || linkNegotiation.isPending}
           onLinkExisting={(negotiationId) => {
+            if (!canActOnChat) {
+              toast({
+                title: "Assuma a conversa",
+                description: chatAssigneeBlockedMessage(),
+                variant: "destructive",
+              });
+              return;
+            }
             void linkNegotiation
               .mutateAsync({ chatId: chat.id, negotiationId })
               .then(() => setDealChoiceOpen(false));
           }}
           onCreateNew={() => {
+            if (!canActOnChat) {
+              toast({
+                title: "Assuma a conversa",
+                description: chatAssigneeBlockedMessage(),
+                variant: "destructive",
+              });
+              return;
+            }
             void ensureLead
               .mutateAsync({ chatId: chat.id, forceNew: true })
               .then(() => setDealChoiceOpen(false));

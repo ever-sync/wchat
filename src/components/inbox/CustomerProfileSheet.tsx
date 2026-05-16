@@ -43,6 +43,10 @@ import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import { leadPrefillFromInboxChat, linkSearchHintFromInboxChat } from "@/lib/inbox-clientes-deeplink";
 import { isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import {
+  chatAssigneeBlockedMessage,
+  negotiationAssigneeBlockedMessage,
+} from "@/lib/crm/negotiation-assignee";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -432,7 +436,15 @@ function ProfileTagsPicker({
   );
 }
 
-function ProfilePipelineSelects({ customer, funnels }: { customer: Customer; funnels: CrmFunnel[] }) {
+function ProfilePipelineSelects({
+  customer,
+  funnels,
+  readOnly = false,
+}: {
+  customer: Customer;
+  funnels: CrmFunnel[];
+  readOnly?: boolean;
+}) {
   const { toast } = useToast();
   const updateCustomer = useUpdateCustomer();
   const storedFunnel = customer.sourceColumns?.[CRM_FUNNEL_ID_KEY]?.trim() ?? "";
@@ -444,6 +456,14 @@ function ProfilePipelineSelects({ customer, funnels }: { customer: Customer; fun
   );
 
   const persist = async (funnelId: string, stageId: string) => {
+    if (readOnly) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       await updateCustomer.mutateAsync({
         id: customer.id,
@@ -480,6 +500,7 @@ function ProfilePipelineSelects({ customer, funnels }: { customer: Customer; fun
           </Label>
           <Select
             value={funnelSelectValue}
+            disabled={readOnly}
             onValueChange={(fid) => {
               if (fid === FUNNEL_NONE) {
                 return;
@@ -510,7 +531,7 @@ function ProfilePipelineSelects({ customer, funnels }: { customer: Customer; fun
           </Label>
           <Select
             value={stageSelectValue}
-            disabled={!funnelOk || stages.length === 0}
+            disabled={readOnly || !funnelOk || stages.length === 0}
             onValueChange={(sid) => {
               if (sid === FUNNEL_NONE || !funnelOk) {
                 return;
@@ -580,11 +601,14 @@ export function CustomerProfileSheet({
   onOpenChange,
   chat,
   messages,
+  crmActionsLocked = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chat: InboxChat | null;
   messages: WhatsappMessage[];
+  /** Atendente sem conversa/negócio assumidos: bloqueia CRM e vínculos. */
+  crmActionsLocked?: boolean;
 }) {
   const { data: customer } = useCustomer(chat?.customerId ?? undefined, { enabled: Boolean(chat?.customerId) });
   const { data: creditSummary } = useCustomerCreditSummary(chat?.customerId ?? undefined, {
@@ -722,6 +746,11 @@ export function CustomerProfileSheet({
           </SheetHeader>
 
           <div className="px-6 py-5">
+            {crmActionsLocked ? (
+              <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                {negotiationAssigneeBlockedMessage()}
+              </p>
+            ) : null}
             {chat && !chat.customerId ? (
               <div className="mb-5 rounded-[28px] border border-amber-200/80 bg-amber-50/50 p-4 shadow-[0_16px_28px_rgba(84,95,101,0.06)]">
                 <p className="text-sm font-semibold text-[#334047]">Conversa sem cliente vinculado</p>
@@ -750,8 +779,16 @@ export function CustomerProfileSheet({
                             <button
                               type="button"
                               className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm text-[#334047] hover:bg-[#f4f7f5] disabled:opacity-50"
-                              disabled={linkChat.isPending}
+                              disabled={linkChat.isPending || crmActionsLocked}
                               onClick={() => {
+                                if (crmActionsLocked) {
+                                  toast({
+                                    title: "Assuma a conversa",
+                                    description: chatAssigneeBlockedMessage(),
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
                                 void (async () => {
                                   try {
                                     await linkChat.mutateAsync({ chatId: chat.id, customerId: c.id });
@@ -789,7 +826,16 @@ export function CustomerProfileSheet({
                         variant="outline"
                         size="sm"
                         className="rounded-xl"
+                        disabled={crmActionsLocked}
                         onClick={() => {
+                          if (crmActionsLocked) {
+                            toast({
+                              title: "Assuma a conversa",
+                              description: chatAssigneeBlockedMessage(),
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           if (chat) {
                             setLeadPrefill(leadPrefillFromInboxChat(chat));
                           } else {
@@ -821,7 +867,11 @@ export function CustomerProfileSheet({
                   <ProfileTagsPicker customer={customer} suggestionTags={tagSuggestions} />
                 )}
                 {isSupabaseConfigured ? (
-                  <ProfilePipelineSelects customer={customer} funnels={effectiveCrmFunnels} />
+                  <ProfilePipelineSelects
+                    customer={customer}
+                    funnels={effectiveCrmFunnels}
+                    readOnly={crmActionsLocked}
+                  />
                 ) : null}
                 {isSupabaseConfigured ? (
                   <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">

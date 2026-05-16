@@ -418,7 +418,7 @@ export interface SaleFlowLineInput {
 }
 
 export interface SaleFlowPayload {
-  chatId: string;
+  chatId: string | null;
   customerId?: string | null;
   flowType: "venda" | "devolucao";
   soldBy?: string;

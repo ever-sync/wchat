@@ -1,16 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  Calendar,
-  ChevronDown,
-  Hash,
-  Loader2,
-  Package,
-  Pencil,
-  Plus,
-  Trash2,
-  Type,
-} from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,21 +23,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -58,22 +47,33 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { useCreateProduct, useProducts, useUpdateProduct } from "@/lib/api/products";
+import { useCreateProduct, useDeleteProducts, useProducts, useUpdateProduct } from "@/lib/api/products";
 import {
+  customFieldValueToString,
   listCategoryIdsForProduct,
+  listCustomFieldValuesForProduct,
+  upsertProductCustomFieldValues,
   useCreateProductCategory,
   useCreateProductCustomField,
-  useCustomFieldValues,
   useDeleteProductCategory,
   useDeleteProductCustomField,
   useProductCategories,
   useProductCategoryAssignments,
   useProductCustomFields,
   useSetProductCategories,
-  useUpsertCustomFieldValue,
-  type ProductCustomFieldKind,
 } from "@/lib/api/product-catalog";
+import {
+  CUSTOM_FIELD_KINDS,
+  FIELD_KIND_GROUPS,
+  FIELD_KIND_LABEL,
+  type CustomFieldKind,
+} from "@/lib/custom-field-kinds";
 import type { Product, ProductUpsertInput } from "@/types/domain";
+import {
+  formatCurrencyInput,
+  maskCurrencyInputChange,
+  parseCurrencyInput,
+} from "@/lib/currency-input";
 import { cn } from "@/lib/utils";
 
 const PAGE_TABS = ["produtos", "campos", "categorias"] as const;
@@ -86,11 +86,27 @@ function parseTab(raw: string | null): PageTab {
   return "produtos";
 }
 
-const FIELD_KIND_LABEL: Record<ProductCustomFieldKind, string> = {
-  texto: "Texto",
-  numero: "Número",
-  data: "Data",
-};
+function formatMoney(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseOptionsText(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function nextProductCode(products: Product[]) {
+  const highest = products.reduce((max, product) => {
+    const numeric = Number((product.codigo ?? "").replace(/\D/g, ""));
+    if (!Number.isFinite(numeric)) {
+      return max;
+    }
+    return Math.max(max, numeric);
+  }, 0);
+  return String(highest + 1);
+}
 
 function defaultProductInput(): ProductUpsertInput {
   return {
@@ -151,7 +167,7 @@ export default function Produtos() {
   const productQuery = useProducts({ search });
 
   const products = productQuery.data ?? [];
-  const productIds = useMemo(() => [...products.map((p) => p.id)].sort(), [products]);
+  const productIds = useMemo(() => products.map((p) => p.id).sort(), [products]);
   const { data: assignmentMap } = useProductCategoryAssignments(productIds);
 
   const { data: categories = [], isLoading: catLoading } = useProductCategories();
@@ -165,77 +181,124 @@ export default function Produtos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductUpsertInput>(() => defaultProductInput());
-  const [categorySelection, setCategorySelection] = useState<string[]>([]);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [valorDisplay, setValorDisplay] = useState("");
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false);
 
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
+  const deleteProducts = useDeleteProducts();
   const setProductCats = useSetProductCategories();
+
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const [newCategoryNome, setNewCategoryNome] = useState("");
   const [categoryToDelete, setCategoryToDelete] = useState<{ id: string; nome: string } | null>(null);
 
   const [newFieldNome, setNewFieldNome] = useState("");
-  const [newFieldKind, setNewFieldKind] = useState<ProductCustomFieldKind>("texto");
+  const [newFieldKind, setNewFieldKind] = useState<CustomFieldKind>("texto");
+  const [listaOptionsText, setListaOptionsText] = useState("");
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; nome: string } | null>(null);
 
   const [linkProductId, setLinkProductId] = useState<string>("");
   const [linkCats, setLinkCats] = useState<string[]>([]);
 
-  const [valuesProductId, setValuesProductId] = useState<string>("");
+  useEffect(() => {
+    if (products.length && !linkProductId) {
+      setLinkProductId(products[0].id);
+    }
+  }, [products, linkProductId]);
 
   useEffect(() => {
-    if (products.length && !valuesProductId) {
-      setValuesProductId(products[0].id);
-      setLinkProductId((prev) => prev || products[0].id);
+    if (!dialogOpen) {
+      return;
     }
-  }, [products, valuesProductId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!dialogOpen || !editingId) return;
-      try {
-        const ids = await listCategoryIdsForProduct(editingId);
-        if (!cancelled) setCategorySelection(ids);
-      } catch {
-        if (!cancelled) setCategorySelection([]);
-      }
+    if (!editingId) {
+      setCustomValues({});
+      setCustomFieldsLoading(false);
+      return;
     }
-    void load();
+
+    if (fieldDefs.length === 0) {
+      setCustomValues({});
+      setCustomFieldsLoading(false);
+      return;
+    }
+
+    let active = true;
+    setCustomFieldsLoading(true);
+
+    void listCustomFieldValuesForProduct(editingId)
+      .then((rows) => {
+        if (!active) {
+          return;
+        }
+        const byField = new Map(rows.map((row) => [row.fieldId, row]));
+        const next: Record<string, string> = {};
+        for (const field of fieldDefs) {
+          const row = byField.get(field.id);
+          next[field.id] = row ? customFieldValueToString(field.kind, row) : "";
+        }
+        setCustomValues(next);
+      })
+      .catch(() => {
+        if (active) {
+          setCustomValues({});
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCustomFieldsLoading(false);
+        }
+      });
+
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [dialogOpen, editingId]);
+  }, [dialogOpen, editingId, fieldDefs]);
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(defaultProductInput());
-    setCategorySelection([]);
+    const base = defaultProductInput();
+    setForm({
+      ...base,
+      codigo: products.length > 0 ? nextProductCode(products) : "1",
+    });
+    setValorDisplay("");
+    setCustomValues({});
     setDialogOpen(true);
   };
 
   const openEdit = (p: Product) => {
     setEditingId(p.id);
     setForm(productToInput(p));
+    setValorDisplay(formatCurrencyInput(p.precoVenda));
     setDialogOpen(true);
   };
 
   const saveProduct = async () => {
-    if (!form.codigo.trim() || !form.nome.trim()) {
-      toast({ title: "Preencha código e nome", variant: "destructive" });
+    if (!form.nome.trim()) {
+      toast({ title: "Informe o nome do produto", variant: "destructive" });
       return;
     }
+    const precoVenda = parseCurrencyInput(valorDisplay);
+    const payload: ProductUpsertInput = {
+      ...(editingId ? form : { ...defaultProductInput(), codigo: form.codigo.trim() || nextProductCode(products) }),
+      nome: form.nome.trim(),
+      precoVenda,
+    };
+
     try {
       let id = editingId;
       if (editingId) {
-        await updateProduct.mutateAsync({ id: editingId, input: form });
+        await updateProduct.mutateAsync({ id: editingId, input: payload });
       } else {
-        const created = await createProduct.mutateAsync(form);
+        const created = await createProduct.mutateAsync(payload);
         id = created.id;
       }
-      if (id) {
-        await setProductCats.mutateAsync({ productId: id, categoryIds: categorySelection });
+      if (id && fieldDefs.length > 0) {
+        await upsertProductCustomFieldValues(id, fieldDefs, customValues);
       }
       toast({ title: editingId ? "Produto atualizado" : "Produto criado" });
       setDialogOpen(false);
@@ -250,6 +313,10 @@ export default function Produtos() {
 
 
 
+  const listaOptions = parseOptionsText(listaOptionsText);
+  const canSubmitField =
+    newFieldNome.trim() && !createField.isPending && (newFieldKind !== "lista" || listaOptions.length > 0);
+
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c.nome])), [categories]);
 
   const extrasDisabled = !isSupabaseConfigured;
@@ -259,9 +326,9 @@ export default function Produtos() {
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Produtos</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Serviços e produtos</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastro com código e nome; personalize campos e categorias por tenant.
+              Cadastro com nome e valor; campos extras e categorias na aba correspondente.
             </p>
           </div>
         </div>
@@ -271,8 +338,8 @@ export default function Produtos() {
             <CardHeader className="py-3">
               <CardTitle className="text-base">Modo offline</CardTitle>
               <CardDescription>
-                Campos extras e categorias ficam disponíveis com Supabase configurado. A lista de produtos pode usar
-                armazenamento local.
+                Campos personalizados e categorias ficam disponíveis com Supabase configurado. A lista de produtos pode
+                usar armazenamento local.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -284,7 +351,7 @@ export default function Produtos() {
               Catálogo
             </TabsTrigger>
             <TabsTrigger value="campos" className="rounded-[8px] px-4" disabled={extrasDisabled}>
-              Campos extras
+              Campos personalizados
             </TabsTrigger>
             <TabsTrigger value="categorias" className="rounded-[8px] px-4" disabled={extrasDisabled}>
               Categorias
@@ -296,7 +363,7 @@ export default function Produtos() {
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-border bg-card py-4">
                 <div>
                   <CardTitle className="text-base">Seus produtos</CardTitle>
-                  <CardDescription>Código interno e nome são o núcleo do cadastro.</CardDescription>
+                  <CardDescription>Nome e valor são os dados principais de cada item.</CardDescription>
                 </div>
                 <Button type="button" size="sm" className="gap-2 rounded-[10px]" onClick={openCreate}>
                   <Plus className="h-4 w-4" />
@@ -306,7 +373,7 @@ export default function Produtos() {
               <CardContent className="p-0">
                 <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
                   <Input
-                    placeholder="Buscar por nome ou código…"
+                    placeholder="Buscar por nome…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="max-w-xs rounded-[10px]"
@@ -316,10 +383,10 @@ export default function Produtos() {
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-[120px]">Código</TableHead>
                         <TableHead>Nome</TableHead>
-                        <TableHead className="hidden sm:table-cell">Categorias</TableHead>
-                        <TableHead className="w-[100px]" />
+                        <TableHead className="w-[140px]">Valor</TableHead>
+                        <TableHead className="hidden min-w-[160px] sm:table-cell">Categoria</TableHead>
+                        <TableHead className="w-[120px]" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -338,25 +405,28 @@ export default function Produtos() {
                         </TableRow>
                       ) : (
                         products.map((p) => {
-                          const cats = assignmentMap?.get(p.id) ?? [];
+                          const catIds = assignmentMap?.get(p.id) ?? [];
                           return (
-                            <TableRow key={p.id} className="border-border">
-                              <TableCell className="font-mono text-sm">{p.codigo}</TableCell>
-                              <TableCell className="font-medium">{p.nome}</TableCell>
-                              <TableCell className="hidden sm:table-cell">
-                                <div className="flex flex-wrap gap-1">
-                                  {cats.length === 0 ? (
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  ) : (
-                                    cats.map((cid) => (
-                                      <Badge key={cid} variant="secondary" className="text-[10px] font-normal">
-                                        {categoryById.get(cid) ?? cid.slice(0, 6)}
-                                      </Badge>
-                                    ))
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
+                          <TableRow key={p.id} className="border-border">
+                            <TableCell className="font-medium">{p.nome}</TableCell>
+                            <TableCell className="tabular-nums text-muted-foreground">
+                              {p.precoVenda > 0 ? formatMoney(p.precoVenda) : "—"}
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <div className="flex flex-wrap gap-1">
+                                {catIds.length === 0 ? (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                ) : (
+                                  catIds.map((cid) => (
+                                    <Badge key={cid} variant="secondary" className="text-[10px] font-normal">
+                                      {categoryById.get(cid) ?? cid.slice(0, 6)}
+                                    </Badge>
+                                  ))
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -367,8 +437,19 @@ export default function Produtos() {
                                   <Pencil className="h-3.5 w-3.5" />
                                   Editar
                                 </Button>
-                              </TableCell>
-                            </TableRow>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-[8px] text-destructive hover:text-destructive"
+                                  aria-label={`Excluir ${p.nome}`}
+                                  onClick={() => setProductToDelete(p)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
                           );
                         })
                       )}
@@ -382,64 +463,93 @@ export default function Produtos() {
           <TabsContent value="campos" className="space-y-4 focus-visible:outline-none">
             <Card className="rounded-[10px]">
               <CardHeader>
-                <CardTitle className="text-base">Definições de campos</CardTitle>
+                <CardTitle className="text-base">Campos personalizados</CardTitle>
                 <CardDescription>
-                  Crie atributos adicionais (texto, número ou data) e preencha por produto abaixo.
+                  Defina atributos extras (texto, números, datas, listas e mais). Eles aparecem ao criar ou editar um
+                  produto.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="field-nome">Nome do campo</Label>
-                    <Input
-                      id="field-nome"
-                      value={newFieldNome}
-                      onChange={(e) => setNewFieldNome(e.target.value)}
-                      placeholder="Ex.: Validade, Lote, Garantia"
-                      className="w-[220px] rounded-[10px]"
-                    />
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="field-nome">Nome do campo</Label>
+                      <Input
+                        id="field-nome"
+                        value={newFieldNome}
+                        onChange={(e) => setNewFieldNome(e.target.value)}
+                        placeholder="Ex.: Validade, Lote, Garantia"
+                        className="rounded-[10px]"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Tipo</Label>
+                      <Select value={newFieldKind} onValueChange={(v) => setNewFieldKind(v as CustomFieldKind)}>
+                        <SelectTrigger className="rounded-[10px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[min(60dvh,320px)]">
+                          {FIELD_KIND_GROUPS.map((group) => (
+                            <SelectGroup key={group}>
+                              <SelectLabel>{group}</SelectLabel>
+                              {CUSTOM_FIELD_KINDS.filter((k) => k.group === group).map((k) => (
+                                <SelectItem key={k.value} value={k.value}>
+                                  {k.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        className="w-full rounded-[10px]"
+                        disabled={!canSubmitField}
+                        onClick={() => {
+                          createField.mutate(
+                            {
+                              nome: newFieldNome,
+                              kind: newFieldKind,
+                              options: newFieldKind === "lista" ? listaOptions : undefined,
+                            },
+                            {
+                              onSuccess: () => {
+                                toast({ title: "Campo criado" });
+                                setNewFieldNome("");
+                                setListaOptionsText("");
+                              },
+                              onError: (e) =>
+                                toast({ title: "Erro ao criar campo", description: e.message, variant: "destructive" }),
+                            },
+                          );
+                        }}
+                      >
+                        {createField.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cadastrar campo"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Tipo</Label>
-                    <Select value={newFieldKind} onValueChange={(v) => setNewFieldKind(v as ProductCustomFieldKind)}>
-                      <SelectTrigger className="w-[140px] rounded-[10px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="texto">Texto</SelectItem>
-                        <SelectItem value="numero">Número</SelectItem>
-                        <SelectItem value="data">Data</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    type="button"
-                    className="rounded-[10px]"
-                    disabled={!newFieldNome.trim() || createField.isPending}
-                    onClick={() => {
-                      createField.mutate(
-                        { nome: newFieldNome, kind: newFieldKind },
-                        {
-                          onSuccess: () => {
-                            toast({ title: "Campo criado" });
-                            setNewFieldNome("");
-                          },
-                          onError: (e) =>
-                            toast({ title: "Erro ao criar campo", description: e.message, variant: "destructive" }),
-                        },
-                      );
-                    }}
-                  >
-                    {createField.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar"}
-                  </Button>
-                </div>
 
+                  {newFieldKind === "lista" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="field-opcoes">Opções da lista (uma por linha)</Label>
+                      <Textarea
+                        id="field-opcoes"
+                        value={listaOptionsText}
+                        onChange={(e) => setListaOptionsText(e.target.value)}
+                        placeholder={"Opção A\nOpção B\nOpção C"}
+                        className="min-h-[88px] rounded-[10px]"
+                      />
+                    </div>
+                  ) : null}
+                </div>
                 <div className="overflow-x-auto rounded-lg border border-border">
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <TableHead>Campo</TableHead>
-                        <TableHead className="w-[100px]">Tipo</TableHead>
+                        <TableHead className="min-w-[140px]">Tipo</TableHead>
                         <TableHead className="w-[80px]" />
                       </TableRow>
                     </TableHeader>
@@ -453,7 +563,7 @@ export default function Produtos() {
                       ) : fieldDefs.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
-                            Nenhum campo extra definido.
+                            Nenhum campo definido.
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -479,12 +589,6 @@ export default function Produtos() {
                   </Table>
                 </div>
 
-                <ValuesEditor
-                  products={products}
-                  productId={valuesProductId}
-                  onProductId={setValuesProductId}
-                  fieldDefs={fieldDefs}
-                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -582,7 +686,7 @@ export default function Produtos() {
                         <SelectContent className="max-h-64">
                           {products.map((p) => (
                             <SelectItem key={p.id} value={p.id}>
-                              {p.codigo} — {p.nome}
+                              {p.nome}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -641,148 +745,57 @@ export default function Produtos() {
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar produto" : "Novo produto"}</DialogTitle>
             <DialogDescription>
-              Informe código e nome. Opcionalmente abra &quot;Mais dados&quot; para preço, estoque e outros campos do
-              ERP.
+              Informe nome e valor. Campos extras definidos na aba Campos personalizados aparecem abaixo.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="codigo">Código (ID)</Label>
-                <div className="relative">
-                  <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="codigo"
-                    className="rounded-[10px] pl-8"
-                    value={form.codigo}
-                    onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))}
-                    disabled={Boolean(editingId)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="nome">Nome</Label>
-                <div className="relative">
-                  <Package className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="nome"
-                    className="rounded-[10px] pl-8"
-                    value={form.nome}
-                    onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                  />
-                </div>
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nome">Nome</Label>
+              <Input
+                id="nome"
+                className="rounded-[10px]"
+                value={form.nome}
+                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
+                placeholder="Nome do produto"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="valor">Valor</Label>
+              <Input
+                id="valor"
+                className="rounded-[10px]"
+                inputMode="numeric"
+                value={valorDisplay}
+                onChange={(e) => setValorDisplay(maskCurrencyInputChange(e.target.value))}
+                placeholder="R$ 0,00"
+              />
             </div>
 
-            <Collapsible open={categoriesOpen} onOpenChange={setCategoriesOpen}>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="outline" className="w-full justify-between rounded-[10px]">
-                  Categorias
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", categoriesOpen && "rotate-180")}
-                  />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-2 rounded-[10px] border border-border p-3">
-                {categories.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Crie categorias na aba Categorias.</p>
+            {fieldDefs.length > 0 ? (
+              <div className="space-y-4 border-t border-border/60 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Campos personalizados
+                </p>
+                {customFieldsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando…
+                  </div>
                 ) : (
-                  categories.map((c) => (
-                    <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={categorySelection.includes(c.id)}
-                        onCheckedChange={(chk) =>
-                          setCategorySelection((prev) =>
-                            chk === true ? [...prev, c.id] : prev.filter((id) => id !== c.id),
-                          )
-                        }
-                      />
-                      {c.nome}
-                    </label>
+                  fieldDefs.map((field) => (
+                    <CustomerCustomFieldInput
+                      key={field.id}
+                      field={field}
+                      value={customValues[field.id] ?? ""}
+                      onChange={(value) =>
+                        setCustomValues((current) => ({ ...current, [field.id]: value }))
+                      }
+                    />
                   ))
                 )}
-              </CollapsibleContent>
-            </Collapsible>
-
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" className="w-full justify-between rounded-[10px] text-primary">
-                  Mais dados (ERP)
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-3 rounded-[10px] border border-border bg-muted/30 p-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Preço venda</Label>
-                    <Input
-                      type="number"
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.precoVenda}
-                      onChange={(e) => setForm((f) => ({ ...f, precoVenda: Number(e.target.value) || 0 }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Preço compra</Label>
-                    <Input
-                      type="number"
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.precoCompra}
-                      onChange={(e) => setForm((f) => ({ ...f, precoCompra: Number(e.target.value) || 0 }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Estoque</Label>
-                    <Input
-                      type="number"
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.qtdEstoque}
-                      onChange={(e) => setForm((f) => ({ ...f, qtdEstoque: Number(e.target.value) || 0 }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Unidade</Label>
-                    <Input
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.unidade}
-                      onChange={(e) => setForm((f) => ({ ...f, unidade: e.target.value }))}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Grupo</Label>
-                    <Input
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.grupo}
-                      onChange={(e) => setForm((f) => ({ ...f, grupo: e.target.value }))}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Código de barras</Label>
-                    <Input
-                      className="h-8 rounded-[8px] text-sm"
-                      value={form.codigoBarras}
-                      onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Status</Label>
-                    <Select
-                      value={form.status}
-                      onValueChange={(v) => setForm((f) => ({ ...f, status: v as ProductUpsertInput["status"] }))}
-                    >
-                      <SelectTrigger className="h-8 rounded-[8px] text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ativo">Ativo</SelectItem>
-                        <SelectItem value="inativo">Inativo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -803,6 +816,60 @@ export default function Produtos() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(productToDelete)} onOpenChange={(o) => !o && setProductToDelete(null)}>
+        <AlertDialogContent className="rounded-[12px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir produto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {productToDelete
+                ? `“${productToDelete.nome}” será removido do catálogo. Esta ação não pode ser desfeita.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-[10px]" disabled={deleteProducts.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-[10px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteProducts.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!productToDelete) {
+                  return;
+                }
+                void (async () => {
+                  try {
+                    await deleteProducts.mutateAsync([productToDelete.id]);
+                    if (linkProductId === productToDelete.id) {
+                      setLinkProductId("");
+                      setLinkCats([]);
+                    }
+                    if (editingId === productToDelete.id) {
+                      setDialogOpen(false);
+                      setEditingId(null);
+                    }
+                    toast({
+                      title: "Produto excluído",
+                      description: `${productToDelete.nome} foi removido.`,
+                    });
+                    setProductToDelete(null);
+                  } catch (err) {
+                    toast({
+                      title: "Não foi possível excluir",
+                      description: err instanceof Error ? err.message : "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  }
+                })();
+              }}
+            >
+              {deleteProducts.isPending ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={Boolean(categoryToDelete)} onOpenChange={(o) => !o && setCategoryToDelete(null)}>
         <AlertDialogContent className="rounded-[12px]">
@@ -889,122 +956,4 @@ function LoadLinkCats({ productId, onLoaded }: { productId: string; onLoaded: (i
   }, [productId, onLoaded]);
 
   return null;
-}
-
-function ValuesEditor({
-  products,
-  productId,
-  onProductId,
-  fieldDefs,
-}: {
-  products: Product[];
-  productId: string;
-  onProductId: (id: string) => void;
-  fieldDefs: { id: string; nome: string; kind: ProductCustomFieldKind }[];
-}) {
-  const { toast } = useToast();
-  const { data: values = [], isLoading } = useCustomFieldValues(productId || null);
-  const upsert = useUpsertCustomFieldValue();
-
-  const valMap = useMemo(() => new Map(values.map((v) => [v.fieldId, v])), [values]);
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border p-4">
-      <Label className="text-base font-semibold">Valores por produto</Label>
-      <Select value={productId} onValueChange={onProductId}>
-        <SelectTrigger className="max-w-md rounded-[10px]">
-          <SelectValue placeholder="Escolha o produto" />
-        </SelectTrigger>
-        <SelectContent className="max-h-64">
-          {products.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              {p.codigo} — {p.nome}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {!productId || fieldDefs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Escolha um produto e defina ao menos um campo extra.</p>
-      ) : isLoading ? (
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {fieldDefs.map((f) => {
-            const row = valMap.get(f.id);
-            const defaultStr =
-              f.kind === "texto"
-                ? (row?.valueText ?? "")
-                : f.kind === "numero"
-                  ? row?.valueNumeric != null
-                    ? String(row.valueNumeric)
-                    : ""
-                  : row?.valueDate ?? "";
-
-            return (
-              <FieldValueInput
-                key={f.id}
-                label={f.nome}
-                kind={f.kind}
-                defaultValue={defaultStr}
-                onCommit={(raw) =>
-                  upsert.mutate(
-                    { productId, fieldId: f.id, kind: f.kind, raw },
-                    {
-                      onError: (e) =>
-                        toast({ title: "Não salvou", description: e.message, variant: "destructive" }),
-                    },
-                  )
-                }
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FieldValueInput({
-  label,
-  kind,
-  defaultValue,
-  onCommit,
-}: {
-  label: string;
-  kind: ProductCustomFieldKind;
-  defaultValue: string;
-  onCommit: (raw: string) => void;
-}) {
-  const [local, setLocal] = useState(defaultValue);
-
-  useEffect(() => {
-    setLocal(defaultValue);
-  }, [defaultValue, kind]);
-
-  const Icon = kind === "data" ? Calendar : kind === "numero" ? Hash : Type;
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Icon className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            className="rounded-[10px] pl-8 text-sm"
-            type={kind === "data" ? "date" : kind === "numero" ? "text" : "text"}
-            inputMode={kind === "numero" ? "decimal" : undefined}
-            value={local}
-            onChange={(e) => setLocal(e.target.value)}
-            onBlur={() => {
-              if (local !== defaultValue) onCommit(local);
-            }}
-          />
-        </div>
-        <Button type="button" variant="secondary" size="sm" className="shrink-0 rounded-[8px]" onClick={() => onCommit(local)}>
-          OK
-        </Button>
-      </div>
-    </div>
-  );
 }
