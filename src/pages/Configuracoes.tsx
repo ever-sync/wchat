@@ -10,6 +10,7 @@ import {
   QrCode,
   RefreshCw,
   ShieldCheck,
+  Tag,
   Trash2,
   UserCog,
   Users,
@@ -89,6 +90,7 @@ import {
   useUpsertTenantSettings,
 } from "@/lib/api/integrations";
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
+import { ChatTagsSettingsSection } from "@/components/settings/ChatTagsSettingsSection";
 import {
   CollaboratorsSectionNav,
   parseCollaboratorsSectionParam,
@@ -115,7 +117,7 @@ const roleLabels: Record<UserRole, string> = {
   atendimento: "Atendimento",
 };
 
-const SETTINGS_TAB_VALUES = ["perfil", "integracoes", "colaboradores", "funis", "respostas"] as const;
+const SETTINGS_TAB_VALUES = ["perfil", "integracoes", "colaboradores", "funis", "respostas", "etiquetas"] as const;
 type SettingsTab = (typeof SETTINGS_TAB_VALUES)[number];
 
 function parseSettingsTabParam(raw: string | null): SettingsTab {
@@ -550,6 +552,7 @@ export default function Configuracoes() {
           ) : null}
           <TabsTrigger value="funis"><BarChart3 className="mr-2 h-4 w-4" />Funis CRM</TabsTrigger>
           <TabsTrigger value="respostas"><Zap className="mr-2 h-4 w-4" />Respostas Rapidas</TabsTrigger>
+          <TabsTrigger value="etiquetas"><Tag className="mr-2 h-4 w-4" />Etiquetas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1686,6 +1689,13 @@ export default function Configuracoes() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="etiquetas" className="space-y-6">
+          <ChatTagsSettingsSection
+            canEdit={canEditConfiguracoes}
+            canDelete={canDeleteConfiguracoes}
+          />
         </TabsContent>
       </Tabs>
 

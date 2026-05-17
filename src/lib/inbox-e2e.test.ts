@@ -8,11 +8,15 @@ describe("inbox E2E filters", () => {
     sessionStorage.clear();
   });
 
-  it("atendimento só enxerga chat atribuído ao perfil mock", () => {
+  it("atendimento enxerga chat próprio e pool, não o de outro atendente", () => {
     setE2eMockRole("atendimento");
     const visible = filterE2eInboxChatsByRole(E2E_INBOX_CHATS);
-    expect(visible).toHaveLength(1);
-    expect(visible[0]?.assigneeId).toBe(E2E_MOCK_PROFILE_ID);
+    expect(visible).toHaveLength(2);
+    expect(visible.some((c) => c.assigneeId === E2E_MOCK_PROFILE_ID)).toBe(true);
+    expect(visible.some((c) => !c.assigneeId)).toBe(true);
+    expect(visible.some((c) => c.assigneeId && c.assigneeId !== E2E_MOCK_PROFILE_ID)).toBe(
+      false,
+    );
   });
 
   it("admin enxerga todas as conversas mock", () => {

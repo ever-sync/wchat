@@ -1,4 +1,12 @@
-import type { InboxChat } from "@/types/domain";
+import type { ChatResolution, InboxChat } from "@/types/domain";
+
+export const CHAT_RESOLUTION_LABELS: Record<ChatResolution, string> = {
+  open: "Em aberto",
+  pending: "Pendente",
+  resolved: "Resolvida",
+  waiting_customer: "Aguardando cliente",
+  lost: "Perdido",
+};
 
 export function isChatSnoozed(chat: Pick<InboxChat, "snoozeUntil">): boolean {
   if (!chat.snoozeUntil) return false;

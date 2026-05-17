@@ -88,13 +88,15 @@ import {
   canAtendimentoActOnChat,
   canAtendimentoModifyNegotiation,
   chatAssignedToOtherAttendantMessage,
+  assumeConversationToViewMessage,
   chatAssigneeBlockedMessage,
   isInboxLeadLocked,
   managerOnlyReleaseToPoolMessage,
+  mustAssumeUnassignedChatToView,
   negotiationAssigneeBlockedMessage,
   shouldOfferInboxClaimBoth,
+  canReleaseCrmNegotiationToPool,
 } from "@/lib/crm/negotiation-assignee";
-import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { isChatSnoozed } from "@/lib/inbox-chat-rules";
@@ -392,6 +394,11 @@ export default function Inbox() {
     return chats.find((chat) => chat.id === activeChatId) ?? null;
   }, [activeChatId, chats]);
 
+  const mustAssumeChatToView = useMemo(
+    () => mustAssumeUnassignedChatToView(profile?.role, activeChat?.assigneeId),
+    [profile?.role, activeChat?.assigneeId],
+  );
+
   const assignDialogChat = useMemo(() => {
     if (!assignDialogChatId) {
       return null;
@@ -488,9 +495,10 @@ export default function Inbox() {
     hasNextPage,
     isFetchingNextPage,
   } = useInboxMessages(activeChat?.id, {
+    enabled: Boolean(activeChat?.id) && !mustAssumeChatToView,
     // Fallback longo se o Realtime cair (mensagens ja entram via WebSocket).
     // Sem refetch ao focar a janela: useInboxRealtime cobre INSERT/UPDATE.
-    refetchInterval: activeChat ? 60_000 : false,
+    refetchInterval: activeChat && !mustAssumeChatToView ? 60_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
@@ -2011,6 +2019,80 @@ export default function Inbox() {
         />
 
         <section className="relative flex min-h-0 flex-col overflow-hidden border-l border-border bg-background">
+          {activeChat && mustAssumeChatToView ? (
+            <div
+              className="flex min-h-0 flex-1 flex-col items-center justify-center bg-background p-6"
+              data-testid="inbox-claim-required"
+            >
+              <div className="w-full max-w-md rounded-2xl border border-border bg-card px-8 py-10 text-center shadow-lg">
+                <div
+                  className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary"
+                  aria-hidden
+                >
+                  <Hand className="h-7 w-7" />
+                </div>
+                <h2 className="mt-5 text-lg font-semibold text-foreground">
+                  {assumeConversationToViewMessage()}
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Esta conversa ainda não tem atendente responsável. Assuma o atendimento para ver o histórico,
+                  responder e usar as ferramentas do chat.
+                </p>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  {offerClaimBoth && linkedNegotiation ? (
+                    <Button
+                      type="button"
+                      className="rounded-full"
+                      disabled={
+                        claimChatMutation.isPending ||
+                        claimCrmNegotiation.isPending ||
+                        releaseCrmNegotiation.isPending ||
+                        !canEditInbox ||
+                        !canEditCrm
+                      }
+                      onClick={() => void handleClaimChatAndNegotiation()}
+                      data-testid="inbox-claim-both"
+                    >
+                      <Hand className="mr-2 h-4 w-4" />
+                      Assumir conversa e negócio
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="rounded-full"
+                      disabled={
+                        claimChatMutation.isPending ||
+                        claimCrmNegotiation.isPending ||
+                        releaseCrmNegotiation.isPending ||
+                        !canEditInbox
+                      }
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            await claimChatMutation.mutateAsync(activeChat.id);
+                            toast({
+                              title: "Conversa assumida",
+                              description: "Você já pode ver e responder esta conversa.",
+                            });
+                          } catch (error) {
+                            toast({
+                              title: "Não foi possível assumir",
+                              description: error instanceof Error ? error.message : "Tente novamente.",
+                              variant: "destructive",
+                            });
+                          }
+                        })();
+                      }}
+                    >
+                      <Hand className="mr-2 h-4 w-4" />
+                      Assumir conversa
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="relative z-10 flex min-h-[59px] shrink-0 items-center justify-between border-b border-border bg-wchat-50 px-4 py-2 md:px-5">
             {activeChat ? (
               <>
@@ -2421,10 +2503,12 @@ export default function Inbox() {
               setTimeout(() => bodyTextareaRef.current?.focus(), 50);
             }}
           />
+            </>
+          )}
         </section>
       </div>
       <CustomerProfileSheet
-        open={profileOpen}
+        open={profileOpen && !mustAssumeChatToView}
         onOpenChange={setProfileOpen}
         chat={activeChat}
         messages={messages}

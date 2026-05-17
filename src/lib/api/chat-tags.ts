@@ -194,6 +194,21 @@ export function useCreateChatTag(
   });
 }
 
+export function useUpdateChatTag(
+  options?: UseMutationOptions<void, Error, { id: string; name?: string; color?: string }>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }) => updateChatTag(id, input),
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["chat-tags"] });
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
 export function useDeleteChatTag(options?: UseMutationOptions<void, Error, string>) {
   const queryClient = useQueryClient();
   return useMutation({

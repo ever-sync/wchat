@@ -9,6 +9,7 @@ import {
   Download,
   ListFilter,
   Calendar,
+  Briefcase,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -47,9 +48,11 @@ import {
 import { CustomerCustomFieldsDialog } from "@/components/customers/CustomerCustomFieldsDialog";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { ClientePerfilContent } from "@/pages/ClientePerfil";
-import { useCrmNegotiationCountsByCustomer } from "@/lib/api/crm-negotiations";
+import {
+  listCrmNegotiationsByCustomerId,
+  useCrmNegotiationCountsByCustomer,
+} from "@/lib/api/crm-negotiations";
+import { isPersistedCrmNegotiationId } from "@/lib/crm/negotiation-model";
 import {
   useCreateCustomer,
   useCustomers,
@@ -90,11 +93,20 @@ const ui = {
   tableHead: "text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground",
   tableRow: "border-border hover:bg-wchat-50",
   tableCellMuted: "text-muted-foreground",
-  linkName: "text-left font-medium text-primary hover:underline",
   paginationBtn: "rounded-[10px] border border-border bg-card text-foreground hover:bg-muted",
 } as const;
 
-const TABLE_COLSPAN = 6;
+const TABLE_COLSPAN = 7;
+
+function formatCustomerFonte(origem: Customer["origem"]): string {
+  if (origem === "organico") {
+    return "Orgânico";
+  }
+  if (origem === "pago") {
+    return "Pago";
+  }
+  return "—";
+}
 
 /** Fallback quando o Supabase não está ativo ou a contagem ainda não carregou. */
 function negociacoesCountHeuristic(customer: Customer): number {
@@ -246,16 +258,45 @@ export default function Clientes() {
   const [quickPasteText, setQuickPasteText] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sheetCustomer, setSheetCustomer] = useState<Customer | null>(null);
-  const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canEditClientes = can("clientes", "edit");
   const canDeleteClientes = can("clientes", "delete");
+  const canViewCrm = can("crm", "view");
 
-  const openCustomerProfile = (customerId: string) => {
-    setProfileCustomerId(customerId);
-  };
+  async function openCustomerNegotiation(customer: Customer) {
+    if (!canViewCrm) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel não tem permissão para abrir negociações no CRM.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      toast({
+        title: "CRM indisponível",
+        description: "Configure o Supabase para vincular negociações aos contatos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const negotiations = await listCrmNegotiationsByCustomerId(customer.id);
+      const target = negotiations.find((n) => isPersistedCrmNegotiationId(n.id));
+      if (!target) {
+        return;
+      }
+      navigate(`/crm/negociacao/${encodeURIComponent(target.id)}`);
+    } catch (err) {
+      toast({
+        title: "Não foi possível abrir a negociação",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }
 
   const filters = useMemo(
     () => ({
@@ -879,11 +920,20 @@ export default function Clientes() {
                     className="border-input data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                   />
                 </TableHead>
-                <TableHead className={ui.tableHead}>Nome</TableHead>
-                <TableHead className={ui.tableHead}>Telefone</TableHead>
-                <TableHead className={`hidden sm:table-cell ${ui.tableHead}`}>E-mail</TableHead>
-                <TableHead className={`text-right ${ui.tableHead}`}>Negociações</TableHead>
-                <TableHead className={`w-14 text-right ${ui.tableHead}`}>Ações</TableHead>
+                <TableHead className={`${ui.tableHead} cursor-default select-none`}>Nome</TableHead>
+                <TableHead className={`${ui.tableHead} cursor-default select-none`}>Telefone</TableHead>
+                <TableHead className={`hidden sm:table-cell ${ui.tableHead} cursor-default select-none`}>
+                  E-mail
+                </TableHead>
+                <TableHead className={`hidden sm:table-cell ${ui.tableHead} cursor-default select-none`}>
+                  Fonte
+                </TableHead>
+                <TableHead className={`text-right ${ui.tableHead} cursor-default select-none`}>
+                  Negociações
+                </TableHead>
+                <TableHead className={`w-14 text-right ${ui.tableHead} cursor-default select-none`}>
+                  Ações
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -911,21 +961,11 @@ export default function Clientes() {
                     isSupabaseConfigured && negCountsReady
                       ? (negCountsByCustomer?.get(customer.id) ?? 0)
                       : negociacoesCountHeuristic(customer);
+                  const showOpenNegotiation =
+                    canViewCrm && isSupabaseConfigured && negCountsReady && nNeg > 0;
                   return (
-                    <TableRow
-                      key={customer.id}
-                      role="button"
-                      tabIndex={0}
-                      className={`${ui.tableRow} cursor-pointer${profileCustomerId === customer.id ? " bg-primary/5" : ""}`}
-                      onClick={() => openCustomerProfile(customer.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openCustomerProfile(customer.id);
-                        }
-                      }}
-                    >
-                      <TableCell className="w-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <TableRow key={customer.id} className={ui.tableRow}>
+                      <TableCell className="w-10 align-middle">
                         <Checkbox
                           aria-label={`Selecionar ${customer.nome}`}
                           checked={selectedIds.has(customer.id)}
@@ -943,17 +983,8 @@ export default function Clientes() {
                           className="border-input data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                         />
                       </TableCell>
-                      <TableCell className="max-w-[200px] py-4 md:max-w-[320px]">
-                        <button
-                          type="button"
-                          className={ui.linkName}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCustomerProfile(customer.id);
-                          }}
-                        >
-                          {customer.nome?.trim() || "Sem nome"}
-                        </button>
+                      <TableCell className="max-w-[200px] py-4 font-medium md:max-w-[320px]">
+                        {customer.nome?.trim() || "Sem nome"}
                       </TableCell>
                       <TableCell
                         className={`whitespace-nowrap py-4 text-[13px] ${ui.tableCellMuted}`}
@@ -967,10 +998,15 @@ export default function Clientes() {
                       >
                         {customer.email?.trim() ? customer.email : "—"}
                       </TableCell>
+                      <TableCell
+                        className={`hidden whitespace-nowrap py-4 text-[13px] sm:table-cell ${ui.tableCellMuted}`}
+                      >
+                        {formatCustomerFonte(customer.origem)}
+                      </TableCell>
                       <TableCell className={`py-4 text-right text-[13px] tabular-nums ${ui.tableCellMuted}`}>
                         {nNeg}
                       </TableCell>
-                      <TableCell className="py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="py-4 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -984,12 +1020,15 @@ export default function Clientes() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onClick={() => openCustomerProfile(customer.id)}>
-                              Abrir perfil
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => navigate(`/clientes/${customer.id}`)}>
-                              Abrir em tela cheia
-                            </DropdownMenuItem>
+                            {showOpenNegotiation ? (
+                              <>
+                                <DropdownMenuItem onClick={() => void openCustomerNegotiation(customer)}>
+                                  <Briefcase className="mr-2 h-4 w-4" />
+                                  Abrir negociação
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            ) : null}
                             <DropdownMenuItem
                               disabled={!canEditClientes}
                               onClick={() => {
@@ -1173,27 +1212,6 @@ export default function Clientes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Sheet
-        open={profileCustomerId != null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setProfileCustomerId(null);
-          }
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(100vw,56rem)]"
-        >
-          {profileCustomerId ? (
-            <ClientePerfilContent
-              customerId={profileCustomerId}
-              onBack={() => setProfileCustomerId(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
 
       <CustomerLeadSheet
         open={dialogOpen && canEditClientes}

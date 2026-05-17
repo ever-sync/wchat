@@ -86,7 +86,7 @@ export function AppSidebar() {
   const pathname = useLocation().pathname;
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
-  const { can } = useRolePermissions();
+  const { can, isLoading: permissionsLoading } = useRolePermissions();
 
   const isSettingsActive = pathname === "/configuracoes" || pathname.startsWith("/configuracoes/");
   const initials =
@@ -103,9 +103,11 @@ export function AppSidebar() {
       aria-label="Navegacao principal"
     >
       <div className="flex flex-col items-center gap-1 px-2">
-        {primaryItems.filter((item) => can(item.permission, "view")).map((item) => (
-          <RailNavLink key={item.url} item={item} pathname={pathname} />
-        ))}
+        {!permissionsLoading
+          ? primaryItems
+              .filter((item) => can(item.permission, "view"))
+              .map((item) => <RailNavLink key={item.url} item={item} pathname={pathname} />)
+          : null}
       </div>
 
       <div className="min-h-0 flex-1" aria-hidden />

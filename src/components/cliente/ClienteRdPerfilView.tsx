@@ -61,12 +61,12 @@ import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assigne
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { useToast } from "@/hooks/use-toast";
 import {
-  customFieldValueToString,
   invalidateCustomerCustomFieldValues,
   upsertCustomerCustomFieldValues,
   useCustomerCustomFieldValues,
   useCustomerCustomFields,
 } from "@/lib/api/customer-custom-fields";
+import { buildCustomerCustomFieldsDisplayList } from "@/lib/customer-custom-field-display";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CrmTask, Customer } from "@/types/domain";
@@ -697,21 +697,15 @@ export function ClienteRdPerfilView({
   const { data: customFieldValueRows = [], isLoading: customFieldsLoading } = useCustomerCustomFieldValues(
     cliente.id,
   );
-  const customFieldsById = useMemo(() => {
-    const values = new Map(customFieldValueRows.map((row) => [row.fieldId, row]));
-    return customFieldDefs.map((field) => ({
-      field,
-      value: customFieldValueToString(
-        field.kind,
-        values.get(field.id) ?? {
-          fieldId: field.id,
-          valueText: null,
-          valueNumeric: null,
-          valueDate: null,
-        },
-      ),
-    }));
-  }, [customFieldDefs, customFieldValueRows]);
+  const customFieldsById = useMemo(
+    () =>
+      buildCustomerCustomFieldsDisplayList({
+        fields: customFieldDefs,
+        valueRows: customFieldValueRows,
+        sourceColumns: cliente.sourceColumns,
+      }),
+    [customFieldDefs, customFieldValueRows, cliente.sourceColumns],
+  );
 
   const [promoVisible, setPromoVisible] = useState(true);
   const [negoPanelEditing, setNegoPanelEditing] = useState(false);

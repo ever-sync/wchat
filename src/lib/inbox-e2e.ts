@@ -7,7 +7,9 @@ import type { InboxChat, InboxChatFilters } from "@/types/domain";
 export function filterE2eInboxChatsByRole(chats: InboxChat[]): InboxChat[] {
   const role = getE2eMockRole();
   if (role === "atendimento") {
-    return chats.filter((c) => c.assigneeId === E2E_MOCK_PROFILE_ID);
+    return chats.filter(
+      (c) => !c.assigneeId || c.assigneeId === E2E_MOCK_PROFILE_ID,
+    );
   }
   return chats;
 }

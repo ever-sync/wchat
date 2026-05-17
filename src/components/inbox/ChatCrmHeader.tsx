@@ -3,13 +3,6 @@ import { Link } from "react-router-dom";
 import { Briefcase, CheckCircle2, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,15 +26,8 @@ import {
   chatAssigneeBlockedMessage,
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
-import type { ChatResolution, InboxChat } from "@/types/domain";
-
-const RESOLUTION_LABELS: Record<ChatResolution, string> = {
-  open: "Em aberto",
-  pending: "Pendente",
-  resolved: "Resolvida",
-  waiting_customer: "Aguardando cliente",
-  lost: "Perdido",
-};
+import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
+import type { InboxChat } from "@/types/domain";
 
 type ChatCrmHeaderProps = {
   chat: InboxChat;
@@ -72,7 +58,6 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   const updateNegotiation = useUpdateCrmNegotiation();
   const [dealChoiceOpen, setDealChoiceOpen] = useState(false);
 
-  const resolution = chat.resolution ?? "open";
   const funnel = funnels.find((f) => f.id === negotiation?.funnelId) ?? funnels[0];
   const stageTitle = negotiation
     ? funnelStageTitleIn(funnels, negotiation.funnelId, negotiation.stageId)
@@ -146,36 +131,6 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             {needsDealChoice ? "Vincular ao CRM" : "Criar lead no CRM"}
           </Button>
         ) : null}
-
-        <Select
-          value={resolution}
-          disabled={!canActOnChat}
-          onValueChange={(value) => {
-            if (!canActOnChat) {
-              toast({
-                title: "Assuma a conversa",
-                description: chatAssigneeBlockedMessage(),
-                variant: "destructive",
-              });
-              return;
-            }
-            void setResolution.mutateAsync({
-              chatId: chat.id,
-              resolution: value as ChatResolution,
-            });
-          }}
-        >
-          <SelectTrigger className="h-7 w-[min(100%,11rem)] min-w-[8.5rem] max-w-[200px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(RESOLUTION_LABELS) as ChatResolution[]).map((key) => (
-              <SelectItem key={key} value={key}>
-                {RESOLUTION_LABELS[key]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
         {negotiation && negotiation.status === "em_andamento" && (
           <Button

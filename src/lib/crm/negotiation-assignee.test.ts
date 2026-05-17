@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assumeConversationToReplyMessage,
+  assumeConversationToViewMessage,
   assumeNegotiationToEditCrmMessage,
   canAtendimentoActOnChat,
   canAtendimentoModifyNegotiation,
@@ -9,6 +10,8 @@ import {
   isClientePerfilCrmLocked,
   isInboxLeadLocked,
   managerOnlyTransferConversationMessage,
+  canBypassInboxClaimGate,
+  mustAssumeUnassignedChatToView,
   shouldOfferInboxClaimBoth,
 } from "./negotiation-assignee";
 
@@ -70,6 +73,27 @@ describe("mensagens de bloqueio (plano multi-atendentes)", () => {
     expect(assumeConversationToReplyMessage()).toContain("Assuma a conversa");
     expect(assumeNegotiationToEditCrmMessage()).toContain("Assuma o negócio");
     expect(managerOnlyTransferConversationMessage()).toContain("gestor");
+    expect(assumeConversationToViewMessage()).toContain("assumi-la");
+  });
+});
+
+describe("mustAssumeUnassignedChatToView", () => {
+  it("exige assumir pool apenas para atendimento", () => {
+    expect(mustAssumeUnassignedChatToView("atendimento", null)).toBe(true);
+    expect(mustAssumeUnassignedChatToView("atendimento", "")).toBe(true);
+    expect(mustAssumeUnassignedChatToView("atendimento", "u1")).toBe(false);
+    expect(mustAssumeUnassignedChatToView("admin", null)).toBe(false);
+    expect(mustAssumeUnassignedChatToView("operacao", null)).toBe(false);
+    expect(mustAssumeUnassignedChatToView("financeiro", null)).toBe(false);
+  });
+});
+
+describe("canBypassInboxClaimGate", () => {
+  it("libera gate para admin e operação", () => {
+    expect(canBypassInboxClaimGate("admin")).toBe(true);
+    expect(canBypassInboxClaimGate("operacao")).toBe(true);
+    expect(canBypassInboxClaimGate("atendimento")).toBe(false);
+    expect(canBypassInboxClaimGate("financeiro")).toBe(false);
   });
 });
 

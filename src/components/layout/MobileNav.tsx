@@ -26,7 +26,7 @@ export function MobileNav() {
   const pathname = useLocation().pathname;
   const navigate = useNavigate();
   const { signOut } = useAuth();
-  const { can } = useRolePermissions();
+  const { can, isLoading: permissionsLoading } = useRolePermissions();
 
   return (
     <nav
@@ -34,7 +34,8 @@ export function MobileNav() {
       aria-label="Navegacao principal"
     >
       <div className="flex items-stretch justify-between gap-0.5">
-        {linkItems.filter((item) => can(item.permission, "view")).map((item) => {
+        {!permissionsLoading
+          ? linkItems.filter((item) => can(item.permission, "view")).map((item) => {
           const isActive = pathMatches(pathname, item.url);
 
           return (
@@ -54,7 +55,8 @@ export function MobileNav() {
               <span className="max-w-full truncate">{item.title}</span>
             </NavLink>
           );
-        })}
+        })
+          : null}
 
         <button
           type="button"

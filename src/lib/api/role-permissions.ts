@@ -68,6 +68,8 @@ export function useTenantRolePermissions(options?: { enabled?: boolean }) {
     queryKey: ["tenant-role-permissions"],
     queryFn: fetchTenantRolePermissions,
     enabled: (options?.enabled ?? true) && isSupabaseConfigured,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

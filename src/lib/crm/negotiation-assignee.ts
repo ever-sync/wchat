@@ -57,6 +57,32 @@ export function assumeConversationToReplyMessage(): string {
   return "Assuma a conversa para responder.";
 }
 
+/** Admin e operação veem conversa no pool sem assumir (gestão da fila). */
+export function canBypassInboxClaimGate(role: UserRole | undefined): boolean {
+  return role === "admin" || role === "operacao";
+}
+
+/**
+ * Bloqueio de conteúdo no Inbox: somente atendimento em conversa sem responsável.
+ * Demais papéis (admin, operação, financeiro, etc.) não passam por este gate.
+ */
+export function mustAssumeUnassignedChatToView(
+  role: UserRole | undefined,
+  chatAssigneeId: string | null | undefined,
+): boolean {
+  if (canBypassInboxClaimGate(role)) {
+    return false;
+  }
+  if (role !== "atendimento") {
+    return false;
+  }
+  return !chatAssigneeId?.trim();
+}
+
+export function assumeConversationToViewMessage(): string {
+  return "Para ver esta conversa, você precisa assumi-la.";
+}
+
 export function assumeNegotiationToEditCrmMessage(): string {
   return "Assuma o negócio para alterar o CRM.";
 }

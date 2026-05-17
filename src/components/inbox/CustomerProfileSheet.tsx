@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDownLeft, Plus, WalletCards, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,7 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { CrmSaleItemsPreview } from "@/components/crm/CrmSaleItemsPreview";
+import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
 import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
@@ -34,8 +33,8 @@ import {
   useDistinctCustomerTags,
   useUpdateCustomer,
 } from "@/lib/api/customers";
-import { useCustomerCreditSummary, useCustomerCredits, useCustomerSales, useReturns } from "@/lib/api/sales";
-import { useEnsureLeadFromChat } from "@/lib/api/crm-lead";
+import { useChatNegotiation, useEnsureLeadFromChat, useSetChatResolution } from "@/lib/api/crm-lead";
+import { useAtendimentoUsers } from "@/lib/api/chat-tags";
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CUSTOMER_TAGS_SOURCE_KEY, parseCustomerTags, serializeCustomerTags } from "@/lib/customer-tags";
@@ -44,32 +43,22 @@ import { leadPrefillFromInboxChat, linkSearchHintFromInboxChat } from "@/lib/inb
 import { isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import {
+  canAtendimentoActOnChat,
   chatAssigneeBlockedMessage,
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
+import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
 import {
-  SALE_PAYMENT_METHOD_LABELS,
+  type ChatResolution,
   type CrmNegotiationStatus,
   type Customer,
   type InboxChat,
   type CustomerUpsertInput,
-  type ReturnRecord,
   type WhatsappMessage,
 } from "@/types/domain";
-
-const statusConfig = {
-  ativo: { label: "Ativo", className: "border-sky-200 bg-sky-100 text-sky-800" },
-  inativo: { label: "Inativo", className: "border-amber-200 bg-amber-100 text-amber-700" },
-  bloqueado: { label: "Bloqueado", className: "border-rose-200 bg-rose-100 text-rose-700" },
-};
-
-const perfilConfig = {
-  A: "border-sky-200 bg-sky-100 text-sky-800",
-  B: "border-sky-200 bg-sky-100 text-sky-800",
-  C: "border-slate-200 bg-slate-100 text-slate-600",
-};
 
 function negotiationStatusLabelPt(s: CrmNegotiationStatus): string {
   const map: Record<CrmNegotiationStatus, string> = {
@@ -123,16 +112,14 @@ function infoValue(value?: string | null) {
   return value?.trim() ? value : "Nao informado";
 }
 
-function customerTypeLabel(value?: string) {
-  if (value === "pf") return "Pessoa fisica";
-  if (value === "pj") return "Pessoa juridica";
-  return "Nao informado";
-}
-
-function customerOriginLabel(value?: string) {
-  if (value === "organico") return "Organico";
-  if (value === "pago") return "Pago";
-  return "Nao informado";
+function profileHeaderPhone(customer: Customer | undefined, chat: InboxChat | null): string {
+  const phone =
+    customer?.telefone?.trim() ||
+    chat?.remotePhoneE164?.trim() ||
+    chat?.remotePhoneDigits?.trim() ||
+    chat?.remoteJid?.trim() ||
+    "";
+  return phone || "Telefone não informado";
 }
 
 function getInitials(name: string) {
@@ -142,168 +129,6 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-type CustomerSaleEvent = {
-  id: string;
-  timestamp: string;
-  weekday: string;
-  hour: string;
-  products: string[];
-  ticket: number | null;
-  summary: string;
-  source: "whatsapp" | "cadastro";
-};
-
-function isCustomerSaleEvent(item: CustomerSaleEvent | null): item is CustomerSaleEvent {
-  return item !== null;
-}
-
-function normalizeMessageTimestamp(message: WhatsappMessage) {
-  return message.receivedAt ?? message.sentAt ?? message.createdAt ?? null;
-}
-
-function parseCurrencyValues(text: string) {
-  const matches = text.match(/R\$\s?\d{1,3}(?:\.\d{3})*,\d{2}/g) ?? [];
-  return matches
-    .map((value) => value.replace("R$", "").replace(/\s/g, "").replace(/\./g, "").replace(",", "."))
-    .map((normalized) => Number(normalized))
-    .filter((value) => Number.isFinite(value));
-}
-
-function extractProducts(text: string) {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const fromMarker = lines
-    .filter((line) => line.startsWith("📦"))
-    .map((line) => line.replace("📦", "").trim())
-    .filter(Boolean);
-
-  if (fromMarker.length > 0) {
-    return Array.from(new Set(fromMarker));
-  }
-
-  const productHints = [
-    "tela",
-    "bateria",
-    "display",
-    "incell",
-    "oled",
-    "carregador",
-    "pelicula",
-    "wefix",
-    "weekeep",
-  ];
-
-  const lower = text.toLowerCase();
-  return productHints.filter((hint) => lower.includes(hint));
-}
-
-function formatWeekday(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return date
-    .toLocaleDateString("pt-BR", { weekday: "short" })
-    .replace(".", "")
-    .toLowerCase();
-}
-
-function formatHour(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "--:--";
-  }
-
-  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function buildSalesHistory(messages: WhatsappMessage[], customerTicket?: number, customerLastOrder?: string): CustomerSaleEvent[] {
-  const saleSignals = [
-    "pedido",
-    "compra",
-    "valor",
-    "preco",
-    "entrega",
-    "pagamento",
-    "boleto",
-    "pix",
-    "orcamento",
-    "produto",
-  ];
-
-  const history = messages
-    .filter((message) => message.direction === "outbound")
-    .map((message) => {
-      const timestamp = normalizeMessageTimestamp(message);
-      const body = message.bodyText?.trim() ?? "";
-      if (!timestamp || !body) {
-        return null;
-      }
-
-      const lower = body.toLowerCase();
-      const hasSignal = saleSignals.some((signal) => lower.includes(signal));
-      const ticketCandidates = parseCurrencyValues(body);
-      const products = extractProducts(body);
-      const hasSaleEvidence = hasSignal || ticketCandidates.length > 0 || products.length > 0;
-
-      if (!hasSaleEvidence) {
-        return null;
-      }
-
-      const saleEvent: CustomerSaleEvent = {
-        id: message.id,
-        timestamp,
-        weekday: formatWeekday(timestamp),
-        hour: formatHour(timestamp),
-        products,
-        ticket: ticketCandidates[0] ?? null,
-        summary: body.slice(0, 120),
-        source: "whatsapp" as const,
-      };
-
-      return saleEvent;
-    })
-    .filter(isCustomerSaleEvent)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  if (history.length > 0) {
-    return history.slice(0, 30);
-  }
-
-  if (customerLastOrder) {
-    return [
-      {
-        id: "fallback-last-order",
-        timestamp: `${customerLastOrder}T12:00:00.000Z`,
-        weekday: formatWeekday(`${customerLastOrder}T12:00:00.000Z`),
-        hour: "12:00",
-        products: [],
-        ticket: customerTicket && customerTicket > 0 ? customerTicket : null,
-        summary: "Registro de ultimo pedido vindo do cadastro do cliente.",
-        source: "cadastro" as const,
-      },
-    ];
-  }
-
-  return [];
-}
-
-function creditMovementLabel(type: "credit_from_return" | "debit_usage") {
-  return type === "credit_from_return" ? "Entrada (devolucao)" : "Saida (uso em venda)";
-}
-
-function returnSourceLabel(source: ReturnRecord["source"]) {
-  return source === "existing_sale" ? "Venda vinculada" : "Outra venda";
-}
-
-function returnResolutionLabel(resolution: ReturnRecord["resolution"]) {
-  return resolution === "credito" ? "Credito futuro" : "Troca";
 }
 
 const FUNNEL_NONE = "__funnel_none__";
@@ -569,14 +394,32 @@ function ProfilePipelineSelects({
   );
 }
 
+function chatAttendantLabel(chat: InboxChat | null): string {
+  const name = chat?.assigneeName?.trim();
+  return name || "Sem atendente";
+}
+
+function negotiationAssigneeLabel(
+  assigneeId: string | null | undefined,
+  resolveName: (id: string) => string | null,
+): string {
+  const id = assigneeId?.trim();
+  if (!id) {
+    return "Pool (sem responsável)";
+  }
+  return resolveName(id) ?? "Responsável não identificado";
+}
+
 function CustomerQuickFacts({
   customer,
   chat,
   messageCount,
+  linkedNegotiationAssigneeLabel,
 }: {
   customer: Customer;
   chat: InboxChat | null;
   messageCount: number;
+  linkedNegotiationAssigneeLabel?: string | null;
 }) {
   const phone = customer.telefone || chat?.remotePhoneE164 || chat?.remotePhoneDigits || chat?.remoteJid || "";
   const row = (label: string, value: string) => (
@@ -595,12 +438,37 @@ function CustomerQuickFacts({
         {row("Telefone", infoValue(phone))}
         {row("E-mail", infoValue(customer.email))}
         {row("Cidade", infoValue([customer.cidade, customer.estado].filter(Boolean).join(" / ")))}
-        {row("Responsável", infoValue(customer.vendedor))}
+        {chat ? row("Atendente (conversa)", chatAttendantLabel(chat)) : null}
+        {linkedNegotiationAssigneeLabel != null
+          ? row("Responsável CRM", linkedNegotiationAssigneeLabel)
+          : null}
+        {row("Vendedor (cadastro)", infoValue(customer.vendedor))}
         {row("Cadastro", formatDate(customer.cadastradoEm))}
         {chat
           ? row("Mensagens (esta conversa)", String(messageCount))
           : null}
-        {chat ? row("Último contato", formatDateTime(chat.lastMessageAt)) : null}
+        {chat ? row("Última mensagem", formatDateTime(chat.lastMessageAt)) : null}
+      </div>
+    </div>
+  );
+}
+
+function ChatOnlyQuickFacts({ chat }: { chat: InboxChat }) {
+  const phone = chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "";
+  const row = (label: string, value: string) => (
+    <div className="flex justify-between gap-3 text-sm">
+      <span className="shrink-0 text-[#6f7b76]">{label}</span>
+      <span className="min-w-0 break-words text-right font-medium text-[#334047]">{value}</span>
+    </div>
+  );
+
+  return (
+    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Conversa</p>
+      <div className="mt-3 space-y-2">
+        {row("Atendente", chatAttendantLabel(chat))}
+        {row("Telefone", infoValue(phone))}
+        {row("Última mensagem", formatDateTime(chat.lastMessageAt))}
       </div>
     </div>
   );
@@ -621,26 +489,41 @@ export function CustomerProfileSheet({
   crmActionsLocked?: boolean;
 }) {
   const { data: customer } = useCustomer(chat?.customerId ?? undefined, { enabled: Boolean(chat?.customerId) });
-  const { data: creditSummary } = useCustomerCreditSummary(chat?.customerId ?? undefined, {
-    enabled: Boolean(chat?.customerId),
-  });
-  const crmEnabled = Boolean(open && chat?.customerId && isSupabaseConfigured);
-  const { data: crmSales = [], isLoading: crmSalesLoading } = useCustomerSales(chat?.customerId, { limit: 25 }, {
-    enabled: crmEnabled,
-  });
-  const { data: crmCredits = [], isLoading: crmCreditsLoading } = useCustomerCredits(
-    { customerId: chat?.customerId, limit: 50 },
-    { enabled: crmEnabled },
-  );
-  const { data: crmReturns = [], isLoading: crmReturnsLoading } = useReturns(
-    { customerId: chat?.customerId, limit: 50 },
-    { enabled: crmEnabled },
-  );
-
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const setChatResolution = useSetChatResolution();
+  const canActOnChat = canAtendimentoActOnChat(profile?.role, chat?.assigneeId, profile?.id);
   const { data: negotiations = [], isLoading: negLoading } = useCrmNegotiationsForCustomer(customer?.id, {
     enabled: Boolean(open && customer?.id && isSupabaseConfigured),
   });
+  const { data: linkedNegotiation } = useChatNegotiation(open && chat?.id ? chat.id : null);
+  const { data: atendimentoUsers = [] } = useAtendimentoUsers();
+  const resolveAttendantName = useMemo(() => {
+    const byId = new Map(atendimentoUsers.map((user) => [user.id, user.nome]));
+    return (id: string) => byId.get(id) ?? null;
+  }, [atendimentoUsers]);
+  const linkedNegotiationAssigneeLabel = useMemo(() => {
+    if (!linkedNegotiation) {
+      return undefined;
+    }
+    return negotiationAssigneeLabel(linkedNegotiation.assigneeId, resolveAttendantName);
+  }, [linkedNegotiation, resolveAttendantName]);
+  const negotiationsForDisplay = useMemo(() => {
+    const list = [...negotiations];
+    const primaryId = chat?.primaryNegotiationId?.trim();
+    if (!primaryId) {
+      return list;
+    }
+    return list.sort((a, b) => {
+      if (a.id === primaryId) {
+        return -1;
+      }
+      if (b.id === primaryId) {
+        return 1;
+      }
+      return 0;
+    });
+  }, [negotiations, chat?.primaryNegotiationId]);
   const {
     data: tenantFunnelsSaved,
     isError: tenantFunnelsQueryError,
@@ -702,7 +585,6 @@ export function CustomerProfileSheet({
   });
 
   const totalMessages = messages.length;
-  const salesHistory = buildSalesHistory(messages, customer?.ticketMedio, customer?.ultimoPedido);
   const displayName = customer?.nome ?? chat?.customerName ?? chat?.displayName ?? "Cliente";
   const initials = getInitials(displayName || "CL");
 
@@ -736,21 +618,47 @@ export function CustomerProfileSheet({
                   {displayName}
                 </SheetTitle>
                 <SheetDescription className="mt-2 text-sm text-[#6a7671]">
-                  {customer
-                    ? `${customerTypeLabel(customer.tipo)} · Codigo ${infoValue(customer.codigo)} · Origem ${customerOriginLabel(customer.origem)}`
-                    : infoValue(chat?.remotePhoneE164 ?? chat?.remotePhoneDigits ?? chat?.remoteJid)}
+                  {profileHeaderPhone(customer, chat)}
                 </SheetDescription>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {customer ? (
-                    <>
-                      <Badge className={`border ${perfilConfig[customer.perfil]}`}>Perfil {customer.perfil}</Badge>
-                      <Badge className={`border ${statusConfig[customer.status].className}`}>{statusConfig[customer.status].label}</Badge>
-                    </>
-                  ) : (
-                    <Badge className="border border-sky-200 bg-sky-100 text-sky-700">Sem cadastro completo</Badge>
-                  )}
-                </div>
+                {chat ? (
+                  <div className="mt-3">
+                    <Label htmlFor="inbox-profile-resolution" className="sr-only">
+                      Status da conversa
+                    </Label>
+                    <Select
+                      value={chat.resolution ?? "open"}
+                      disabled={crmActionsLocked || !canActOnChat || setChatResolution.isPending}
+                      onValueChange={(value) => {
+                        if (!canActOnChat) {
+                          toast({
+                            title: "Assuma a conversa",
+                            description: chatAssigneeBlockedMessage(),
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        void setChatResolution.mutateAsync({
+                          chatId: chat.id,
+                          resolution: value as ChatResolution,
+                        });
+                      }}
+                    >
+                      <SelectTrigger
+                        id="inbox-profile-resolution"
+                        className="h-9 w-full max-w-xs rounded-xl border border-[#dfe6d8] bg-white text-sm text-[#334047]"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(CHAT_RESOLUTION_LABELS) as ChatResolution[]).map((key) => (
+                          <SelectItem key={key} value={key}>
+                            {CHAT_RESOLUTION_LABELS[key]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
               </div>
             </div>
           </SheetHeader>
@@ -863,14 +771,26 @@ export function CustomerProfileSheet({
             ) : null}
 
             {chat && !customer && isSupabaseConfigured ? (
-              <div className="mb-5">
+              <div className="mb-5 space-y-5">
+                <ChatOnlyQuickFacts chat={chat} />
                 <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
               </div>
             ) : null}
 
             {customer && chat ? (
               <div className="space-y-5">
-                <CustomerQuickFacts customer={customer} chat={chat} messageCount={totalMessages} />
+                <CustomerQuickFacts
+                  customer={customer}
+                  chat={chat}
+                  messageCount={totalMessages}
+                  linkedNegotiationAssigneeLabel={linkedNegotiationAssigneeLabel}
+                />
+                {isSupabaseConfigured ? (
+                  <CustomerCustomFieldsFacts
+                    customerId={customer.id}
+                    sourceColumns={customer.sourceColumns}
+                  />
+                ) : null}
                 {isSupabaseConfigured ? (
                   <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
                 ) : (
@@ -896,18 +816,34 @@ export function CustomerProfileSheet({
                       <p className="mt-2 text-sm text-[#6f7b76]">Nenhuma negociação vinculada.</p>
                     ) : (
                       <ul className="mt-2 space-y-2">
-                        {negotiations.slice(0, 5).map((n) => (
+                        {negotiationsForDisplay.slice(0, 5).map((n) => {
+                          const isPrimaryChatDeal =
+                            Boolean(chat.primaryNegotiationId?.trim()) &&
+                            n.id === chat.primaryNegotiationId;
+                          const negAssigneeLabel = negotiationAssigneeLabel(
+                            n.assigneeId,
+                            resolveAttendantName,
+                          );
+                          return (
                           <li
                             key={n.id}
                             className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2 text-sm"
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium text-[#334047]">{n.title.trim() || "Sem título"}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate font-medium text-[#334047]">{n.title.trim() || "Sem título"}</p>
+                                {isPrimaryChatDeal ? (
+                                  <Badge className="shrink-0 border border-violet-200 bg-violet-50 text-[10px] font-medium text-violet-900">
+                                    Esta conversa
+                                  </Badge>
+                                ) : null}
+                              </div>
                               <p className="text-xs text-[#6f7b76]">
                                 {funnelListNameIn(effectiveCrmFunnels, n.funnelId)} ·{" "}
                                 {funnelStageTitleIn(effectiveCrmFunnels, n.funnelId, n.stageId)} ·{" "}
                                 {negotiationStatusLabelPt(n.status)}
                                 {n.totalValue > 0 ? <> · {formatMoney(n.totalValue)}</> : null}
+                                <> · {negAssigneeLabel}</>
                               </p>
                             </div>
                             {isUuidString(n.id) ? (
@@ -916,7 +852,8 @@ export function CustomerProfileSheet({
                               </Button>
                             ) : null}
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -928,221 +865,6 @@ export function CustomerProfileSheet({
                   <Button asChild variant="secondary" size="sm" className="rounded-xl">
                     <Link to="/crm">Abrir CRM</Link>
                   </Button>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Histórico</p>
-                  {isSupabaseConfigured ? (
-                    <p className="text-sm text-[#5f6d66]">
-                      <span className="font-semibold text-[#334047]">Crédito:</span>{" "}
-                      {formatMoney(creditSummary?.totalCredit ?? 0)}
-                    </p>
-                  ) : null}
-                  {chat?.lastMessagePreview?.trim() ? (
-                    <Card className="overflow-hidden border-border/60 bg-card/90 shadow-sm">
-                      <CardHeader className="border-b border-border/60 bg-secondary/30 py-3">
-                        <CardTitle className="text-sm font-medium text-foreground">Última mensagem</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-3">
-                        <p className="text-sm leading-relaxed text-slate-700">{chat.lastMessagePreview.trim()}</p>
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                  {isSupabaseConfigured && chat?.customerId ? (
-                    <div className="grid gap-4">
-                      <Card className="overflow-hidden border-border/60 bg-card/90 shadow-sm">
-                        <CardHeader className="border-b border-border/60 bg-secondary/30 pb-3">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
-                            <WalletCards className="h-4 w-4 shrink-0" />
-                            Vendas no CRM
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          {crmSalesLoading ? (
-                            <p className="text-sm text-muted-foreground">Carregando vendas...</p>
-                          ) : crmSales.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Nenhuma venda registrada.</p>
-                          ) : (
-                            <ul className="space-y-3">
-                              {crmSales.map((sale) => (
-                                <li key={sale.id} className="rounded-2xl border border-border/60 bg-background/90 p-3 text-sm">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="font-semibold text-foreground">{formatDateTime(sale.soldAt)}</p>
-                                    <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                                      {SALE_PAYMENT_METHOD_LABELS[sale.paymentMethod]}
-                                    </Badge>
-                                  </div>
-                                  <CrmSaleItemsPreview
-                                    items={sale.items}
-                                    maxVisible={3}
-                                    formatLine={(item) => ` · ${formatMoney(item.unitPrice * item.quantity)}`}
-                                  />
-                                  <p className="mt-2 font-medium text-foreground">Total {formatMoney(sale.totalAmount)}</p>
-                                  {sale.notes ? <p className="mt-2 text-xs leading-relaxed text-slate-600">{sale.notes}</p> : null}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      <Card className="overflow-hidden border-border/60 bg-card/90 shadow-sm">
-                        <CardHeader className="border-b border-border/60 bg-secondary/30 pb-3">
-                          <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
-                            <ArrowDownLeft className="h-4 w-4 shrink-0" />
-                            Devoluções no CRM
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          {crmReturnsLoading ? (
-                            <p className="text-sm text-muted-foreground">Carregando devoluções...</p>
-                          ) : crmReturns.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Nenhuma devolução registrada.</p>
-                          ) : (
-                            <ul className="space-y-3">
-                              {crmReturns.map((row) => (
-                                <li
-                                  key={row.id}
-                                  className="rounded-2xl border border-border/60 bg-background/90 p-3 text-sm"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="font-semibold text-foreground">{formatDateTime(row.returnedAt)}</p>
-                                    <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                                      {returnResolutionLabel(row.resolution)}
-                                    </Badge>
-                                  </div>
-                                  <p className="mt-2 font-medium text-foreground">
-                                    {row.productName?.trim() || "Produto não informado"}
-                                  </p>
-                                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                    <span>
-                                      Qtd.{" "}
-                                      <span className="font-medium text-foreground">
-                                        {row.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}
-                                      </span>
-                                    </span>
-                                    <span>
-                                      Valor{" "}
-                                      <span className="font-medium text-foreground">{formatMoney(row.amount)}</span>
-                                    </span>
-                                    <span>{returnSourceLabel(row.source)}</span>
-                                    {row.usedCustomPrice ? (
-                                      <span className="text-amber-800">Valor informado manualmente</span>
-                                    ) : null}
-                                  </div>
-                                  {row.notes?.trim() ? (
-                                    <p className="mt-2 text-xs leading-relaxed text-slate-600">{row.notes}</p>
-                                  ) : null}
-                                  {row.saleId ? (
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                      Pedido: <span className="font-mono text-foreground">{row.saleId}</span>
-                                    </p>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      <Card className="overflow-hidden border-border/60 bg-card/90 shadow-sm">
-                        <CardHeader className="border-b border-border/60 bg-secondary/30 pb-3">
-                          <CardTitle className="text-sm font-medium text-foreground">Histórico de crédito</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          {crmCreditsLoading ? (
-                            <p className="text-sm text-muted-foreground">Carregando lançamentos...</p>
-                          ) : crmCredits.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Sem movimentos de saldo.</p>
-                          ) : (
-                            <ul className="space-y-3">
-                              {crmCredits.map((row) => (
-                                <li
-                                  key={row.id}
-                                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/60 bg-background/90 p-3 text-sm"
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <Badge
-                                      className={
-                                        row.type === "credit_from_return"
-                                          ? "border-sky-200 bg-sky-100 text-sky-900"
-                                          : "border-amber-200 bg-amber-100 text-amber-900"
-                                      }
-                                    >
-                                      {creditMovementLabel(row.type)}
-                                    </Badge>
-                                    <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(row.createdAt)}</p>
-                                    {row.description ? (
-                                      <p className="mt-1 text-xs leading-relaxed text-slate-600">{row.description}</p>
-                                    ) : null}
-                                  </div>
-                                  <p
-                                    className={`shrink-0 font-semibold tabular-nums ${
-                                      row.type === "credit_from_return" ? "text-sky-800" : "text-amber-900"
-                                    }`}
-                                  >
-                                    {row.type === "credit_from_return" ? "+" : "-"}
-                                    {formatMoney(row.amount)}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ) : isSupabaseConfigured ? (
-                    <Card className="overflow-hidden border-dashed border-border/80 bg-card/40 shadow-sm">
-                      <CardContent className="p-4 text-sm text-muted-foreground">
-                        Associe um cliente para ver vendas e créditos do CRM aqui.
-                      </CardContent>
-                    </Card>
-                  ) : null}
-
-                  <Card className="overflow-hidden border-border/60 bg-card/90 shadow-sm">
-                    <CardHeader className="border-b border-border/60 bg-secondary/30 pb-3">
-                      <CardTitle className="text-sm font-medium text-foreground">Sinais de venda na conversa</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 p-4">
-                      {salesHistory.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Nenhum trecho de venda identificado nas mensagens enviadas.
-                        </p>
-                      ) : (
-                        salesHistory.map((event) => (
-                          <div key={event.id} className="rounded-2xl border border-border/60 bg-background/90 p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-foreground">{formatDateTime(event.timestamp)}</p>
-                              <Badge className="border border-slate-200 bg-slate-100 text-slate-700">
-                                {event.source === "cadastro" ? "Cadastro" : "WhatsApp"}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-                              <p>
-                                Dia: <span className="font-medium text-foreground">{event.weekday}</span>
-                              </p>
-                              <p>
-                                Horário: <span className="font-medium text-foreground">{event.hour}</span>
-                              </p>
-                              <p>
-                                Produtos:{" "}
-                                <span className="font-medium text-foreground">
-                                  {event.products.join(", ") || "Não identificado"}
-                                </span>
-                              </p>
-                              <p>
-                                Ticket:{" "}
-                                <span className="font-medium text-foreground">
-                                  {event.ticket ? formatMoney(event.ticket) : "Não identificado"}
-                                </span>
-                              </p>
-                            </div>
-                            <p className="mt-2 text-xs text-slate-600">{event.summary}</p>
-                          </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
                 </div>
               </div>
             ) : null}
