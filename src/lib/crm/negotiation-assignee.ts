@@ -5,6 +5,41 @@ export function canReleaseCrmNegotiationToPool(role: UserRole | undefined): bool
   return role === "admin" || role === "operacao";
 }
 
+/** Ao criar negociação, admin deve escolher o atendente responsável. */
+export function mustPickNegotiationAssigneeOnCreate(role: UserRole | undefined): boolean {
+  return role === "admin";
+}
+
+/** Atendente que cria negociação vira responsável automaticamente. */
+export function autoAssignNegotiationToCreatorOnCreate(role: UserRole | undefined): boolean {
+  return role === "atendimento";
+}
+
+export function resolveNegotiationAssigneeOnCreate(
+  role: UserRole | undefined,
+  profileId: string | null | undefined,
+  pickedAssigneeId: string | null | undefined,
+): { assigneeId: string | null; error?: string } {
+  if (autoAssignNegotiationToCreatorOnCreate(role)) {
+    const selfId = profileId?.trim();
+    if (!selfId) {
+      return { assigneeId: null, error: "Não foi possível identificar seu usuário." };
+    }
+    return { assigneeId: selfId };
+  }
+
+  if (mustPickNegotiationAssigneeOnCreate(role)) {
+    const assigneeId = pickedAssigneeId?.trim();
+    if (!assigneeId) {
+      return { assigneeId: null, error: "Selecione o atendente responsável pelo lead." };
+    }
+    return { assigneeId };
+  }
+
+  const fallbackId = profileId?.trim();
+  return { assigneeId: fallbackId || null };
+}
+
 export function isNegotiationAssignedToProfile(
   assigneeId: string | null | undefined,
   profileId: string | null | undefined,

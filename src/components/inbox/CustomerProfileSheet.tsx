@@ -20,6 +20,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
@@ -47,12 +49,15 @@ import {
   chatAssigneeBlockedMessage,
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
+import { isPersistedCrmNegotiationId } from "@/lib/crm/negotiation-model";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
 import {
   type ChatResolution,
+  type CrmNegotiation,
   type CrmNegotiationStatus,
   type Customer,
   type InboxChat,
@@ -453,6 +458,73 @@ function CustomerQuickFacts({
   );
 }
 
+const PROFILE_TAB_TRIGGER_CLASS =
+  "rounded-xl px-3 py-1.5 text-xs font-semibold text-[#6f7b76] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
+
+function ProfileNegotiationsPanel({
+  negotiations,
+  negotiationsForDisplay,
+  negLoading,
+  chat,
+  effectiveCrmFunnels,
+  resolveAttendantName,
+}: {
+  negotiations: CrmNegotiation[];
+  negotiationsForDisplay: CrmNegotiation[];
+  negLoading: boolean;
+  chat: InboxChat;
+  effectiveCrmFunnels: CrmFunnel[];
+  resolveAttendantName: (id: string) => string | null;
+}) {
+  return (
+    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Negociações</p>
+      {negLoading ? (
+        <p className="mt-2 text-sm text-[#6f7b76]">Carregando…</p>
+      ) : negotiations.length === 0 ? (
+        <p className="mt-2 text-sm text-[#6f7b76]">Nenhuma negociação vinculada.</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {negotiationsForDisplay.slice(0, 5).map((n) => {
+            const isPrimaryChatDeal =
+              Boolean(chat.primaryNegotiationId?.trim()) && n.id === chat.primaryNegotiationId;
+            const negAssigneeLabel = negotiationAssigneeLabel(n.assigneeId, resolveAttendantName);
+            return (
+              <li
+                key={n.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate font-medium text-[#334047]">{n.title.trim() || "Sem título"}</p>
+                    {isPrimaryChatDeal ? (
+                      <Badge className="shrink-0 border border-violet-200 bg-violet-50 text-[10px] font-medium text-violet-900">
+                        Esta conversa
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-[#6f7b76]">
+                    {funnelListNameIn(effectiveCrmFunnels, n.funnelId)} ·{" "}
+                    {funnelStageTitleIn(effectiveCrmFunnels, n.funnelId, n.stageId)} ·{" "}
+                    {negotiationStatusLabelPt(n.status)}
+                    {n.totalValue > 0 ? <> · {formatMoney(n.totalValue)}</> : null}
+                    <> · {negAssigneeLabel}</>
+                  </p>
+                </div>
+                {isUuidString(n.id) ? (
+                  <Button asChild variant="outline" size="sm" className="shrink-0 rounded-xl text-xs">
+                    <Link to={`/crm/negociacao/${encodeURIComponent(n.id)}`}>Abrir</Link>
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ChatOnlyQuickFacts({ chat }: { chat: InboxChat }) {
   const phone = chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "";
   const row = (label: string, value: string) => (
@@ -491,6 +563,9 @@ export function CustomerProfileSheet({
   const { data: customer } = useCustomer(chat?.customerId ?? undefined, { enabled: Boolean(chat?.customerId) });
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
+  const canViewCrm = can("crm", "view");
+  const canEditClientes = can("clientes", "edit");
   const setChatResolution = useSetChatResolution();
   const canActOnChat = canAtendimentoActOnChat(profile?.role, chat?.assigneeId, profile?.id);
   const { data: negotiations = [], isLoading: negLoading } = useCrmNegotiationsForCustomer(customer?.id, {
@@ -524,6 +599,19 @@ export function CustomerProfileSheet({
       return 0;
     });
   }, [negotiations, chat?.primaryNegotiationId]);
+  const documentsNegotiationId = useMemo(() => {
+    const candidates = [
+      linkedNegotiation?.id,
+      chat?.primaryNegotiationId,
+      ...negotiationsForDisplay.map((n) => n.id),
+    ];
+    for (const id of candidates) {
+      if (id && isPersistedCrmNegotiationId(id)) {
+        return id;
+      }
+    }
+    return null;
+  }, [linkedNegotiation?.id, chat?.primaryNegotiationId, negotiationsForDisplay]);
   const {
     data: tenantFunnelsSaved,
     isError: tenantFunnelsQueryError,
@@ -587,6 +675,24 @@ export function CustomerProfileSheet({
   const totalMessages = messages.length;
   const displayName = customer?.nome ?? chat?.customerName ?? chat?.displayName ?? "Cliente";
   const initials = getInitials(displayName || "CL");
+  const [profileTab, setProfileTab] = useState("resumo");
+  const showCrmTab = Boolean(customer && isSupabaseConfigured);
+  const showCamposTab = Boolean(customer && isSupabaseConfigured);
+  const showArquivosTab = Boolean(isSupabaseConfigured && canViewCrm);
+
+  useEffect(() => {
+    setProfileTab("resumo");
+  }, [chat?.id]);
+
+  useEffect(() => {
+    if (profileTab === "crm" && !showCrmTab) {
+      setProfileTab("resumo");
+    } else if (profileTab === "campos" && !showCamposTab) {
+      setProfileTab("resumo");
+    } else if (profileTab === "arquivos" && !showArquivosTab) {
+      setProfileTab("resumo");
+    }
+  }, [profileTab, showArquivosTab, showCamposTab, showCrmTab]);
 
   return (
     <>
@@ -770,103 +876,119 @@ export function CustomerProfileSheet({
               </div>
             ) : null}
 
-            {chat && !customer && isSupabaseConfigured ? (
-              <div className="mb-5 space-y-5">
-                <ChatOnlyQuickFacts chat={chat} />
-                <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
-              </div>
-            ) : null}
+            {chat ? (
+              <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4">
+                <TabsList className="h-auto w-full flex-wrap justify-start gap-0.5 rounded-2xl border border-[#e1e8dc] bg-white/90 p-1 shadow-sm">
+                  <TabsTrigger value="resumo" className={PROFILE_TAB_TRIGGER_CLASS}>
+                    Resumo
+                  </TabsTrigger>
+                  {showCrmTab ? (
+                    <TabsTrigger value="crm" className={PROFILE_TAB_TRIGGER_CLASS}>
+                      CRM
+                    </TabsTrigger>
+                  ) : null}
+                  {showCamposTab ? (
+                    <TabsTrigger value="campos" className={PROFILE_TAB_TRIGGER_CLASS}>
+                      Campos
+                    </TabsTrigger>
+                  ) : null}
+                  <TabsTrigger value="etiquetas" className={PROFILE_TAB_TRIGGER_CLASS}>
+                    Etiquetas
+                  </TabsTrigger>
+                  {showArquivosTab ? (
+                    <TabsTrigger value="arquivos" className={PROFILE_TAB_TRIGGER_CLASS}>
+                      Arquivos
+                    </TabsTrigger>
+                  ) : null}
+                </TabsList>
 
-            {customer && chat ? (
-              <div className="space-y-5">
-                <CustomerQuickFacts
-                  customer={customer}
-                  chat={chat}
-                  messageCount={totalMessages}
-                  linkedNegotiationAssigneeLabel={linkedNegotiationAssigneeLabel}
-                />
-                {isSupabaseConfigured ? (
-                  <CustomerCustomFieldsFacts
-                    customerId={customer.id}
-                    sourceColumns={customer.sourceColumns}
-                  />
+                <TabsContent value="resumo" className="mt-0 space-y-5 focus-visible:outline-none">
+                  {customer ? (
+                    <CustomerQuickFacts
+                      customer={customer}
+                      chat={chat}
+                      messageCount={totalMessages}
+                      linkedNegotiationAssigneeLabel={linkedNegotiationAssigneeLabel}
+                    />
+                  ) : isSupabaseConfigured ? (
+                    <ChatOnlyQuickFacts chat={chat} />
+                  ) : null}
+                  {customer ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild variant="secondary" size="sm" className="rounded-xl">
+                        <Link to={`/clientes/${customer.id}`}>Perfil completo</Link>
+                      </Button>
+                      <Button asChild variant="secondary" size="sm" className="rounded-xl">
+                        <Link to="/crm">Abrir CRM</Link>
+                      </Button>
+                    </div>
+                  ) : null}
+                </TabsContent>
+
+                {showCrmTab && customer ? (
+                  <TabsContent value="crm" className="mt-0 space-y-5 focus-visible:outline-none">
+                    <ProfilePipelineSelects
+                      customer={customer}
+                      funnels={effectiveCrmFunnels}
+                      readOnly={crmActionsLocked}
+                    />
+                    <ProfileNegotiationsPanel
+                      negotiations={negotiations}
+                      negotiationsForDisplay={negotiationsForDisplay}
+                      negLoading={negLoading}
+                      chat={chat}
+                      effectiveCrmFunnels={effectiveCrmFunnels}
+                      resolveAttendantName={resolveAttendantName}
+                    />
+                  </TabsContent>
                 ) : null}
-                {isSupabaseConfigured ? (
-                  <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
-                ) : (
-                  <ProfileTagsPicker
-                    customer={customer}
-                    suggestionTags={tagSuggestions}
-                    disabled={crmActionsLocked}
-                  />
-                )}
-                {isSupabaseConfigured ? (
-                  <ProfilePipelineSelects
-                    customer={customer}
-                    funnels={effectiveCrmFunnels}
-                    readOnly={crmActionsLocked}
-                  />
+
+                {showCamposTab && customer ? (
+                  <TabsContent value="campos" className="mt-0 focus-visible:outline-none">
+                    <CustomerCustomFieldsFacts
+                      customerId={customer.id}
+                      sourceColumns={customer.sourceColumns}
+                      readOnly={crmActionsLocked || !canEditClientes}
+                    />
+                  </TabsContent>
                 ) : null}
-                {isSupabaseConfigured ? (
-                  <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Negociações</p>
-                    {negLoading ? (
-                      <p className="mt-2 text-sm text-[#6f7b76]">Carregando…</p>
-                    ) : negotiations.length === 0 ? (
-                      <p className="mt-2 text-sm text-[#6f7b76]">Nenhuma negociação vinculada.</p>
+
+                <TabsContent value="etiquetas" className="mt-0 focus-visible:outline-none">
+                  {isSupabaseConfigured ? (
+                    <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
+                  ) : customer ? (
+                    <ProfileTagsPicker
+                      customer={customer}
+                      suggestionTags={tagSuggestions}
+                      disabled={crmActionsLocked}
+                    />
+                  ) : (
+                    <p className="text-sm text-[#6f7b76]">Etiquetas disponíveis com Supabase configurado.</p>
+                  )}
+                </TabsContent>
+
+                {showArquivosTab ? (
+                  <TabsContent value="arquivos" className="mt-0 focus-visible:outline-none">
+                    {documentsNegotiationId ? (
+                      <CrmNegotiationDocumentsSection
+                        negotiationId={documentsNegotiationId}
+                        enabled={open}
+                        readOnly={crmActionsLocked}
+                        className="border-[#e1e8dc]"
+                      />
                     ) : (
-                      <ul className="mt-2 space-y-2">
-                        {negotiationsForDisplay.slice(0, 5).map((n) => {
-                          const isPrimaryChatDeal =
-                            Boolean(chat.primaryNegotiationId?.trim()) &&
-                            n.id === chat.primaryNegotiationId;
-                          const negAssigneeLabel = negotiationAssigneeLabel(
-                            n.assigneeId,
-                            resolveAttendantName,
-                          );
-                          return (
-                          <li
-                            key={n.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2 text-sm"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="truncate font-medium text-[#334047]">{n.title.trim() || "Sem título"}</p>
-                                {isPrimaryChatDeal ? (
-                                  <Badge className="shrink-0 border border-violet-200 bg-violet-50 text-[10px] font-medium text-violet-900">
-                                    Esta conversa
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <p className="text-xs text-[#6f7b76]">
-                                {funnelListNameIn(effectiveCrmFunnels, n.funnelId)} ·{" "}
-                                {funnelStageTitleIn(effectiveCrmFunnels, n.funnelId, n.stageId)} ·{" "}
-                                {negotiationStatusLabelPt(n.status)}
-                                {n.totalValue > 0 ? <> · {formatMoney(n.totalValue)}</> : null}
-                                <> · {negAssigneeLabel}</>
-                              </p>
-                            </div>
-                            {isUuidString(n.id) ? (
-                              <Button asChild variant="outline" size="sm" className="shrink-0 rounded-xl text-xs">
-                                <Link to={`/crm/negociacao/${encodeURIComponent(n.id)}`}>Abrir</Link>
-                              </Button>
-                            ) : null}
-                          </li>
-                          );
-                        })}
-                      </ul>
+                      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
+                          Arquivos
+                        </p>
+                        <p className="mt-2 text-sm text-[#6f7b76]">
+                          Crie ou vincule uma negociação a esta conversa para anexar documentos ao lead.
+                        </p>
+                      </div>
                     )}
-                  </div>
+                  </TabsContent>
                 ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="secondary" size="sm" className="rounded-xl">
-                    <Link to={`/clientes/${customer.id}`}>Perfil completo</Link>
-                  </Button>
-                  <Button asChild variant="secondary" size="sm" className="rounded-xl">
-                    <Link to="/crm">Abrir CRM</Link>
-                  </Button>
-                </div>
-              </div>
+              </Tabs>
             ) : null}
           </div>
         </div>

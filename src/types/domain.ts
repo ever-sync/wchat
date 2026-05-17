@@ -268,6 +268,9 @@ export interface CustomerFilters {
   /** Tag textual (ex.: "vip", "atacado"), buscada em observacoes e source_columns. */
   tag?: string;
   selectedCustomerIds?: string[];
+  /** Metadado de escopo (cache React Query); filtro real no RLS para atendimento. */
+  listScopeRole?: UserRole;
+  listScopeUserId?: string;
 }
 
 export interface CustomerUpsertInput {

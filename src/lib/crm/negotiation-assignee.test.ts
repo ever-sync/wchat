@@ -11,7 +11,10 @@ import {
   isInboxLeadLocked,
   managerOnlyTransferConversationMessage,
   canBypassInboxClaimGate,
+  autoAssignNegotiationToCreatorOnCreate,
   mustAssumeUnassignedChatToView,
+  mustPickNegotiationAssigneeOnCreate,
+  resolveNegotiationAssigneeOnCreate,
   shouldOfferInboxClaimBoth,
 } from "./negotiation-assignee";
 
@@ -25,6 +28,35 @@ describe("canReleaseCrmNegotiationToPool", () => {
     expect(canReleaseCrmNegotiationToPool("atendimento")).toBe(false);
     expect(canReleaseCrmNegotiationToPool("financeiro")).toBe(false);
     expect(canReleaseCrmNegotiationToPool(undefined)).toBe(false);
+  });
+});
+
+describe("resolveNegotiationAssigneeOnCreate", () => {
+  it("atendimento vincula a si mesmo", () => {
+    expect(resolveNegotiationAssigneeOnCreate("atendimento", "u1", null)).toEqual({
+      assigneeId: "u1",
+    });
+    expect(resolveNegotiationAssigneeOnCreate("atendimento", "u1", "u2")).toEqual({
+      assigneeId: "u1",
+    });
+  });
+
+  it("admin exige atendente escolhido", () => {
+    expect(resolveNegotiationAssigneeOnCreate("admin", "admin-1", null).error).toContain(
+      "atendente",
+    );
+    expect(resolveNegotiationAssigneeOnCreate("admin", "admin-1", "att-1")).toEqual({
+      assigneeId: "att-1",
+    });
+  });
+
+  it("operacao e financeiro usam o criador quando nao ha escolha", () => {
+    expect(resolveNegotiationAssigneeOnCreate("operacao", "op-1", null)).toEqual({
+      assigneeId: "op-1",
+    });
+    expect(mustPickNegotiationAssigneeOnCreate("admin")).toBe(true);
+    expect(mustPickNegotiationAssigneeOnCreate("atendimento")).toBe(false);
+    expect(autoAssignNegotiationToCreatorOnCreate("atendimento")).toBe(true);
   });
 });
 

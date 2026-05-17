@@ -41,6 +41,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
+import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
 import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
@@ -73,7 +74,6 @@ import { CrmOrphanNegotiationsBanner } from "@/components/crm/CrmOrphanNegotiati
 import {
   type ListCrmNegotiationsFilters,
   useClaimCrmNegotiation,
-  useCreateCrmNegotiation,
   useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
   useReleaseCrmNegotiationToPool,
@@ -365,7 +365,6 @@ export default function Crm() {
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
-  const createCrmNegotiation = useCreateCrmNegotiation();
 
   const openChatInbox = useCallback(
     (chatId: string) => {
@@ -432,7 +431,6 @@ export default function Crm() {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newNegotiationTitle, setNewNegotiationTitle] = useState("");
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
   const [e2eAssigneeOverrides, setE2eAssigneeOverrides] = useState<Record<string, string>>({});
@@ -536,6 +534,18 @@ export default function Crm() {
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   }, [collaborators, isSupabaseConfigured, profile?.nome, profileId]);
+
+  const crmAttendantOptions = useMemo(() => {
+    if (isSupabaseConfigured) {
+      return collaborators
+        .filter((c) => c.status === "active" && c.role === "atendimento")
+        .map((c) => ({
+          id: c.id,
+          name: (c.nome?.trim() || c.email?.trim() || "Sem nome").trim(),
+        }));
+    }
+    return attendants;
+  }, [attendants, collaborators, isSupabaseConfigured]);
 
   const [view, setView] = useState<"board" | "list">("board");
   const [sortId, setSortId] = useState<SortId>("created_desc");
@@ -1276,115 +1286,16 @@ export default function Crm() {
         </Button>
       </div>
 
-      <Dialog
-        open={createOpen && canEditCrm}
-        onOpenChange={(open) => {
-          if (!canEditCrm) {
-            setCreateOpen(false);
-            return;
-          }
-          setCreateOpen(open);
-        }}
-      >
-        <DialogContent className="border-[#dee2e6] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova negociação</DialogTitle>
-            <DialogDescription>
-              Funil atual: {funnel.listName}. A negociação entra na primeira etapa do funil.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="crm-new-title">Título</Label>
-            <Input
-              id="crm-new-title"
-              value={newNegotiationTitle}
-              onChange={(e) => setNewNegotiationTitle(e.target.value)}
-              placeholder="Nome do lead ou oportunidade"
-              className="border-[#ced4da]"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void (async () => {
-                    const title = newNegotiationTitle.trim();
-                    if (!title) {
-                      return;
-                    }
-                    const firstStageId = funnel.stages[0]?.id ?? "lead";
-                    try {
-                      await createCrmNegotiation.mutateAsync({
-                        title,
-                        funnelId,
-                        stageId: firstStageId,
-                        assigneeId: profileId ?? null,
-                      });
-                      setNewNegotiationTitle("");
-                      setCreateOpen(false);
-                      toast({ title: "Negociação criada", description: title });
-                    } catch (err) {
-                      toast({
-                        title: "Não foi possível criar",
-                        description: err instanceof Error ? err.message : "Tente novamente.",
-                        variant: "destructive",
-                      });
-                    }
-                  })();
-                }
-              }}
-            />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="bg-[#4E1BB1] hover:bg-[#3C1494]"
-              disabled={createCrmNegotiation.isPending || !canEditCrm}
-              onClick={() => {
-                void (async () => {
-                  if (!canEditCrm) {
-                    toast({
-                      title: "Ação indisponível",
-                      description: "Seu papel nao tem permissao para criar negociações.",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  const title = newNegotiationTitle.trim();
-                  if (!title) {
-                    toast({
-                      title: "Título obrigatório",
-                      description: "Informe um nome para a negociação.",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  const firstStageId = funnel.stages[0]?.id ?? "lead";
-                  try {
-                    await createCrmNegotiation.mutateAsync({
-                      title,
-                      funnelId,
-                      stageId: firstStageId,
-                      assigneeId: profileId ?? null,
-                    });
-                    setNewNegotiationTitle("");
-                    setCreateOpen(false);
-                    toast({ title: "Negociação criada", description: title });
-                  } catch (err) {
-                    toast({
-                      title: "Não foi possível criar",
-                      description: err instanceof Error ? err.message : "Tente novamente.",
-                      variant: "destructive",
-                    });
-                  }
-                })();
-              }}
-            >
-              {createCrmNegotiation.isPending ? "Salvando…" : "Criar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CrmCreateNegotiationDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        funnels={funnels}
+        defaultFunnelId={funnelId}
+        profileId={profileId}
+        userRole={profile?.role}
+        assigneeOptions={crmAttendantOptions}
+        canEdit={canEditCrm}
+      />
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[#e9ecef] bg-[#F8F9FA] px-4 py-2.5 md:gap-3 md:px-6">
         <Popover open={funnelOpen} onOpenChange={setFunnelOpen}>

@@ -50,10 +50,12 @@ export function CrmNegotiationDocumentsSection({
   negotiationId,
   enabled,
   readOnly = false,
+  className,
 }: {
   negotiationId: string;
   enabled: boolean;
   readOnly?: boolean;
+  className?: string;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -154,6 +156,7 @@ export function CrmNegotiationDocumentsSection({
       className={cn(
         "overflow-hidden border border-[#e8eaed] bg-white",
         !enabled && "opacity-60",
+        className,
       )}
       style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
       aria-busy={isLoading || busy}

@@ -63,6 +63,7 @@ import {
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { useRoutes } from "@/lib/api/routes";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useAppStore } from "@/store/useAppStore";
 import { buildCustomersCsv, buildMinimalCustomerImportTemplateCsv, parseCustomersSpreadsheet } from "@/lib/customers-csv";
@@ -232,6 +233,7 @@ export default function Clientes() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+  const { profile } = useAuth();
   const { can } = useRolePermissions();
   const [search, setSearch] = useState("");
   const [filterPerfil, setFilterPerfil] = useState("todos");
@@ -311,6 +313,9 @@ export default function Clientes() {
       ...(filterAtivoComercial !== "todos" ? { ativoComercial: filterAtivoComercial } : {}),
       ...(filterObservacoes.trim() ? { observacoesContem: filterObservacoes.trim() } : {}),
       ...(filterTag.trim() ? { tag: filterTag.trim() } : {}),
+      /** Escopo da lista no cache (RLS no Supabase filtra atendente: pool + próprios). */
+      listScopeRole: profile?.role,
+      listScopeUserId: profile?.role === "atendimento" ? profile?.id : undefined,
     }),
     [
       filterAtivoComercial,
@@ -323,6 +328,8 @@ export default function Clientes() {
       filterStatus,
       filterTag,
       filterZona,
+      profile?.id,
+      profile?.role,
       search,
     ],
   );
