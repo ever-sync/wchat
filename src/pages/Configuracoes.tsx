@@ -43,6 +43,7 @@ import {
   useCollaboratorInvites,
   useInviteCollaborator,
   useMyProfile,
+  useDeleteCollaboratorInvite,
   useRevokeCollaboratorInvite,
   useTenantCollaborators,
   useUpdateMyProfile,
@@ -78,6 +79,7 @@ import {
   useUpsertTenantSettings,
 } from "@/lib/api/integrations";
 import { useSellers } from "@/lib/api/sellers";
+import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
 import type { QuickReply, QuickReplyScope, UserRole } from "@/types/domain";
 
 const statusStyles = {
@@ -127,6 +129,7 @@ export default function Configuracoes() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("operacao");
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
+  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
   const [funnelDraft, setFunnelDraft] = useState<CrmFunnel[]>(DEFAULT_CRM_FUNNELS);
   const [funnelJsonDraft, setFunnelJsonDraft] = useState("");
   const [funnelJsonOpen, setFunnelJsonOpen] = useState(false);
@@ -179,6 +182,7 @@ export default function Configuracoes() {
   const updateProfile = useUpdateMyProfile();
   const inviteCollaborator = useInviteCollaborator();
   const revokeInvite = useRevokeCollaboratorInvite();
+  const deleteInvite = useDeleteCollaboratorInvite();
   const { data: instances = [], isLoading, error } = useWhatsappInstances({ enabled: tab === "integracoes" && canUseAuthenticatedActions });
   const { data: tenantIntegrations } = useTenantIntegrations();
   const { data: tenantSettings } = useTenantSettings();
@@ -833,6 +837,11 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="colaboradores" className="space-y-6">
+          <RolePermissionsMatrix
+            canEdit={myProfile?.role === "admin"}
+            disabled={!canUseAuthenticatedActions}
+          />
+
           <div className="grid gap-4 md:grid-cols-3">
             {[{ label: "Colaboradores ativos", value: collaboratorMetrics.active, icon: Users }, { label: "Administradores", value: collaboratorMetrics.admins, icon: ShieldCheck }, { label: "Convites pendentes", value: collaboratorMetrics.pending, icon: Mail }].map((metric) => (
               <Card key={metric.label} className="border-border/60 bg-card/80"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="text-2xl font-bold text-foreground">{metric.value}</p></div><div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div></CardContent></Card>
@@ -1045,6 +1054,55 @@ export default function Configuracoes() {
                           </Button>
                           </>
                         ) : null}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={
+                            deletingInviteId === invite.id ||
+                            deleteInvite.isPending ||
+                            !canUseAuthenticatedActions ||
+                            myProfile?.role !== "admin"
+                          }
+                          onClick={async () => {
+                            if (!canUseAuthenticatedActions) {
+                              toast({
+                                title: "Sessao indisponivel",
+                                description: "Faca login novamente antes de excluir convites.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            if (myProfile?.role !== "admin") {
+                              return;
+                            }
+
+                            setDeletingInviteId(invite.id);
+                            try {
+                              await deleteInvite.mutateAsync(invite.id);
+                              const removed = `Convite de ${invite.email} removido.`;
+                              toast({ title: "Convite excluido", description: removed });
+                              useAppStore.getState().addNotification({
+                                tipo: "sucesso",
+                                titulo: "Convite excluido",
+                                descricao: removed,
+                              });
+                            } catch (e) {
+                              const desc = e instanceof Error ? e.message : "Tente novamente.";
+                              toast({ title: "Nao foi possivel excluir", description: desc, variant: "destructive" });
+                            } finally {
+                              setDeletingInviteId(null);
+                            }
+                          }}
+                        >
+                          {deletingInviteId === invite.id ? (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="mr-1 h-3 w-3" />
+                          )}
+                          Excluir
+                        </Button>
                       </div>
                     </div>
                   ))}

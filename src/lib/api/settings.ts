@@ -162,6 +162,7 @@ export async function listCollaboratorInvites() {
     .from("collaborator_invites")
     .select("id, tenant_id, nome, email, role, status, invited_by, auth_user_id, created_at, accepted_at, updated_at")
     .eq("tenant_id", tenantId)
+    .in("status", ["pending", "revoked"])
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -185,6 +186,24 @@ export async function inviteCollaborator(input: InviteCollaboratorInput) {
     emailSent: data.emailSent ?? false,
     warning: data.warning ?? null,
   } satisfies InviteCollaboratorResult;
+}
+
+export async function deleteCollaboratorInvite(inviteId: string) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure o Supabase antes de excluir convites.");
+  }
+
+  const tenantId = await getCurrentTenantId();
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from("collaborator_invites")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("id", inviteId);
+
+  if (error) {
+    throw new Error(error.message ?? "Nao foi possivel excluir o convite.");
+  }
 }
 
 export async function revokeCollaboratorInvite(inviteId: string) {
@@ -278,6 +297,21 @@ export function useRevokeCollaboratorInvite(
 
   return useMutation({
     mutationFn: revokeCollaboratorInvite,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["collaborator-invites"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useDeleteCollaboratorInvite(
+  options?: UseMutationOptions<void, Error, string>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteCollaboratorInvite,
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["collaborator-invites"] });

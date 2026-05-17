@@ -277,8 +277,14 @@ function toCustomerInput(customer: Customer, status = customer.status) {
   };
 }
 
-export default function ClientePerfil() {
-  const { id } = useParams<{ id: string }>();
+export function ClientePerfilContent({
+  customerId,
+  onBack,
+}: {
+  customerId: string;
+  onBack: () => void;
+}) {
+  const id = customerId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -416,7 +422,7 @@ export default function ClientePerfil() {
         style={{ backgroundColor: "#f0f2f5" }}
       >
         <p className="text-sm text-[#78909c]">{error?.message || "Cliente nao encontrado."}</p>
-        <Button variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/clientes")}>
+        <Button variant="outline" className="border-[#cfd8dc]" onClick={onBack}>
           Voltar para clientes
         </Button>
       </div>
@@ -522,7 +528,7 @@ export default function ClientePerfil() {
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
         qualificationStars={qualificationFromPerfil(cliente.perfil)}
-        onBack={() => navigate("/clientes")}
+        onBack={onBack}
         onRefresh={() => {
           void queryClient.invalidateQueries({ queryKey: ["customers", id] });
           if (crmEnabled) {
@@ -797,4 +803,25 @@ export default function ClientePerfil() {
       />
     </div>
   );
+}
+
+export default function ClientePerfil() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  if (!id) {
+    return (
+      <div
+        className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 text-center"
+        style={{ backgroundColor: "#f0f2f5" }}
+      >
+        <p className="text-sm text-[#78909c]">Cliente não informado.</p>
+        <Button variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/clientes")}>
+          Voltar para clientes
+        </Button>
+      </div>
+    );
+  }
+
+  return <ClientePerfilContent customerId={id} onBack={() => navigate("/clientes")} />;
 }

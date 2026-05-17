@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
 import { resolveAuthRedirectSession } from "@/lib/auth-redirect";
-import { escapeIlikeLiteralForPostgrest } from "@/lib/customer-search-sanitize";
 import { requireSupabase } from "@/lib/supabase";
 
 export default function AtivarAcesso() {
@@ -106,14 +105,21 @@ export default function AtivarAcesso() {
         throw profileError;
       }
 
-      const { error: inviteError } = await supabase
-        .from("collaborator_invites")
-        .update({
-          status: "accepted",
-          accepted_at: new Date().toISOString(),
-          auth_user_id: user.id,
-        })
-        .ilike("email", escapeIlikeLiteralForPostgrest(user.email));
+      const { data: profileRow, error: profileLoadError } = await supabase
+        .from("profiles")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profileLoadError || !profileRow?.tenant_id) {
+        throw profileLoadError ?? new Error("Nao foi possivel validar o tenant do convite.");
+      }
+
+      const { error: inviteError } = await supabase.rpc("clear_collaborator_invite_after_accept", {
+        target_user_id: user.id,
+        target_email: user.email,
+        target_tenant_id: profileRow.tenant_id,
+      });
 
       if (inviteError) {
         throw inviteError;

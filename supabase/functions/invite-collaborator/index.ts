@@ -126,6 +126,12 @@ async function sendInviteEmail(
     };
   }
 
+  if (message.includes("database error saving new user")) {
+    throw new Error(
+      "Falha ao criar o usuario no banco (trigger de cadastro). Aplique a migration 20260517123000_fix_invite_user_creation_trigger.sql no Supabase e tente novamente.",
+    );
+  }
+
   throw new Error(inviteError.message);
 }
 
@@ -186,7 +192,7 @@ Deno.serve(async (request) => {
       throw new Error("Esse email ja esta associado a outro tenant.");
     }
 
-    await service
+    const { error: inviteUpsertError } = await service
       .from("collaborator_invites")
       .upsert(
         {
@@ -201,6 +207,10 @@ Deno.serve(async (request) => {
         },
         { onConflict: "tenant_id,email" },
       );
+
+    if (inviteUpsertError) {
+      throw new Error(inviteUpsertError.message);
+    }
 
     let emailSent = false;
     let inviteWarning: string | null = null;

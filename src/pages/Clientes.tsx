@@ -47,6 +47,8 @@ import {
 import { CustomerCustomFieldsDialog } from "@/components/customers/CustomerCustomFieldsDialog";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ClientePerfilContent } from "@/pages/ClientePerfil";
 import { useCrmNegotiationCountsByCustomer } from "@/lib/api/crm-negotiations";
 import {
   useCreateCustomer,
@@ -242,9 +244,14 @@ export default function Clientes() {
   const [quickPasteText, setQuickPasteText] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sheetCustomer, setSheetCustomer] = useState<Customer | null>(null);
+  const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openCustomerProfile = (customerId: string) => {
+    setProfileCustomerId(customerId);
+  };
 
   const filters = useMemo(
     () => ({
@@ -854,12 +861,12 @@ export default function Clientes() {
                       key={customer.id}
                       role="button"
                       tabIndex={0}
-                      className={`${ui.tableRow} cursor-pointer`}
-                      onClick={() => navigate(`/clientes/${customer.id}`)}
+                      className={`${ui.tableRow} cursor-pointer${profileCustomerId === customer.id ? " bg-primary/5" : ""}`}
+                      onClick={() => openCustomerProfile(customer.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          navigate(`/clientes/${customer.id}`);
+                          openCustomerProfile(customer.id);
                         }
                       }}
                     >
@@ -887,7 +894,7 @@ export default function Clientes() {
                           className={ui.linkName}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/clientes/${customer.id}`);
+                            openCustomerProfile(customer.id);
                           }}
                         >
                           {customer.nome?.trim() || "Sem nome"}
@@ -922,8 +929,11 @@ export default function Clientes() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => openCustomerProfile(customer.id)}>
+                              Abrir perfil
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/clientes/${customer.id}`)}>
-                              Abrir negociação
+                              Abrir em tela cheia
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
@@ -1070,6 +1080,27 @@ export default function Clientes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet
+        open={profileCustomerId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProfileCustomerId(null);
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(100vw,56rem)]"
+        >
+          {profileCustomerId ? (
+            <ClientePerfilContent
+              customerId={profileCustomerId}
+              onBack={() => setProfileCustomerId(null)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <CustomerLeadSheet
         open={dialogOpen}
