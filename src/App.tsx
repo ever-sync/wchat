@@ -22,6 +22,7 @@ import NotFound from "./pages/NotFound";
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Clientes = lazy(() => import("./pages/Clientes"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const ConfiguracoesFila = lazy(() => import("./pages/ConfiguracoesFila"));
 const ClientePerfil = lazy(() => import("./pages/ClientePerfil"));
 const Crm = lazy(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
@@ -143,6 +144,14 @@ const App = () => (
                       element={
                         <PermissionRoute permission="configuracoes">
                           <Configuracoes />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/configuracoes/fila"
+                      element={
+                        <PermissionRoute permission="configuracoes">
+                          <ConfiguracoesFila />
                         </PermissionRoute>
                       }
                     />

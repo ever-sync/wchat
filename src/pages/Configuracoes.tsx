@@ -15,7 +15,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,8 +88,17 @@ import {
   useUpsertTenantIntegrations,
   useUpsertTenantSettings,
 } from "@/lib/api/integrations";
-import { useSellers } from "@/lib/api/sellers";
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
+import {
+  CollaboratorsSectionNav,
+  parseCollaboratorsSectionParam,
+  type CollaboratorsSettingsSection,
+} from "@/components/settings/CollaboratorsSectionNav";
+import {
+  IntegrationsSectionNav,
+  parseIntegrationsSectionParam,
+  type IntegrationsSettingsSection,
+} from "@/components/settings/IntegrationsSectionNav";
 import type { QuickReply, QuickReplyScope, UserRole } from "@/types/domain";
 
 const statusStyles = {
@@ -128,6 +137,12 @@ export default function Configuracoes() {
   const { can } = useRolePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<SettingsTab>(() => parseSettingsTabParam(searchParams.get("aba")));
+  const [collaboratorsSection, setCollaboratorsSection] = useState<CollaboratorsSettingsSection>(() =>
+    parseCollaboratorsSectionParam(searchParams.get("secao")),
+  );
+  const [integrationsSection, setIntegrationsSection] = useState<IntegrationsSettingsSection>(() =>
+    parseIntegrationsSectionParam(searchParams.get("secao")),
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [instanceName, setInstanceName] = useState("");
@@ -165,9 +180,59 @@ export default function Configuracoes() {
   const canDeleteCollaborators = can("colaboradores", "delete");
 
   const abaKey = searchParams.get("aba");
+  const secaoKey = searchParams.get("secao");
   useEffect(() => {
     setTab(parseSettingsTabParam(abaKey));
   }, [abaKey]);
+
+  useEffect(() => {
+    const currentTab = parseSettingsTabParam(abaKey);
+    if (currentTab === "colaboradores") {
+      setCollaboratorsSection(parseCollaboratorsSectionParam(secaoKey));
+    } else if (currentTab === "integracoes") {
+      setIntegrationsSection(parseIntegrationsSectionParam(secaoKey));
+    }
+  }, [abaKey, secaoKey]);
+
+  const handleIntegrationsSectionChange = useCallback(
+    (section: IntegrationsSettingsSection) => {
+      setIntegrationsSection(section);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.set("aba", "integracoes");
+          if (section === "whatsapp") {
+            p.delete("secao");
+          } else {
+            p.set("secao", section);
+          }
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleCollaboratorsSectionChange = useCallback(
+    (section: CollaboratorsSettingsSection) => {
+      setCollaboratorsSection(section);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.set("aba", "colaboradores");
+          if (section === "usuarios") {
+            p.delete("secao");
+          } else {
+            p.set("secao", section);
+          }
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const handleTabChange = useCallback((value: string) => {
     const next = parseSettingsTabParam(value);
@@ -177,8 +242,21 @@ export default function Configuracoes() {
         const p = new URLSearchParams(prev);
         if (next === "perfil") {
           p.delete("aba");
+          p.delete("secao");
         } else {
           p.set("aba", next);
+          const secao = p.get("secao");
+          if (next === "colaboradores") {
+            if (secao !== "usuarios" && secao !== "permissoes" && secao !== "fila") {
+              p.delete("secao");
+            }
+          } else if (next === "integracoes") {
+            if (secao !== "whatsapp" && secao !== "automacao") {
+              p.delete("secao");
+            }
+          } else {
+            p.delete("secao");
+          }
         }
         return p;
       },
@@ -213,7 +291,6 @@ export default function Configuracoes() {
   const { data: tenantSettings } = useTenantSettings();
   const upsertIntegrations = useUpsertTenantIntegrations();
   const upsertSettings = useUpsertTenantSettings();
-  const { data: sellers = [] } = useSellers();
   const [n8nUrl, setN8nUrl] = useState("");
   const [n8nSecret, setN8nSecret] = useState("");
   const [n8nEnabled, setN8nEnabled] = useState(false);
@@ -589,6 +666,14 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="integracoes" className="space-y-6">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <IntegrationsSectionNav
+              value={integrationsSection}
+              onChange={handleIntegrationsSectionChange}
+            />
+            <div className="min-w-0 flex-1 space-y-6">
+              {integrationsSection === "whatsapp" ? (
+                <>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-bold text-foreground">Integrações operacionais</h2>
@@ -848,7 +933,10 @@ export default function Configuracoes() {
               })}
             </CardContent>
           </Card>
+                </>
+              ) : null}
 
+              {integrationsSection === "automacao" ? (
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
               <CardTitle className="text-lg">IA no n8n</CardTitle>
@@ -979,40 +1067,44 @@ export default function Configuracoes() {
               </Button>
             </CardContent>
           </Card>
-
-          <Card className="border-border/60 bg-card/80">
-            <CardHeader>
-              <CardTitle className="text-lg">Vendedores (Trendii)</CardTitle>
-              <CardDescription>
-                Perfis de equipe vinculados a vendedores para metas e relatórios ({sellers.length} ativos).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {sellers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Convide colaboradores com papel Atendimento ou Operação — um registro de vendedor será criado automaticamente ao usar o CRM.
-                </p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {sellers.map((s) => (
-                    <li key={s.id} className="flex justify-between rounded-lg border border-border/60 px-3 py-2">
-                      <span className="font-medium">{s.name}</span>
-                      <Badge variant="secondary">{s.role}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+              ) : null}
+            </div>
+          </div>
         </TabsContent>
 
         {canViewCollaborators ? (
           <TabsContent value="colaboradores" className="space-y-6">
-          <RolePermissionsMatrix
-            canEdit={myProfile?.role === "admin"}
-            disabled={!canUseAuthenticatedActions}
-          />
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+              <CollaboratorsSectionNav
+                value={collaboratorsSection}
+                onChange={handleCollaboratorsSectionChange}
+              />
+              <div className="min-w-0 flex-1 space-y-6">
+                {collaboratorsSection === "permissoes" ? (
+                  <RolePermissionsMatrix
+                    canEdit={myProfile?.role === "admin"}
+                    disabled={!canUseAuthenticatedActions}
+                  />
+                ) : null}
 
+                {collaboratorsSection === "fila" ? (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Fila de atendimento</CardTitle>
+                      <CardDescription>
+                        Configure quem recebe conversas do pool, limites de carga e distribuição automática.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button variant="secondary" asChild>
+                        <Link to="/configuracoes/fila">Abrir configuração da fila</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                {collaboratorsSection === "usuarios" ? (
+                  <>
           <div className="grid gap-4 md:grid-cols-3">
             {[{ label: "Colaboradores ativos", value: collaboratorMetrics.active, icon: Users }, { label: "Administradores", value: collaboratorMetrics.admins, icon: ShieldCheck }, { label: "Convites pendentes", value: collaboratorMetrics.pending, icon: Mail }].map((metric) => (
               <Card key={metric.label} className="border-border/60 bg-card/80"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="text-2xl font-bold text-foreground">{metric.value}</p></div><div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div></CardContent></Card>
@@ -1308,6 +1400,10 @@ export default function Configuracoes() {
               </Card>
             </div>
           </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
           </TabsContent>
         ) : null}
 

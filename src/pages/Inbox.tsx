@@ -9,8 +9,8 @@ import {
   Plus,
   ShoppingCart,
   Trash2,
+  ArrowRightLeft,
   UserRound,
-  UserPlus,
   Users,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -90,6 +90,7 @@ import {
   chatAssignedToOtherAttendantMessage,
   chatAssigneeBlockedMessage,
   isInboxLeadLocked,
+  managerOnlyReleaseToPoolMessage,
   negotiationAssigneeBlockedMessage,
   shouldOfferInboxClaimBoth,
 } from "@/lib/crm/negotiation-assignee";
@@ -125,6 +126,9 @@ import {
 
 /** Limite de vendas do cliente carregadas no fluxo de devolucao (API listSales). */
 const SALE_RETURN_HISTORY_LIMIT = 200;
+
+/** Valor sentinela do Select de transferência (Radix não aceita string vazia). */
+const INBOX_ASSIGN_NONE = "__none__";
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", {
@@ -388,6 +392,13 @@ export default function Inbox() {
     return chats.find((chat) => chat.id === activeChatId) ?? null;
   }, [activeChatId, chats]);
 
+  const assignDialogChat = useMemo(() => {
+    if (!assignDialogChatId) {
+      return null;
+    }
+    return chats.find((chat) => chat.id === assignDialogChatId) ?? null;
+  }, [assignDialogChatId, chats]);
+
   const blockedRequestedChatId = useMemo(() => {
     if (!requestedChatId?.trim() || chatsLoading) {
       return null;
@@ -399,6 +410,8 @@ export default function Inbox() {
   }, [requestedChatId, chats, chatsLoading]);
 
   const isManagerInbox = profile?.role === "admin" || profile?.role === "operacao";
+  const canManageChatPool =
+    profile?.role === "admin" || profile?.role === "operacao" || profile?.role === "financeiro";
   const { data: linkedNegotiation, isLoading: linkedNegotiationLoading } = useChatNegotiation(
     activeChat?.id ?? null,
   );
@@ -2208,16 +2221,15 @@ export default function Inbox() {
                     className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
                     title={
                       !canEditInbox
-                        ? "Seu papel nao tem permissao para atribuir conversa"
+                        ? "Seu papel nao tem permissao para transferir conversa"
                         : activeChat.assigneeName
-                          ? `Responsável: ${activeChat.assigneeName}`
-                          : "Atribuir ou transferir conversa"
+                          ? `Transferir · responsável: ${activeChat.assigneeName}`
+                          : "Atribuir conversa a um atendente"
                     }
+                    data-testid="inbox-transfer-chat"
                   >
-                    <UserPlus className="h-4 w-4" />
-                    {activeChat.assigneeName ? (
-                      <span className="hidden text-xs sm:inline">{activeChat.assigneeName.split(" ")[0]}</span>
-                    ) : null}
+                    <ArrowRightLeft className="h-4 w-4" />
+                    <span className="hidden text-xs sm:inline">Transferir</span>
                   </button>
                   <button
                     type="button"
@@ -2435,27 +2447,34 @@ export default function Inbox() {
         <DialogContent className="max-w-sm rounded-2xl border-border bg-wchat-50 p-0">
           <DialogHeader className="border-b border-border pb-4 pl-6 pt-5">
             <DialogTitle className="text-[17px] font-medium text-foreground">
-              Atribuir ou transferir conversa
+              {assignDialogChat?.assigneeId ? "Transferir conversa" : "Atribuir conversa"}
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
-              Defina o responsável por essa conversa, transfira para outro vendedor ou distribua automaticamente.
+              {assignDialogChat?.assigneeName
+                ? `Responsável atual: ${assignDialogChat.assigneeName}. Escolha outro atendente para transferir.`
+                : "Escolha o atendente responsável por esta conversa."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 px-6 py-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Responsável</Label>
+              <Label className="text-xs text-muted-foreground">Novo responsável</Label>
               <Select
-                value={assignDialogSelectedUser}
-                onValueChange={setAssignDialogSelectedUser}
+                value={assignDialogSelectedUser || INBOX_ASSIGN_NONE}
+                onValueChange={(value) =>
+                  setAssignDialogSelectedUser(value === INBOX_ASSIGN_NONE ? "" : value)
+                }
               >
                 <SelectTrigger className="border border-input bg-card text-foreground focus:ring-primary">
-                  <SelectValue placeholder="Selecionar..." />
+                  <SelectValue placeholder="Selecionar atendente..." />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-card text-foreground">
-                  <SelectItem value="">Sem responsável</SelectItem>
+                  {canManageChatPool ? (
+                    <SelectItem value={INBOX_ASSIGN_NONE}>Sem responsável (pool)</SelectItem>
+                  ) : null}
                   {atendimentoUsers.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.nome}
+                      {user.id === profileId ? " (você)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2464,32 +2483,36 @@ export default function Inbox() {
           </div>
           <DialogFooter className="border-t border-border px-6 py-4">
             <div className="flex w-full items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-lg border-border bg-transparent text-muted-foreground hover:bg-wchat-100"
-                disabled={autoAssignChatMutation.isPending}
-                onClick={async () => {
-                  if (!assignDialogChatId) return;
-                  try {
-                    const nextId = await autoAssignChatMutation.mutateAsync(assignDialogChatId);
-                    if (!nextId) {
-                      toast({ title: "Nenhum atendente disponível", variant: "destructive" });
-                    } else {
-                      toast({ title: "Conversa distribuída automaticamente" });
+              {canManageChatPool ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg border-border bg-transparent text-muted-foreground hover:bg-wchat-100"
+                  disabled={autoAssignChatMutation.isPending}
+                  onClick={async () => {
+                    if (!assignDialogChatId) return;
+                    try {
+                      const nextId = await autoAssignChatMutation.mutateAsync(assignDialogChatId);
+                      if (!nextId) {
+                        toast({ title: "Nenhum atendente disponível", variant: "destructive" });
+                      } else {
+                        const name =
+                          atendimentoUsers.find((u) => u.id === nextId)?.nome ?? "atendente";
+                        toast({ title: "Conversa distribuída", description: `Atribuída a ${name}.` });
+                      }
+                      setAssignDialogOpen(false);
+                    } catch (err) {
+                      toast({
+                        title: "Erro ao distribuir",
+                        description: err instanceof Error ? err.message : "Tente novamente.",
+                        variant: "destructive",
+                      });
                     }
-                    setAssignDialogOpen(false);
-                  } catch (err) {
-                    toast({
-                      title: "Erro ao distribuir",
-                      description: err instanceof Error ? err.message : "Tente novamente.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                Round-robin
-              </Button>
+                  }}
+                >
+                  Distribuir fila
+                </Button>
+              ) : null}
               <div className="flex-1" />
               <Button
                 size="sm"
@@ -2497,27 +2520,57 @@ export default function Inbox() {
                 disabled={assignChatMutation.isPending || unassignChatMutation.isPending}
                 onClick={async () => {
                   if (!assignDialogChatId) return;
+                  const previousAssigneeId = assignDialogChat?.assigneeId ?? null;
+                  const nextAssigneeId = assignDialogSelectedUser.trim() || null;
+
+                  if (nextAssigneeId && nextAssigneeId === previousAssigneeId) {
+                    toast({
+                      title: "Nenhuma alteração",
+                      description: "Selecione outro atendente para transferir.",
+                    });
+                    return;
+                  }
+
+                  if (!nextAssigneeId && !canManageChatPool) {
+                    toast({
+                      title: "Ação não permitida",
+                      description: managerOnlyReleaseToPoolMessage(),
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
                   try {
-                    if (assignDialogSelectedUser) {
+                    if (nextAssigneeId) {
                       await assignChatMutation.mutateAsync({
                         chatId: assignDialogChatId,
-                        assigneeId: assignDialogSelectedUser,
+                        assigneeId: nextAssigneeId,
+                        reason: previousAssigneeId ? "transfer" : "assign",
+                      });
+                      const name =
+                        atendimentoUsers.find((u) => u.id === nextAssigneeId)?.nome ?? "atendente";
+                      toast({
+                        title: previousAssigneeId ? "Conversa transferida" : "Conversa atribuída",
+                        description: name,
                       });
                     } else {
-                      await unassignChatMutation.mutateAsync({ chatId: assignDialogChatId });
+                      await unassignChatMutation.mutateAsync({
+                        chatId: assignDialogChatId,
+                        reason: "release_to_pool",
+                      });
+                      toast({ title: "Conversa devolvida ao pool" });
                     }
-                    toast({ title: "Atribuição salva" });
                     setAssignDialogOpen(false);
                   } catch (err) {
                     toast({
-                      title: "Erro ao atribuir",
+                      title: previousAssigneeId ? "Erro ao transferir" : "Erro ao atribuir",
                       description: err instanceof Error ? err.message : "Tente novamente.",
                       variant: "destructive",
                     });
                   }
                 }}
               >
-                Salvar
+                {assignDialogChat?.assigneeId ? "Transferir" : "Atribuir"}
               </Button>
             </div>
           </DialogFooter>
