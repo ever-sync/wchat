@@ -69,10 +69,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
+import { CrmOrphanNegotiationsBanner } from "@/components/crm/CrmOrphanNegotiationsBanner";
 import {
   type ListCrmNegotiationsFilters,
   useClaimCrmNegotiation,
   useCreateCrmNegotiation,
+  useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
   useReleaseCrmNegotiationToPool,
   useUpdateCrmNegotiation,
@@ -425,6 +427,9 @@ export default function Crm() {
   }, [appliedOwner, creationDateFilter, funnelId, profileId, statusFilter]);
 
   const { data: dbRecords = [] } = useCrmNegotiations(crmListFilters);
+  const { data: negotiationFunnelRefs = [] } = useCrmNegotiationFunnelRefs({
+    enabled: isSupabaseConfigured,
+  });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newNegotiationTitle, setNewNegotiationTitle] = useState("");
@@ -1908,6 +1913,12 @@ export default function Crm() {
           </span>
         ) : null}
       </div>
+
+      {isSupabaseConfigured ? (
+        <div className="shrink-0 px-4 pt-3 md:px-6">
+          <CrmOrphanNegotiationsBanner funnels={funnels} negotiationRefs={negotiationFunnelRefs} />
+        </div>
+      ) : null}
 
       {view === "board" ? (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={(e) => void handleDragEnd(e)}>

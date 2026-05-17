@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
+import { CrmFunnelMigrateDialog } from "@/components/crm/CrmFunnelMigrateDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +45,8 @@ import {
   updateFunnel,
   updateStage,
 } from "@/lib/crm/funnel-editor-utils";
+import type { PendingFunnelMigration } from "@/lib/crm/funnel-migration";
+import { mergePendingMigrations } from "@/lib/crm/funnel-migration";
 import { CRM_STAGE_REQUIRED_FIELD_OPTIONS } from "@/lib/crm/stage-requirements";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +54,10 @@ type CrmFunnelConfigEditorProps = {
   funnels: CrmFunnel[];
   onChange: (funnels: CrmFunnel[]) => void;
   disabled?: boolean;
+  countNegotiationsByFunnel?: (funnelId: string) => Promise<number>;
+  countNegotiationsByStage?: (funnelId: string, stageId: string) => Promise<number>;
+  pendingMigrations?: PendingFunnelMigration[];
+  onPendingMigrationsChange?: (migrations: PendingFunnelMigration[]) => void;
 };
 
 function toggleStageField(
@@ -79,16 +86,48 @@ function toggleStageField(
   });
 }
 
+type MigratePrompt =
+  | {
+      kind: "funnel";
+      funnelId: string;
+      funnelName: string;
+      count: number;
+    }
+  | {
+      kind: "stage";
+      funnelId: string;
+      funnelName: string;
+      stageId: string;
+      stageTitle: string;
+      count: number;
+    };
+
 export function CrmFunnelConfigEditor({
   funnels,
   onChange,
   disabled,
+  countNegotiationsByFunnel,
+  countNegotiationsByStage,
+  pendingMigrations = [],
+  onPendingMigrationsChange,
 }: CrmFunnelConfigEditorProps) {
   const [funnelId, setFunnelId] = useState(funnels[0]?.id ?? "");
   const [newFunnelOpen, setNewFunnelOpen] = useState(false);
   const [newFunnelName, setNewFunnelName] = useState("");
   const [deleteFunnelOpen, setDeleteFunnelOpen] = useState(false);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
+  const [migratePrompt, setMigratePrompt] = useState<MigratePrompt | null>(null);
+  const [countLoading, setCountLoading] = useState(false);
+
+  const queueMigration = useCallback(
+    (migration: PendingFunnelMigration) => {
+      if (!onPendingMigrationsChange) {
+        return;
+      }
+      onPendingMigrationsChange(mergePendingMigrations(pendingMigrations, migration));
+    },
+    [onPendingMigrationsChange, pendingMigrations],
+  );
 
   useEffect(() => {
     if (!funnels.some((f) => f.id === funnelId)) {
@@ -100,6 +139,69 @@ export function CrmFunnelConfigEditor({
     () => funnels.find((f) => f.id === funnelId) ?? funnels[0],
     [funnelId, funnels],
   );
+
+  const requestDeleteFunnel = useCallback(async () => {
+    if (!activeFunnel) {
+      return;
+    }
+    if (!countNegotiationsByFunnel) {
+      setDeleteFunnelOpen(true);
+      return;
+    }
+    setCountLoading(true);
+    try {
+      const count = await countNegotiationsByFunnel(activeFunnel.id);
+      if (count > 0) {
+        setMigratePrompt({
+          kind: "funnel",
+          funnelId: activeFunnel.id,
+          funnelName: activeFunnel.listName,
+          count,
+        });
+        return;
+      }
+      setDeleteFunnelOpen(true);
+    } finally {
+      setCountLoading(false);
+    }
+  }, [activeFunnel, countNegotiationsByFunnel]);
+
+  const requestDeleteStage = useCallback(
+    async (stageId: string) => {
+      if (!activeFunnel) {
+        return;
+      }
+      const stage = activeFunnel.stages.find((s) => s.id === stageId);
+      if (!stage) {
+        return;
+      }
+      if (!countNegotiationsByStage) {
+        setDeleteStageId(stageId);
+        return;
+      }
+      setCountLoading(true);
+      try {
+        const count = await countNegotiationsByStage(activeFunnel.id, stageId);
+        if (count > 0) {
+          setMigratePrompt({
+            kind: "stage",
+            funnelId: activeFunnel.id,
+            funnelName: activeFunnel.listName,
+            stageId,
+            stageTitle: stage.title,
+            count,
+          });
+          return;
+        }
+        setDeleteStageId(stageId);
+      } finally {
+        setCountLoading(false);
+      }
+    },
+    [activeFunnel, countNegotiationsByStage],
+  );
+
+  const pendingMigrationCount = pendingMigrations.length;
 
   if (funnels.length === 0) {
     return (
@@ -396,7 +498,7 @@ export function CrmFunnelConfigEditor({
                       className="h-8 w-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       disabled={disabled || activeFunnel.stages.length <= 1}
                       aria-label="Excluir etapa"
-                      onClick={() => setDeleteStageId(stage.id)}
+                      onClick={() => void requestDeleteStage(stage.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -406,16 +508,27 @@ export function CrmFunnelConfigEditor({
             </div>
           </div>
 
+          {pendingMigrationCount > 0 ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {pendingMigrationCount} migração{pendingMigrationCount === 1 ? "" : "ões"} pendente
+              {pendingMigrationCount === 1 ? "" : "s"} — salve os funis para aplicar no banco.
+            </p>
+          ) : null}
+
           <div className="flex justify-end border-t border-border/60 pt-4">
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={disabled || funnels.length <= 1}
-              onClick={() => setDeleteFunnelOpen(true)}
+              disabled={disabled || funnels.length <= 1 || countLoading}
+              onClick={() => void requestDeleteFunnel()}
             >
-              <Trash2 className="mr-1.5 h-4 w-4" />
+              {countLoading ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1.5 h-4 w-4" />
+              )}
               Excluir funil
             </Button>
           </div>
@@ -442,9 +555,8 @@ export function CrmFunnelConfigEditor({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir funil?</AlertDialogTitle>
             <AlertDialogDescription>
-              O funil &quot;{activeFunnel?.listName}&quot; será removido desta configuração. Cards no CRM
-              que ainda usam etapas deste funil podem ficar inconsistentes até você salvar e
-              reorganizar.
+              O funil &quot;{activeFunnel?.listName}&quot; será removido desta configuração. Não há
+              negociações vinculadas a este funil no banco.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -473,7 +585,7 @@ export function CrmFunnelConfigEditor({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir etapa?</AlertDialogTitle>
             <AlertDialogDescription>
-              Negociações já nesta etapa continuarão com o ID antigo no banco até serem movidas.
+              A etapa será removida da configuração. Não há negociações nesta etapa no banco.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -491,6 +603,58 @@ export function CrmFunnelConfigEditor({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {migratePrompt?.kind === "funnel" ? (
+        <CrmFunnelMigrateDialog
+          open
+          onOpenChange={(open) => !open && setMigratePrompt(null)}
+          funnels={funnels}
+          excludeFunnelId={migratePrompt.funnelId}
+          negotiationCount={migratePrompt.count}
+          title="Migrar negociações antes de excluir o funil"
+          description={`O funil "${migratePrompt.funnelName}" ainda tem negociações no CRM. Escolha para onde movê-las:`}
+          confirmLabel="Migrar e excluir funil"
+          disabled={disabled}
+          onConfirm={({ funnelId: toFunnelId, stageId: toStageId }) => {
+            queueMigration({
+              kind: "funnel",
+              fromFunnelId: migratePrompt.funnelId,
+              toFunnelId,
+              toStageId,
+            });
+            const next = removeFunnel(funnels, migratePrompt.funnelId);
+            onChange(next);
+            setFunnelId(next[0]?.id ?? "");
+            setMigratePrompt(null);
+          }}
+        />
+      ) : null}
+
+      {migratePrompt?.kind === "stage" ? (
+        <CrmFunnelMigrateDialog
+          open
+          onOpenChange={(open) => !open && setMigratePrompt(null)}
+          funnels={funnels}
+          defaultTargetFunnelId={migratePrompt.funnelId}
+          negotiationCount={migratePrompt.count}
+          title="Migrar negociações antes de excluir a etapa"
+          description={`A etapa "${migratePrompt.stageTitle}" (${migratePrompt.funnelName}) ainda tem negociações. Escolha a etapa de destino:`}
+          confirmLabel="Migrar e excluir etapa"
+          disabled={disabled}
+          onConfirm={({ stageId: toStageId }) => {
+            queueMigration({
+              kind: "stage",
+              funnelId: migratePrompt.funnelId,
+              fromStageId: migratePrompt.stageId,
+              toStageId,
+            });
+            if (activeFunnel) {
+              onChange(removeStage(funnels, activeFunnel.id, migratePrompt.stageId));
+            }
+            setMigratePrompt(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

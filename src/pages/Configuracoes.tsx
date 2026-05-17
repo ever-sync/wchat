@@ -61,12 +61,21 @@ import {
   useSyncWhatsappInstances,
   useWhatsappInstances,
 } from "@/lib/api/whatsapp";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
 import { CrmFunnelConfigEditor } from "@/components/crm/CrmFunnelConfigEditor";
+import {
+  applyPendingFunnelMigrations,
+  countCrmNegotiationsByFunnelId,
+  countCrmNegotiationsByFunnelStage,
+} from "@/lib/api/crm-funnel-migration";
 import { validateFunnelsDraft } from "@/lib/crm/funnel-editor-utils";
 import type { CrmFunnel } from "@/data/crm-funnels";
 import { DEFAULT_CRM_FUNNELS, parseTenantCrmFunnelsJson } from "@/data/crm-funnels";
+import {
+  buildUnresolvedConfigRemovals,
+  type PendingFunnelMigration,
+} from "@/lib/crm/funnel-migration";
 import {
   useCreateQuickReply,
   useDeleteQuickReply,
@@ -135,6 +144,9 @@ export default function Configuracoes() {
   const [funnelDraft, setFunnelDraft] = useState<CrmFunnel[]>(DEFAULT_CRM_FUNNELS);
   const [funnelJsonDraft, setFunnelJsonDraft] = useState("");
   const [funnelJsonOpen, setFunnelJsonOpen] = useState(false);
+  const [pendingFunnelMigrations, setPendingFunnelMigrations] = useState<PendingFunnelMigration[]>(
+    [],
+  );
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrEditingId, setQrEditingId] = useState<string | null>(null);
@@ -272,6 +284,7 @@ export default function Configuracoes() {
     const effective = savedCrmFunnels ?? DEFAULT_CRM_FUNNELS;
     setFunnelDraft(structuredClone(effective));
     setFunnelJsonDraft(JSON.stringify(effective, null, 2));
+    setPendingFunnelMigrations([]);
   }, [crmFunnelsLoading, savedCrmFunnels, tab]);
 
   const syncFunnelDraftToJson = (next: CrmFunnel[]) => {
@@ -298,8 +311,77 @@ export default function Configuracoes() {
       });
       return;
     }
+
+    const baseline = savedCrmFunnels ?? DEFAULT_CRM_FUNNELS;
+    const autoMigrations: PendingFunnelMigration[] = [];
+    const removals = buildUnresolvedConfigRemovals(baseline, valid);
+
+    for (const removal of removals) {
+      if (removal.kind === "funnel_rename") {
+        autoMigrations.push({
+          kind: "funnel_rename",
+          fromFunnelId: removal.from,
+          toFunnelId: removal.to,
+        });
+        continue;
+      }
+      if (removal.kind === "funnel") {
+        const covered = pendingFunnelMigrations.some(
+          (m) => m.kind === "funnel" && m.fromFunnelId === removal.funnelId,
+        );
+        if (covered) {
+          continue;
+        }
+        if (isSupabaseConfigured) {
+          const count = await countCrmNegotiationsByFunnelId(removal.funnelId);
+          if (count > 0) {
+            toast({
+              title: "Funil com negociações",
+              description: `O funil removido ainda tem ${count} negociação(ões). Use "Excluir funil" no editor visual para migrar antes de salvar.`,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+        continue;
+      }
+      const covered = pendingFunnelMigrations.some(
+        (m) =>
+          m.kind === "stage" &&
+          m.funnelId === removal.funnelId &&
+          m.fromStageId === removal.stageId,
+      );
+      if (covered) {
+        continue;
+      }
+      if (isSupabaseConfigured) {
+        const count = await countCrmNegotiationsByFunnelStage(removal.funnelId, removal.stageId);
+        if (count > 0) {
+          toast({
+            title: "Etapa com negociações",
+            description: `A etapa removida ainda tem ${count} negociação(ões). Exclua a etapa pelo editor visual e escolha o destino da migração.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
+    const allMigrations = [...pendingFunnelMigrations, ...autoMigrations];
+    if (allMigrations.length > 0 && isSupabaseConfigured) {
+      const { negotiationsUpdated, customersAligned } =
+        await applyPendingFunnelMigrations(allMigrations);
+      if (negotiationsUpdated > 0 || customersAligned > 0) {
+        toast({
+          title: "Negociações atualizadas",
+          description: `${negotiationsUpdated} negociação(ões) e ${customersAligned} cliente(s) alinhados aos novos funis.`,
+        });
+      }
+    }
+
     await upsertCrmFunnels.mutateAsync(valid);
     syncFunnelDraftToJson(valid);
+    setPendingFunnelMigrations([]);
     toast({
       title: "Funis salvos",
       description: "O quadro CRM vai usar esta definição.",
@@ -1247,6 +1329,14 @@ export default function Configuracoes() {
                     funnels={funnelDraft}
                     onChange={syncFunnelDraftToJson}
                     disabled={!canUseAuthenticatedActions || upsertCrmFunnels.isPending}
+                    countNegotiationsByFunnel={
+                      isSupabaseConfigured ? countCrmNegotiationsByFunnelId : undefined
+                    }
+                    countNegotiationsByStage={
+                      isSupabaseConfigured ? countCrmNegotiationsByFunnelStage : undefined
+                    }
+                    pendingMigrations={pendingFunnelMigrations}
+                    onPendingMigrationsChange={setPendingFunnelMigrations}
                   />
 
                   <Collapsible open={funnelJsonOpen} onOpenChange={setFunnelJsonOpen}>

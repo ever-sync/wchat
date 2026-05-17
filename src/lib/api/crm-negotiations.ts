@@ -160,6 +160,50 @@ export async function listCrmNegotiationsByCustomerId(customerId: string): Promi
   return (data ?? []).map((row) => mapCrmNegotiationDbRow(asDbRow(row)));
 }
 
+/** Referências leves para detectar negociações órfãs em relação à config de funis. */
+export async function listCrmNegotiationFunnelRefs(): Promise<
+  Array<Pick<CrmNegotiationRecord, "id" | "funnelId" | "stageId">>
+> {
+  if (!isSupabaseConfigured) {
+    return [];
+  }
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { data, error } = await supabase
+    .from("crm_negotiations")
+    .select("id, funnel_id, stage_id")
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => {
+    const r = row as { id: string; funnel_id: string; stage_id: string };
+    return {
+      id: String(r.id),
+      funnelId: String(r.funnel_id),
+      stageId: String(r.stage_id),
+    };
+  });
+}
+
+export function useCrmNegotiationFunnelRefs(
+  options?: Omit<
+    UseQueryOptions<Array<Pick<CrmNegotiationRecord, "id" | "funnelId" | "stageId">>>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  const { enabled: enabledOption, ...rest } = options ?? {};
+  return useQuery({
+    ...rest,
+    queryKey: ["crm-negotiations", "funnel-refs"],
+    queryFn: listCrmNegotiationFunnelRefs,
+    enabled: (enabledOption ?? true) && isSupabaseConfigured,
+    staleTime: 30_000,
+  });
+}
+
 export async function listCrmNegotiations(
   filters: ListCrmNegotiationsFilters = {},
 ): Promise<CrmNegotiationRecord[]> {
