@@ -1,6 +1,10 @@
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
-import { getFunctionsBaseUrl, requireTenantContext } from "../_shared/supabase.ts";
+import {
+  PermissionDeniedError,
+  getFunctionsBaseUrl,
+  requireTenantPermission,
+} from "../_shared/supabase.ts";
 import {
   findWebhook,
   resolveConnectionConfig,
@@ -21,7 +25,12 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { admin, tenantId } = await requireTenantContext(request);
+    const { admin, tenantId } = await requireTenantPermission(
+      request,
+      "configuracoes",
+      "edit",
+      "Seu papel nao tem permissao para sincronizar instancias.",
+    );
     const body = await request.json().catch(() => ({}));
     const instanceId = body.instanceId as string | undefined;
 
@@ -98,6 +107,9 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, synced });
   } catch (error) {
+    if (error instanceof PermissionDeniedError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Unexpected error." },
       400,

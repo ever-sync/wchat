@@ -1,7 +1,11 @@
 import { decryptSecret } from "../_shared/crypto.ts";
 import { ensureChat, getInstanceById, insertMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
-import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts";
+import {
+  PermissionDeniedError,
+  createAdminClient,
+  requireTenantPermission,
+} from "../_shared/supabase.ts";
 import { withRetries } from "../_shared/retry.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
@@ -125,7 +129,12 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { admin, tenantId, userId } = await requireTenantContext(request);
+    const { admin, tenantId, userId } = await requireTenantPermission(
+      request,
+      "inbox",
+      "edit",
+      "Seu papel nao tem permissao para enviar mensagens.",
+    );
     const body = await request.json();
     const instance = await getInstanceById(admin, String(body.instanceId));
     if (instance.tenant_id !== tenantId) {
@@ -237,6 +246,9 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, message });
   } catch (error) {
+    if (error instanceof PermissionDeniedError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     return jsonResponse({ error: error instanceof Error ? error.message : "Unexpected error." }, 400);
   }
 });

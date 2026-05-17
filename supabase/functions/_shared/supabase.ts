@@ -1,4 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
+import {
+  canTenantPermission,
+  mergeRolePermissionsConfig,
+  permissionDeniedMessage,
+  type PermissionAction,
+  type PermissionFunctionKey,
+  type TenantRolePermissionsConfig,
+  PermissionDeniedError,
+} from "./role-permissions.ts";
+export { PermissionDeniedError } from "./role-permissions.ts";
 
 export function getRequiredEnv(name: string) {
   const value = Deno.env.get(name);
@@ -45,7 +55,7 @@ export async function requireTenantContext(request: Request) {
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("tenant_id")
+    .select("tenant_id, role")
     .eq("id", userData.user.id)
     .single();
 
@@ -57,6 +67,7 @@ export async function requireTenantContext(request: Request) {
     admin,
     userId: userData.user.id,
     tenantId: profile.tenant_id as string,
+    role: String(profile.role ?? "atendimento"),
   };
 }
 
@@ -79,4 +90,39 @@ export async function requireTenantContextOrInternal(request: Request) {
 
 export function getFunctionsBaseUrl() {
   return `${getRequiredEnv("SUPABASE_URL")}/functions/v1`;
+}
+
+export async function fetchTenantRolePermissions(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+): Promise<TenantRolePermissionsConfig> {
+  const { data, error } = await admin
+    .from("tenant_settings")
+    .select("role_permissions")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mergeRolePermissionsConfig(data?.role_permissions);
+}
+
+export async function requireTenantPermission(
+  request: Request,
+  fn: PermissionFunctionKey,
+  action: PermissionAction,
+  customMessage?: string,
+) {
+  const context = await requireTenantContext(request);
+  const permissions = await fetchTenantRolePermissions(context.admin, context.tenantId);
+  if (!canTenantPermission(permissions, context.role, fn, action)) {
+    throw new PermissionDeniedError(customMessage ?? permissionDeniedMessage(fn, action));
+  }
+
+  return {
+    ...context,
+    permissions,
+  };
 }

@@ -1,6 +1,10 @@
 import { escapeIlikeLiteralForPostgrest } from "../_shared/ilike-literal.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
-import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts";
+import {
+  PermissionDeniedError,
+  createAdminClient,
+  requireTenantPermission,
+} from "../_shared/supabase.ts";
 
 const allowedRoles = new Set(["admin", "operacao", "financeiro", "atendimento"]);
 
@@ -146,7 +150,12 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { admin, tenantId, userId } = await requireTenantContext(request);
+    const { admin, tenantId, userId } = await requireTenantPermission(
+      request,
+      "colaboradores",
+      "edit",
+      "Seu papel nao tem permissao para criar acessos de colaboradores.",
+    );
     const body = await request.json().catch(() => ({}));
     const nome = String(body.nome ?? "").trim();
     const email = String(body.email ?? "").trim().toLowerCase();
@@ -266,6 +275,9 @@ Deno.serve(async (request) => {
       warning: inviteWarning,
     });
   } catch (error) {
+    if (error instanceof PermissionDeniedError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Unexpected error." },
       400,
