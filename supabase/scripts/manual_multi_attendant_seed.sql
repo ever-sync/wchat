@@ -1,0 +1,35 @@
+-- Fase 1.2: dados para validação manual multi-atendentes.
+-- 1) Liste perfis do tenant (substitua o tenant_id se souber o UUID):
+--
+--   select id, email, role, nome from public.profiles
+--   where tenant_id = '<SEU_TENANT_ID>' and status = 'active'
+--   order by role, email;
+--
+-- 2) Escolha uma instância WhatsApp ativa:
+--
+--   select id, display_name from public.whatsapp_instances
+--   where tenant_id = '<SEU_TENANT_ID>' and archived_at is null limit 5;
+--
+-- 3) Atribua conversas (exemplo — ajuste IDs):
+--
+--   update public.whatsapp_chats
+--   set assignee_id = '<UUID_ATENDENTE_A>', assigned_at = now(), assigned_by = '<UUID_GESTOR>'
+--   where id = '<CHAT_ID_A>';
+--
+--   update public.whatsapp_chats
+--   set assignee_id = '<UUID_ATENDENTE_B>', assigned_at = now(), assigned_by = '<UUID_GESTOR>'
+--   where id = '<CHAT_ID_B>';
+--
+--   update public.whatsapp_chats
+--   set assignee_id = null, assigned_at = null, assigned_by = null
+--   where id = '<CHAT_ID_POOL>';
+--
+-- 4) Negócios CRM (pool / A / B):
+--
+--   update public.crm_negotiations set assignee_id = null where id = '<NEG_POOL>';
+--   update public.crm_negotiations set assignee_id = '<UUID_ATENDENTE_A>' where id = '<NEG_A>';
+--   update public.crm_negotiations set assignee_id = '<UUID_ATENDENTE_B>' where id = '<NEG_B>';
+--
+-- 5) Deep link para testar bloqueio: /inbox?chatId=<CHAT_ID_B> logado como atendente A
+
+select 'Configure os UUIDs acima e execute os UPDATEs manualmente.' as instrucao;

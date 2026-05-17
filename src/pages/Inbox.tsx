@@ -87,9 +87,11 @@ import { invalidateSalesQueries, persistMarkWinSale } from "@/lib/crm/persist-ma
 import {
   canAtendimentoActOnChat,
   canAtendimentoModifyNegotiation,
+  chatAssignedToOtherAttendantMessage,
   chatAssigneeBlockedMessage,
   isInboxLeadLocked,
   negotiationAssigneeBlockedMessage,
+  shouldOfferInboxClaimBoth,
 } from "@/lib/crm/negotiation-assignee";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
@@ -385,6 +387,18 @@ export default function Inbox() {
     }
     return chats.find((chat) => chat.id === activeChatId) ?? null;
   }, [activeChatId, chats]);
+
+  const blockedRequestedChatId = useMemo(() => {
+    if (!requestedChatId?.trim() || chatsLoading) {
+      return null;
+    }
+    if (chats.some((chat) => chat.id === requestedChatId)) {
+      return null;
+    }
+    return requestedChatId;
+  }, [requestedChatId, chats, chatsLoading]);
+
+  const isManagerInbox = profile?.role === "admin" || profile?.role === "operacao";
   const { data: linkedNegotiation, isLoading: linkedNegotiationLoading } = useChatNegotiation(
     activeChat?.id ?? null,
   );
@@ -401,6 +415,20 @@ export default function Inbox() {
     linkedNegotiation.status === "em_andamento" &&
     canReleaseToPool &&
     !isNegotiationUnassigned(linkedNegotiation.assigneeId);
+  const offerClaimBoth =
+    Boolean(activeChat && linkedNegotiation) &&
+    shouldOfferInboxClaimBoth(activeChat?.assigneeId, linkedNegotiation?.assigneeId);
+  const managerUnassignedCount = useMemo(() => {
+    if (!isManagerInbox) {
+      return 0;
+    }
+    return chats.filter(
+      (c) =>
+        !c.assigneeId &&
+        (c.resolution ?? "open") === "open" &&
+        c.status === "open",
+    ).length;
+  }, [isManagerInbox, chats]);
   // Badge "(N) Distribui Bot" no titulo da aba enquanto em background.
   const totalUnread = useMemo(
     () => chats.reduce((acc, chat) => acc + (chat.unreadCount ?? 0), 0),
@@ -517,8 +545,12 @@ export default function Inbox() {
     }
 
     setActiveChatId((current) => {
-      if (requestedChatId && chats.some((chat) => chat.id === requestedChatId)) {
-        return requestedChatId;
+      if (requestedChatId) {
+        if (chats.some((chat) => chat.id === requestedChatId)) {
+          return requestedChatId;
+        }
+        // Deep link para conversa inacessível (outro atendente / RLS): não faz fallback na lista.
+        return null;
       }
 
       if (requestedCustomerId) {
@@ -816,6 +848,13 @@ export default function Inbox() {
   }
 
   const canActOnChat = canAtendimentoActOnChat(profile?.role, activeChat?.assigneeId, profileId);
+  const inboxAssigneeFilterOptions = useMemo(
+    () =>
+      isManagerInbox
+        ? atendimentoUsers.map((user) => ({ id: user.id, name: user.name }))
+        : undefined,
+    [isManagerInbox, atendimentoUsers],
+  );
   const canModifyLinkedNegotiation = canAtendimentoModifyNegotiation(
     profile?.role,
     linkedNegotiation?.assigneeId,
@@ -1769,6 +1808,28 @@ export default function Inbox() {
     [activeChat, queryClient, retryingMessageId, sendMessage, toast],
   );
 
+  async function handleClaimChatAndNegotiation() {
+    if (!activeChat || !linkedNegotiation) {
+      return;
+    }
+    try {
+      await claimChatMutation.mutateAsync(activeChat.id);
+      if (isNegotiationUnassigned(linkedNegotiation.assigneeId)) {
+        await claimCrmNegotiation.mutateAsync(linkedNegotiation.id);
+      }
+      toast({
+        title: "Conversa e negócio assumidos",
+        description: `Você é o responsável por "${linkedNegotiation.title}".`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível assumir",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function handleSendMessage() {
     if (!activeChat) {
       return;
@@ -1927,6 +1988,13 @@ export default function Inbox() {
           onSelectChat={handleSelectChat}
           onPrefetchChat={prefetchChatMessages}
           searchInputRef={searchInputRef}
+          assigneeFilterOptions={inboxAssigneeFilterOptions}
+          managerUnassignedCount={isManagerInbox ? managerUnassignedCount : undefined}
+          onOpenUnassignedQueue={() => {
+            setQuickFilter("unassigned");
+            setAssigneeFilter("unassigned");
+            setSnoozedFilter("active");
+          }}
         />
 
         <section className="relative flex min-h-0 flex-col overflow-hidden border-l border-border bg-background">
@@ -1942,7 +2010,26 @@ export default function Inbox() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {!activeChat.assigneeId ? (
+                  {offerClaimBoth && linkedNegotiation ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleClaimChatAndNegotiation()}
+                      disabled={
+                        claimChatMutation.isPending ||
+                        claimCrmNegotiation.isPending ||
+                        releaseCrmNegotiation.isPending ||
+                        !canEditInbox ||
+                        !canEditCrm
+                      }
+                      className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      title="Assumir conversa e negócio vinculado"
+                      data-testid="inbox-claim-both"
+                    >
+                      <Hand className="h-4 w-4" />
+                      <span className="hidden sm:inline">Assumir ambos</span>
+                    </button>
+                  ) : null}
+                  {!activeChat.assigneeId && !offerClaimBoth ? (
                     <button
                       type="button"
                       onClick={() => void claimChatMutation.mutateAsync(activeChat.id)}
@@ -1959,7 +2046,7 @@ export default function Inbox() {
                       <span className="hidden sm:inline">Assumir</span>
                     </button>
                   ) : null}
-                  {showClaimNegotiation && linkedNegotiation ? (
+                  {showClaimNegotiation && linkedNegotiation && !offerClaimBoth ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -2093,7 +2180,19 @@ export default function Inbox() {
                         });
                         return;
                       }
-                      if (!canActOnChat && activeChat.assigneeId) {
+                      if (
+                        profile?.role === "atendimento" &&
+                        activeChat.assigneeId &&
+                        activeChat.assigneeId !== profileId
+                      ) {
+                        toast({
+                          title: "Conversa de outro atendente",
+                          description: chatAssignedToOtherAttendantMessage(),
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      if (!isManagerInbox && !canActOnChat) {
                         toast({
                           title: "Assuma a conversa",
                           description: chatAssigneeBlockedMessage(),
@@ -2203,9 +2302,20 @@ export default function Inbox() {
                   </svg>
                 </div>
                 <div className="max-w-md text-center">
+                  {blockedRequestedChatId ? (
+                    <p
+                      data-testid="inbox-chat-blocked"
+                      className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                      role="status"
+                    >
+                      {chatAssignedToOtherAttendantMessage()}
+                    </p>
+                  ) : null}
                   <p className="text-2xl font-light text-wchat-900">converse. entenda. resolva.</p>
                   <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    Selecione uma conversa na lista ao lado para visualizar o historico e responder seus clientes.
+                    {blockedRequestedChatId
+                      ? "Esta conversa não está disponível para o seu usuário. Escolha outra na lista ao lado."
+                      : "Selecione uma conversa na lista ao lado para visualizar o historico e responder seus clientes."}
                   </p>
                 </div>
               </div>

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  assumeConversationToReplyMessage,
+  assumeNegotiationToEditCrmMessage,
   canAtendimentoActOnChat,
   canAtendimentoModifyNegotiation,
   canReleaseCrmNegotiationToPool,
+  chatAssignedToOtherAttendantMessage,
   isClientePerfilCrmLocked,
   isInboxLeadLocked,
+  managerOnlyTransferConversationMessage,
+  shouldOfferInboxClaimBoth,
 } from "./negotiation-assignee";
 
 describe("canReleaseCrmNegotiationToPool", () => {
@@ -56,6 +61,27 @@ describe("isClientePerfilCrmLocked", () => {
     expect(isClientePerfilCrmLocked("admin", "u1", [{ status: "em_andamento", assigneeId: null }])).toBe(
       false,
     );
+  });
+});
+
+describe("mensagens de bloqueio (plano multi-atendentes)", () => {
+  it("expõe textos consistentes para UX", () => {
+    expect(chatAssignedToOtherAttendantMessage()).toContain("outro atendente");
+    expect(assumeConversationToReplyMessage()).toContain("Assuma a conversa");
+    expect(assumeNegotiationToEditCrmMessage()).toContain("Assuma o negócio");
+    expect(managerOnlyTransferConversationMessage()).toContain("gestor");
+  });
+});
+
+describe("shouldOfferInboxClaimBoth", () => {
+  it("oferece quando conversa e negócio estão no pool", () => {
+    expect(shouldOfferInboxClaimBoth(null, null)).toBe(true);
+    expect(shouldOfferInboxClaimBoth(undefined, "")).toBe(true);
+  });
+
+  it("não oferece se conversa ou negócio já têm responsável", () => {
+    expect(shouldOfferInboxClaimBoth("u1", null)).toBe(false);
+    expect(shouldOfferInboxClaimBoth(null, "u2")).toBe(false);
   });
 });
 

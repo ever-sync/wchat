@@ -11,6 +11,8 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { invokeAuthedFunction } from "@/lib/api/functions";
+import { isE2eMockAuth } from "@/lib/e2e";
+import { listE2eInboxChats } from "@/lib/inbox-e2e";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type {
   ChatResolution,
@@ -337,6 +339,10 @@ export async function deleteWhatsappInstance(id: string) {
 }
 
 export async function listInboxChats(filters: InboxChatFilters = {}) {
+  if (isE2eMockAuth) {
+    return listE2eInboxChats(filters);
+  }
+
   if (!isSupabaseConfigured) {
     return [] as InboxChat[];
   }

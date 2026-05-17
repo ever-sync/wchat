@@ -1928,6 +1928,9 @@ export default function Crm() {
                   onOpenNegotiation={openNegotiationCard}
                   onOpenCustomer={(customerId) => navigate(`/clientes/${customerId}`)}
                   onOpenChat={openChatInbox}
+                  resolveAssigneeName={(assigneeId) =>
+                    attendants.find((a) => a.id === assigneeId)?.name?.trim() ?? null
+                  }
                   onColumnRefresh={() => {
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiation-stages"] });
@@ -2192,6 +2195,7 @@ function DraggableNegotiationCard({
   onOpenNegotiation,
   onOpenCustomer,
   onOpenChat,
+  resolveAssigneeName,
 }: {
   card: CrmNegotiation;
   staleNegotiationDays: number;
@@ -2204,6 +2208,7 @@ function DraggableNegotiationCard({
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
+  resolveAssigneeName?: (assigneeId: string) => string | null;
 }) {
   const { profile } = useAuth();
   const profileId = profile?.id;
@@ -2254,6 +2259,14 @@ function DraggableNegotiationCard({
         <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[#5B2FD4]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
         {isInPool ? <CrmPoolBadge /> : null}
+        {!isInPool && card.assigneeId && resolveAssigneeName?.(card.assigneeId) ? (
+          <span
+            className="max-w-[7rem] truncate text-[10px] font-medium text-[#495057]"
+            title={`Responsável: ${resolveAssigneeName(card.assigneeId)}`}
+          >
+            {resolveAssigneeName(card.assigneeId)}
+          </span>
+        ) : null}
         <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[#adb5bd]" aria-hidden />
       </div>
       <p className="mb-2 text-[15px] font-bold leading-snug text-[#212529]">{card.title}</p>
@@ -2360,6 +2373,7 @@ function KanbanColumn({
   onOpenChat,
   onColumnRefresh,
   onColumnValueSort,
+  resolveAssigneeName,
 }: {
   stage: CrmStageDef & { cards: CrmNegotiation[] };
   staleNegotiationDays: number;
@@ -2374,6 +2388,7 @@ function KanbanColumn({
   onOpenChat?: (chatId: string) => void;
   onColumnRefresh?: () => void;
   onColumnValueSort?: () => void;
+  resolveAssigneeName?: (assigneeId: string) => string | null;
 }) {
   const count = stage.cards.length;
   const columnValue = stage.cards.reduce((acc, c) => acc + c.totalValue, 0);
@@ -2438,6 +2453,7 @@ function KanbanColumn({
             onOpenNegotiation={onOpenNegotiation}
             onOpenCustomer={onOpenCustomer}
             onOpenChat={onOpenChat}
+            resolveAssigneeName={resolveAssigneeName}
           />
         ))}
       </div>

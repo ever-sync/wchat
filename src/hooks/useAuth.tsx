@@ -7,18 +7,10 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { E2E_MOCK_PROFILE_ID, isE2eMockAuth } from "@/lib/e2e";
+import { E2E_MOCK_PROFILE_ID, getE2eMockRole, isE2eMockAuth } from "@/lib/e2e";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
 import type { AppUserProfile, AuthCredentials, SignUpPayload, UserRole } from "@/types/domain";
-
-function getE2eMockRole(): UserRole {
-  const rawRole = import.meta.env.VITE_E2E_MOCK_ROLE;
-  if (rawRole === "admin" || rawRole === "operacao" || rawRole === "financeiro" || rawRole === "atendimento") {
-    return rawRole;
-  }
-  return "admin";
-}
 
 type AuthContextValue = {
   profile: AppUserProfile | null;

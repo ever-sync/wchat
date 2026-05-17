@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getE2eChatNegotiation } from "@/data/crm-e2e-fixtures";
+import { isE2eMockAuth } from "@/lib/e2e";
 import { requireSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { ChatResolution, CrmNegotiationRecord } from "@/types/domain";
 import { mapCrmNegotiationDbRow } from "@/lib/crm/negotiation-model";
@@ -101,8 +103,16 @@ export function useEnsureLeadFromChat() {
 export function useChatNegotiation(chatId: string | null) {
   return useQuery({
     queryKey: ["chat-negotiation", chatId],
-    queryFn: () => (chatId ? fetchChatNegotiation(chatId) : Promise.resolve(null)),
-    enabled: Boolean(chatId) && isSupabaseConfigured,
+    queryFn: () => {
+      if (!chatId) {
+        return Promise.resolve(null);
+      }
+      if (isE2eMockAuth) {
+        return Promise.resolve(getE2eChatNegotiation(chatId));
+      }
+      return fetchChatNegotiation(chatId);
+    },
+    enabled: Boolean(chatId) && (isSupabaseConfigured || isE2eMockAuth),
   });
 }
 

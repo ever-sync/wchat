@@ -41,11 +41,42 @@ export function canAtendimentoActOnChat(
 }
 
 export function negotiationAssigneeBlockedMessage(): string {
-  return "Assuma o negócio para trabalhar neste lead. Só é possível alterar negócios atribuídos a você.";
+  return assumeNegotiationToEditCrmMessage();
 }
 
 export function chatAssigneeBlockedMessage(): string {
-  return "Assuma a conversa para interagir. Só é possível trabalhar em conversas atribuídas a você.";
+  return assumeConversationToReplyMessage();
+}
+
+/** Conversa atribuída a outro atendente (deep link / RLS). */
+export function chatAssignedToOtherAttendantMessage(): string {
+  return "Conversa atribuída a outro atendente.";
+}
+
+export function assumeConversationToReplyMessage(): string {
+  return "Assuma a conversa para responder.";
+}
+
+export function assumeNegotiationToEditCrmMessage(): string {
+  return "Assuma o negócio para alterar o CRM.";
+}
+
+export function managerOnlyTransferConversationMessage(): string {
+  return "Apenas gestor pode transferir esta conversa.";
+}
+
+export function managerOnlyReleaseToPoolMessage(): string {
+  return "Apenas gestor pode devolver ao pool.";
+}
+
+/** Chat e negócio vinculados no pool: oferecer assumir os dois de uma vez. */
+export function shouldOfferInboxClaimBoth(
+  chatAssigneeId: string | null | undefined,
+  negotiationAssigneeId: string | null | undefined,
+): boolean {
+  const chatOpen = !chatAssigneeId?.trim();
+  const negOpen = !negotiationAssigneeId?.trim();
+  return chatOpen && negOpen;
 }
 
 /** Perfil do cliente: bloqueia CRM se houver negócio em andamento não assumido pelo atendente. */

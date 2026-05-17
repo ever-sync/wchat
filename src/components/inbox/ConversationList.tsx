@@ -37,6 +37,11 @@ export type ConversationListProps = {
   /** @deprecated Navegação ficou no rail estilo WhatsApp; mantido por compatibilidade. */
   showPainelExit?: boolean;
   searchInputRef?: RefObject<HTMLInputElement>;
+  /** Gestor: filtra inbox por atendente específico. */
+  assigneeFilterOptions?: ReadonlyArray<{ id: string; name: string }>;
+  /** Gestor: atalho para fila sem responsável. */
+  managerUnassignedCount?: number;
+  onOpenUnassignedQueue?: () => void;
 };
 
 type FilterSelectsProps = {
@@ -49,6 +54,7 @@ type FilterSelectsProps = {
   onSnoozedFilterChange: (value: "active" | "snoozed") => void;
   assigneeFilter: string;
   onAssigneeFilterChange: (value: string) => void;
+  assigneeFilterOptions?: ReadonlyArray<{ id: string; name: string }>;
 };
 
 function ConversationFilterSelects({
@@ -61,6 +67,7 @@ function ConversationFilterSelects({
   onSnoozedFilterChange,
   assigneeFilter,
   onAssigneeFilterChange,
+  assigneeFilterOptions,
 }: FilterSelectsProps) {
   return (
     <>
@@ -118,6 +125,11 @@ function ConversationFilterSelects({
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="mine">Meus</SelectItem>
             <SelectItem value="unassigned">Sem responsável</SelectItem>
+            {assigneeFilterOptions?.map((user) => (
+              <SelectItem key={user.id} value={user.id}>
+                {user.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -218,6 +230,9 @@ export function ConversationList({
   onSelectChat,
   onPrefetchChat,
   searchInputRef,
+  assigneeFilterOptions,
+  managerUnassignedCount,
+  onOpenUnassignedQueue,
 }: ConversationListProps) {
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
@@ -276,6 +291,7 @@ export function ConversationList({
                     onSnoozedFilterChange={onSnoozedFilterChange}
                     assigneeFilter={assigneeFilter}
                     onAssigneeFilterChange={onAssigneeFilterChange}
+                    assigneeFilterOptions={assigneeFilterOptions}
                   />
                   <div className="border-t border-border pt-2.5">
                     <p className="mb-2 text-xs font-medium text-muted-foreground">Etiquetas</p>
@@ -300,6 +316,18 @@ export function ConversationList({
             </button>
           </div>
         </div>
+
+        {managerUnassignedCount != null && managerUnassignedCount > 0 && onOpenUnassignedQueue ? (
+          <button
+            type="button"
+            data-testid="inbox-manager-queue"
+            onClick={onOpenUnassignedQueue}
+            className="mt-2 flex w-full items-center justify-between rounded-lg border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-left text-xs font-medium text-amber-950 transition-colors hover:bg-amber-100/80"
+          >
+            <span>Fila: {managerUnassignedCount} sem responsável</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">Ver</span>
+          </button>
+        ) : null}
 
         <div className="mt-2 space-y-2">
           <div className="relative">

@@ -114,6 +114,7 @@ export function ConversationRow({
   return (
     <button
       type="button"
+      data-testid={`inbox-chat-${chat.id}`}
       onClick={onClick}
       onPointerEnter={onPointerEnter}
       className={cn(
