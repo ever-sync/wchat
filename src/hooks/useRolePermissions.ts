@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantRolePermissions } from "@/lib/api/role-permissions";
 import {
+  DEFAULT_ROLE_PERMISSIONS,
   canRolePermission,
   type PermissionAction,
   type PermissionFunctionKey,
@@ -10,15 +11,13 @@ import {
 export function useRolePermissions() {
   const { profile } = useAuth();
   const { data: config, isLoading } = useTenantRolePermissions();
+  const effectiveConfig = config ?? DEFAULT_ROLE_PERMISSIONS;
 
   const can = useMemo(
     () => (fn: PermissionFunctionKey, action: PermissionAction) => {
-      if (!config) {
-        return true;
-      }
-      return canRolePermission(config, profile?.role, fn, action);
+      return canRolePermission(effectiveConfig, profile?.role, fn, action);
     },
-    [config, profile?.role],
+    [effectiveConfig, profile?.role],
   );
 
   return { can, isLoading, config };

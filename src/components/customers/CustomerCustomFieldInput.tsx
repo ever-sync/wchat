@@ -16,7 +16,6 @@ import {
   customFieldKindHasInputMask,
   getCustomFieldInputMaxLength,
 } from "@/lib/custom-field-masks";
-import type { CustomFieldKind } from "@/lib/custom-field-kinds";
 
 export type CustomFieldDefinitionLike = {
   id: string;
@@ -32,6 +31,7 @@ type CustomerCustomFieldInputProps = {
   id?: string;
   labelClassName?: string;
   inputClassName?: string;
+  disabled?: boolean;
 };
 
 function boolFromValue(value: string): boolean {
@@ -124,6 +124,7 @@ export function CustomerCustomFieldInput({
   id,
   labelClassName,
   inputClassName = "rounded-[10px]",
+  disabled = false,
 }: CustomerCustomFieldInputProps) {
   const inputId = id ?? `customer-custom-${field.id}`;
   const { kind } = field;
@@ -138,6 +139,7 @@ export function CustomerCustomFieldInput({
           <Switch
             id={inputId}
             checked={boolFromValue(value)}
+            disabled={disabled}
             onCheckedChange={(checked) => onChange(checked ? "1" : "0")}
           />
           <span className="text-sm text-muted-foreground">{boolFromValue(value) ? "Sim" : "Não"}</span>
@@ -149,7 +151,7 @@ export function CustomerCustomFieldInput({
   if (kind === "lista" && options.length > 0) {
     return (
       <FieldShell label={field.nome} labelClassName={labelClassName} htmlFor={inputId}>
-        <Select value={value || undefined} onValueChange={onChange}>
+        <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger id={inputId} className={inputClassName}>
             <SelectValue placeholder="Selecione…" />
           </SelectTrigger>
@@ -171,6 +173,7 @@ export function CustomerCustomFieldInput({
         <Textarea
           id={inputId}
           value={value}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           className={inputClassName}
           rows={3}
@@ -187,12 +190,14 @@ export function CustomerCustomFieldInput({
             id={inputId}
             type="color"
             value={value || "#6366f1"}
+            disabled={disabled}
             onChange={(e) => onChange(e.target.value)}
             className="h-10 w-14 cursor-pointer rounded-[10px] p-1"
           />
           <Input
             type="text"
             value={value}
+            disabled={disabled}
             onChange={(e) => onChange(e.target.value)}
             placeholder="#6366f1"
             className={`${inputClassName} flex-1`}
@@ -213,6 +218,7 @@ export function CustomerCustomFieldInput({
         placeholder={inputProps.placeholder}
         maxLength={maxLength}
         value={value}
+        disabled={disabled}
         onChange={(e) =>
           isMasked
             ? handleMaskedChange(kind, e.target.value, onChange)

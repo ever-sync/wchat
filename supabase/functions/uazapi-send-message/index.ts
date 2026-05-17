@@ -125,9 +125,44 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { admin, tenantId } = await requireTenantContext(request);
+    const { admin, tenantId, userId } = await requireTenantContext(request);
     const body = await request.json();
     const instance = await getInstanceById(admin, String(body.instanceId));
+    if (instance.tenant_id !== tenantId) {
+      throw new Error("WhatsApp instance not found.");
+    }
+
+    const { data: actor, error: actorError } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .eq("tenant_id", tenantId)
+      .single();
+    if (actorError || !actor?.role) {
+      throw new Error("Permissão negada.");
+    }
+
+    const actorRole = String(actor.role);
+    if (!["admin", "operacao", "atendimento"].includes(actorRole)) {
+      throw new Error("Permissão negada para enviar mensagens.");
+    }
+
+    if (actorRole === "atendimento") {
+      const { data: existingChat, error: chatError } = await admin
+        .from("whatsapp_chats")
+        .select("assignee_id")
+        .eq("tenant_id", tenantId)
+        .eq("instance_id", instance.id)
+        .eq("remote_jid", String(body.remoteJid))
+        .maybeSingle();
+      if (chatError) {
+        throw new Error(chatError.message);
+      }
+      if (!existingChat || existingChat.assignee_id !== userId) {
+        throw new Error("Assuma a conversa para enviar mensagens.");
+      }
+    }
+
     const apiKey = await decryptSecret(instance.encrypted_apikey);
     const config = {
       instanceName: instance.uazapi_instance_name,

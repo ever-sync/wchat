@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import { useCustomers } from "@/lib/api/customers";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import {
@@ -140,6 +141,7 @@ type CustomerLeadSheetProps = {
   customer?: Customer | null;
   initialOverrides?: Partial<CustomerUpsertInput>;
   loading?: boolean;
+  disabled?: boolean;
 };
 
 export function CustomerLeadSheet({
@@ -149,6 +151,7 @@ export function CustomerLeadSheet({
   customer,
   initialOverrides,
   loading = false,
+  disabled = false,
 }: CustomerLeadSheetProps) {
   const { toast } = useToast();
   const isEdit = Boolean(customer);
@@ -220,6 +223,15 @@ export function CustomerLeadSheet({
   }, [customer, fieldDefs, initialOverrides, open, toast]);
 
   async function handleSubmit() {
+    if (disabled) {
+      toast({
+        title: "Assuma a conversa",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+
     const phone = normalizePhone(telefone);
     if (!phone.jid) {
       toast({
@@ -275,6 +287,7 @@ export function CustomerLeadSheet({
   const isBusy = loading || savingCustomFields;
   const hasCustomFields = fieldDefs.length > 0;
   const phoneValid = Boolean(normalizePhone(telefone).jid);
+  const isReadOnly = disabled || isBusy;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -288,6 +301,12 @@ export function CustomerLeadSheet({
             <SheetTitle className={sheetUi.title}>{isEdit ? "Editar contato" : "Criar contato"}</SheetTitle>
           </SheetHeader>
 
+          {disabled ? (
+            <div className="mx-6 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              {negotiationAssigneeBlockedMessage()}
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-6 py-5">
             <div className="flex flex-col gap-5">
               <div className="space-y-2">
@@ -299,6 +318,7 @@ export function CustomerLeadSheet({
                   className={sheetUi.input}
                   placeholder="Nome do contato"
                   value={nome}
+                  disabled={isReadOnly}
                   onChange={(event) => setNome(event.target.value)}
                   autoComplete="name"
                 />
@@ -314,6 +334,7 @@ export function CustomerLeadSheet({
                   className={sheetUi.input}
                   placeholder="email@exemplo.com"
                   value={email}
+                  disabled={isReadOnly}
                   onChange={(event) => setEmail(event.target.value)}
                   autoComplete="email"
                 />
@@ -328,6 +349,7 @@ export function CustomerLeadSheet({
                   className={sheetUi.input}
                   placeholder="+55 (11) 99999-9999"
                   value={telefone}
+                  disabled={isReadOnly}
                   onChange={(event) => setTelefone(event.target.value)}
                   onBlur={(event) => {
                     const v = event.target.value.trim();
@@ -357,6 +379,7 @@ export function CustomerLeadSheet({
                         key={field.id}
                         field={field}
                         value={customValues[field.id] ?? ""}
+                        disabled={isReadOnly}
                         onChange={(value) =>
                           setCustomValues((current) => ({ ...current, [field.id]: value }))
                         }
@@ -376,7 +399,7 @@ export function CustomerLeadSheet({
               type="button"
               variant="ghost"
               className={sheetUi.btnSecondary}
-              disabled={isBusy}
+              disabled={isReadOnly}
               onClick={() => onOpenChange(false)}
             >
               Cancelar
@@ -384,7 +407,7 @@ export function CustomerLeadSheet({
             <Button
               type="button"
               className={sheetUi.btnPrimary}
-              disabled={isBusy || !phoneValid}
+              disabled={isReadOnly || !phoneValid}
               onClick={() => void handleSubmit()}
             >
               {isBusy ? (

@@ -68,6 +68,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import {
   type ListCrmNegotiationsFilters,
   useClaimCrmNegotiation,
@@ -351,7 +352,9 @@ export default function Crm() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   const profileId = profile?.id;
+  const canEditCrm = can("crm", "edit");
   const { data: customers = [] } = useCustomers({});
   const { data: stageOverrides = {} } = useCrmNegotiationStageOverrides();
   const upsertStageOverride = useUpsertCrmNegotiationStageOverride();
@@ -1243,7 +1246,16 @@ export default function Crm() {
         <Button
           type="button"
           className="h-9 gap-1.5 rounded-md bg-[#4E1BB1] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#3C1494]"
+          disabled={!canEditCrm}
           onClick={() => {
+            if (!canEditCrm) {
+              toast({
+                title: "Ação indisponível",
+                description: "Seu papel nao tem permissao para criar negociações.",
+                variant: "destructive",
+              });
+              return;
+            }
             if (!isSupabaseConfigured) {
               toast({
                 title: "Supabase necessário",
@@ -1259,7 +1271,16 @@ export default function Crm() {
         </Button>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen && canEditCrm}
+        onOpenChange={(open) => {
+          if (!canEditCrm) {
+            setCreateOpen(false);
+            return;
+          }
+          setCreateOpen(open);
+        }}
+      >
         <DialogContent className="border-[#dee2e6] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nova negociação</DialogTitle>
@@ -1313,9 +1334,17 @@ export default function Crm() {
             <Button
               type="button"
               className="bg-[#4E1BB1] hover:bg-[#3C1494]"
-              disabled={createCrmNegotiation.isPending}
+              disabled={createCrmNegotiation.isPending || !canEditCrm}
               onClick={() => {
                 void (async () => {
+                  if (!canEditCrm) {
+                    toast({
+                      title: "Ação indisponível",
+                      description: "Seu papel nao tem permissao para criar negociações.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   const title = newNegotiationTitle.trim();
                   if (!title) {
                     toast({

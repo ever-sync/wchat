@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
   useCollaboratorInvites,
@@ -115,6 +116,7 @@ function qrSrc(value?: string | null) {
 export default function Configuracoes() {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<SettingsTab>(() => parseSettingsTabParam(searchParams.get("aba")));
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -144,13 +146,18 @@ export default function Configuracoes() {
   const [sessionHint, setSessionHint] = useState("");
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(true);
   const canUseAuthenticatedActions = !diagnosticsLoading && sessionStatus === "valid";
+  const canViewCollaborators = can("colaboradores", "view");
+  const canEditConfiguracoes = can("configuracoes", "edit");
+  const canDeleteConfiguracoes = can("configuracoes", "delete");
+  const canEditCollaborators = can("colaboradores", "edit");
+  const canDeleteCollaborators = can("colaboradores", "delete");
 
   const abaKey = searchParams.get("aba");
   useEffect(() => {
     setTab(parseSettingsTabParam(abaKey));
   }, [abaKey]);
 
-  const handleTabChange = (value: string) => {
+  const handleTabChange = useCallback((value: string) => {
     const next = parseSettingsTabParam(value);
     setTab(next);
     setSearchParams(
@@ -165,7 +172,13 @@ export default function Configuracoes() {
       },
       { replace: true },
     );
-  };
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (tab === "colaboradores" && !canViewCollaborators) {
+      handleTabChange("perfil");
+    }
+  }, [canViewCollaborators, handleTabChange, tab]);
 
   const { data: myProfile } = useMyProfile({ enabled: tab !== "integracoes" && canUseAuthenticatedActions });
   const { data: savedCrmFunnels, isLoading: crmFunnelsLoading } = useTenantCrmFunnelConfig({
@@ -370,7 +383,12 @@ export default function Configuracoes() {
         <TabsList className="h-auto flex-wrap justify-start rounded-2xl border border-border/60 bg-card/80 p-1">
           <TabsTrigger value="perfil"><UserCog className="mr-2 h-4 w-4" />Perfil</TabsTrigger>
           <TabsTrigger value="integracoes"><MessageSquare className="mr-2 h-4 w-4" />Integracoes</TabsTrigger>
-          <TabsTrigger value="colaboradores"><Users className="mr-2 h-4 w-4" />Colaboradores</TabsTrigger>
+          {canViewCollaborators ? (
+            <TabsTrigger value="colaboradores">
+              <Users className="mr-2 h-4 w-4" />
+              Colaboradores
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="funis"><BarChart3 className="mr-2 h-4 w-4" />Funis CRM</TabsTrigger>
           <TabsTrigger value="respostas"><Zap className="mr-2 h-4 w-4" />Respostas Rapidas</TabsTrigger>
         </TabsList>
@@ -405,8 +423,22 @@ export default function Configuracoes() {
               <div className="flex justify-end">
                 <Button
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
-                  disabled={updateProfile.isPending || !profileName.trim() || !profileCompany.trim() || !canUseAuthenticatedActions}
+                  disabled={
+                    updateProfile.isPending ||
+                    !profileName.trim() ||
+                    !profileCompany.trim() ||
+                    !canUseAuthenticatedActions ||
+                    !canEditConfiguracoes
+                  }
                   onClick={async () => {
+                    if (!canEditConfiguracoes) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para salvar o perfil.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     if (!canUseAuthenticatedActions) {
                       toast({
                         title: "Sessao indisponivel",
@@ -484,6 +516,14 @@ export default function Configuracoes() {
               <Button
                 variant="outline"
                 onClick={() => {
+                  if (!canEditConfiguracoes) {
+                    toast({
+                      title: "Ação indisponível",
+                      description: "Seu papel nao tem permissao para sincronizar instancias.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   if (!canUseAuthenticatedActions) {
                     toast({
                       title: "Sessao indisponivel",
@@ -500,14 +540,29 @@ export default function Configuracoes() {
 
                   syncInstances.mutate({});
                 }}
-                disabled={syncInstances.isPending || !canUseAuthenticatedActions}
+                disabled={syncInstances.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
               >
                 {syncInstances.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Sincronizar tudo
               </Button>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <Dialog
+                open={dialogOpen && canEditConfiguracoes}
+                onOpenChange={(open) => {
+                  if (!canEditConfiguracoes) {
+                    setDialogOpen(false);
+                    return;
+                  }
+                  setDialogOpen(open);
+                }}
+              >
                 <DialogTrigger asChild>
-                  <Button className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="mr-2 h-4 w-4" />Nova instancia</Button>
+                  <Button
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    disabled={!canEditConfiguracoes}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nova instancia
+                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
@@ -532,8 +587,16 @@ export default function Configuracoes() {
                     </div>
                     <Button
                       className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                      disabled={connectInstance.isPending || !displayName || !apiKey || !canUseAuthenticatedActions}
+                      disabled={connectInstance.isPending || !displayName || !apiKey || !canUseAuthenticatedActions || !canEditConfiguracoes}
                       onClick={async () => {
+                        if (!canEditConfiguracoes) {
+                          toast({
+                            title: "Ação indisponível",
+                            description: "Seu papel nao tem permissao para conectar uma instancia.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         if (!canUseAuthenticatedActions) {
                           toast({
                             title: "Sessao indisponivel",
@@ -641,9 +704,18 @@ export default function Configuracoes() {
                               return;
                             }
 
-                            syncInstances.mutate({ instanceId: instance.id });
-                          }}
-                          disabled={syncInstances.isPending || !canUseAuthenticatedActions}
+                          if (!canEditConfiguracoes) {
+                            toast({
+                              title: "Ação indisponível",
+                              description: "Seu papel nao tem permissao para sincronizar instancias.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+
+                          syncInstances.mutate({ instanceId: instance.id });
+                        }}
+                          disabled={syncInstances.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
                         >
                           <RefreshCw className="mr-2 h-4 w-4" />
                           Sync
@@ -665,6 +737,14 @@ export default function Configuracoes() {
                               return;
                             }
 
+                            if (!canEditConfiguracoes) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel nao tem permissao para remover uma instancia.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             await deleteInstance.mutateAsync(instance.id);
                             const archived = `${instance.displayName} saiu da operacao e as conversas ficaram arquivadas.`;
                             toast({ title: "Canal arquivado", description: archived });
@@ -674,7 +754,7 @@ export default function Configuracoes() {
                               descricao: archived,
                             });
                           }}
-                          disabled={deleteInstance.isPending || !canUseAuthenticatedActions}
+                          disabled={deleteInstance.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Remover
@@ -781,8 +861,16 @@ export default function Configuracoes() {
               </div>
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
-                disabled={!canUseAuthenticatedActions || upsertIntegrations.isPending}
+                disabled={!canUseAuthenticatedActions || upsertIntegrations.isPending || !canEditConfiguracoes}
                 onClick={async () => {
+                  if (!canEditConfiguracoes) {
+                    toast({
+                      title: "Ação indisponível",
+                      description: "Seu papel nao tem permissao para salvar integrações.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   try {
                     await upsertIntegrations.mutateAsync({
                       n8nWebhookUrl: n8nUrl.trim() || null,
@@ -836,7 +924,8 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="colaboradores" className="space-y-6">
+        {canViewCollaborators ? (
+          <TabsContent value="colaboradores" className="space-y-6">
           <RolePermissionsMatrix
             canEdit={myProfile?.role === "admin"}
             disabled={!canUseAuthenticatedActions}
@@ -871,8 +960,22 @@ export default function Configuracoes() {
                 </div>
                 <Button
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                  disabled={inviteCollaborator.isPending || myProfile?.role !== "admin" || !inviteName.trim() || !inviteEmail.trim() || !canUseAuthenticatedActions}
+                  disabled={
+                    inviteCollaborator.isPending ||
+                    !canUseAuthenticatedActions ||
+                    !canEditCollaborators ||
+                    !inviteName.trim() ||
+                    !inviteEmail.trim()
+                  }
                   onClick={async () => {
+                    if (!canEditCollaborators) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para criar acessos.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     if (!canUseAuthenticatedActions) {
                       toast({
                         title: "Sessao indisponivel",
@@ -924,7 +1027,7 @@ export default function Configuracoes() {
                   {inviteCollaborator.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                   Criar acesso
                 </Button>
-                {myProfile?.role !== "admin" ? <p className="text-xs text-warning">Somente administradores podem convidar colaboradores.</p> : null}
+                {!canEditCollaborators ? <p className="text-xs text-warning">Seu papel nao tem permissão para convidar colaboradores.</p> : null}
               </CardContent>
             </Card>
 
@@ -958,7 +1061,8 @@ export default function Configuracoes() {
                             disabled={
                               resendingInviteId === invite.id ||
                               inviteCollaborator.isPending ||
-                              !canUseAuthenticatedActions
+                              !canUseAuthenticatedActions ||
+                              !canEditCollaborators
                             }
                             onClick={async () => {
                               if (!canUseAuthenticatedActions) {
@@ -1014,8 +1118,16 @@ export default function Configuracoes() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={revokeInvite.isPending || !canUseAuthenticatedActions}
+                            disabled={revokeInvite.isPending || !canUseAuthenticatedActions || !canEditCollaborators}
                             onClick={async () => {
+                              if (!canEditCollaborators) {
+                                toast({
+                                  title: "Ação indisponível",
+                                  description: "Seu papel nao tem permissao para revogar convites.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
                               if (!canUseAuthenticatedActions) {
                                 toast({
                                   title: "Sessao indisponivel",
@@ -1062,19 +1174,23 @@ export default function Configuracoes() {
                             deletingInviteId === invite.id ||
                             deleteInvite.isPending ||
                             !canUseAuthenticatedActions ||
-                            myProfile?.role !== "admin"
+                            !canDeleteCollaborators
                           }
                           onClick={async () => {
+                            if (!canDeleteCollaborators) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel nao tem permissao para excluir convites.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             if (!canUseAuthenticatedActions) {
                               toast({
                                 title: "Sessao indisponivel",
                                 description: "Faca login novamente antes de excluir convites.",
                                 variant: "destructive",
                               });
-                              return;
-                            }
-
-                            if (myProfile?.role !== "admin") {
                               return;
                             }
 
@@ -1110,7 +1226,8 @@ export default function Configuracoes() {
               </Card>
             </div>
           </div>
-        </TabsContent>
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="funis" className="space-y-6">
           <Card className="border-border/60 bg-card/80">
@@ -1160,8 +1277,16 @@ export default function Configuracoes() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
-                      disabled={upsertCrmFunnels.isPending || !canUseAuthenticatedActions}
+                      disabled={upsertCrmFunnels.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
                       onClick={() => {
+                        if (!canEditConfiguracoes) {
+                          toast({
+                            title: "Ação indisponível",
+                            description: "Seu papel nao tem permissao para salvar funis.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         if (!canUseAuthenticatedActions) {
                           toast({
                             title: "Sessão indisponível",
@@ -1213,8 +1338,16 @@ export default function Configuracoes() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={deleteCrmFunnels.isPending || !canUseAuthenticatedActions}
+                      disabled={deleteCrmFunnels.isPending || !canUseAuthenticatedActions || !canDeleteConfiguracoes}
                       onClick={() => {
+                        if (!canDeleteConfiguracoes) {
+                          toast({
+                            title: "Ação indisponível",
+                            description: "Seu papel nao tem permissao para remover funis.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         if (!canUseAuthenticatedActions) {
                           return;
                         }
@@ -1263,7 +1396,16 @@ export default function Configuracoes() {
                 <Button
                   size="sm"
                   className="rounded-xl"
+                  disabled={!canEditConfiguracoes}
                   onClick={() => {
+                    if (!canEditConfiguracoes) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para criar respostas rápidas.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     setQrEditingId(null);
                     setQrTitle("");
                     setQrShortcut("");
@@ -1308,7 +1450,16 @@ export default function Configuracoes() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 rounded-lg"
+                          disabled={!canEditConfiguracoes}
                           onClick={() => {
+                            if (!canEditConfiguracoes) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel nao tem permissao para editar respostas rápidas.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             setQrEditingId(qr.id);
                             setQrTitle(qr.title);
                             setQrShortcut(qr.shortcut ?? "");
@@ -1323,8 +1474,16 @@ export default function Configuracoes() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                          disabled={deleteQR.isPending}
+                          disabled={deleteQR.isPending || !canDeleteConfiguracoes}
                           onClick={() => {
+                            if (!canDeleteConfiguracoes) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel nao tem permissao para excluir respostas rápidas.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             void deleteQR.mutateAsync(qr.id).then(() => {
                               toast({ title: "Resposta removida" });
                             }).catch((e: Error) => {
@@ -1345,7 +1504,16 @@ export default function Configuracoes() {
       </Tabs>
 
       {/* Dialog criar / editar resposta rápida */}
-      <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
+      <Dialog
+        open={qrDialogOpen && canEditConfiguracoes}
+        onOpenChange={(open) => {
+          if (!canEditConfiguracoes) {
+            setQrDialogOpen(false);
+            return;
+          }
+          setQrDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle>{qrEditingId ? "Editar resposta" : "Nova resposta rápida"}</DialogTitle>
@@ -1404,8 +1572,16 @@ export default function Configuracoes() {
             </Button>
             <Button
               className="rounded-xl"
-              disabled={!qrTitle.trim() || !qrBodyText.trim() || createQR.isPending || updateQR.isPending}
+              disabled={!canEditConfiguracoes || !qrTitle.trim() || !qrBodyText.trim() || createQR.isPending || updateQR.isPending}
               onClick={() => {
+                if (!canEditConfiguracoes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para salvar respostas rápidas.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 const payload = {
                   title: qrTitle.trim(),
                   shortcut: qrShortcut.trim() || null,

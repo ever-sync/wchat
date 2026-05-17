@@ -299,6 +299,7 @@ export function MessageInput({
           {onNoteModeChange ? (
             <button
               type="button"
+              disabled={composerActionsDisabled}
               onClick={() => onNoteModeChange(!noteMode)}
               className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${noteMode ? "bg-[#4a3500] text-[#f5d96a] hover:bg-[#5c4400]" : "text-muted-foreground hover:bg-wchat-200 hover:text-foreground"}`}
               title={noteMode ? "Sair do modo nota" : "Escrever nota interna"}
@@ -322,6 +323,7 @@ export function MessageInput({
           ref={bodyTextareaRef}
           value={bodyText}
           rows={1}
+          disabled={composerActionsDisabled}
           data-gramm_editor="false"
           data-grammarly-ignore="true"
           onChange={(event) => onBodyTextChange(event.target.value)}
@@ -378,7 +380,7 @@ export function MessageInput({
               "h-11 shrink-0 rounded-full px-5 text-foreground shadow-none",
               noteMode ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-wchat-700 text-primary-foreground",
             )}
-            disabled={sendDisabled}
+            disabled={sendDisabled || composerActionsDisabled}
             aria-busy={sendPending || attachmentUploading}
             onClick={() => {
               void onSend();

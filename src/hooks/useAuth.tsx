@@ -10,7 +10,15 @@ import type { Session, User } from "@supabase/supabase-js";
 import { E2E_MOCK_PROFILE_ID, isE2eMockAuth } from "@/lib/e2e";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
-import type { AppUserProfile, AuthCredentials, SignUpPayload } from "@/types/domain";
+import type { AppUserProfile, AuthCredentials, SignUpPayload, UserRole } from "@/types/domain";
+
+function getE2eMockRole(): UserRole {
+  const rawRole = import.meta.env.VITE_E2E_MOCK_ROLE;
+  if (rawRole === "admin" || rawRole === "operacao" || rawRole === "financeiro" || rawRole === "atendimento") {
+    return rawRole;
+  }
+  return "admin";
+}
 
 type AuthContextValue = {
   profile: AppUserProfile | null;
@@ -62,13 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isE2eMockAuth) {
+      const mockRole = getE2eMockRole();
       setProfile({
         id: E2E_MOCK_PROFILE_ID,
         nome: "E2E User",
         email: "e2e@wchat.test",
         empresa: "E2E Tenant",
         plano: "starter",
-        role: "admin",
+        role: mockRole,
         status: "active",
       });
       setSession(null);

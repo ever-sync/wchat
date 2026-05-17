@@ -74,6 +74,7 @@ import {
   maskCurrencyInputChange,
   parseCurrencyInput,
 } from "@/lib/currency-input";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { cn } from "@/lib/utils";
 
 const PAGE_TABS = ["produtos", "campos", "categorias"] as const;
@@ -151,8 +152,11 @@ const screen =
 
 export default function Produtos() {
   const { toast } = useToast();
+  const { can } = useRolePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseTab(searchParams.get("aba"));
+  const canEditProdutos = can("produtos", "edit");
+  const canDeleteProdutos = can("produtos", "delete");
 
   const setTab = useCallback(
     (next: PageTab) => {
@@ -259,6 +263,14 @@ export default function Produtos() {
   }, [dialogOpen, editingId, fieldDefs]);
 
   const openCreate = () => {
+    if (!canEditProdutos) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para criar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditingId(null);
     const base = defaultProductInput();
     setForm({
@@ -271,6 +283,14 @@ export default function Produtos() {
   };
 
   const openEdit = (p: Product) => {
+    if (!canEditProdutos) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para editar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditingId(p.id);
     setForm(productToInput(p));
     setValorDisplay(formatCurrencyInput(p.precoVenda));
@@ -278,6 +298,14 @@ export default function Produtos() {
   };
 
   const saveProduct = async () => {
+    if (!canEditProdutos) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para salvar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!form.nome.trim()) {
       toast({ title: "Informe o nome do produto", variant: "destructive" });
       return;
@@ -365,7 +393,13 @@ export default function Produtos() {
                   <CardTitle className="text-base">Seus produtos</CardTitle>
                   <CardDescription>Nome e valor são os dados principais de cada item.</CardDescription>
                 </div>
-                <Button type="button" size="sm" className="gap-2 rounded-[10px]" onClick={openCreate}>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2 rounded-[10px]"
+                  disabled={!canEditProdutos}
+                  onClick={openCreate}
+                >
                   <Plus className="h-4 w-4" />
                   Novo produto
                 </Button>
@@ -432,6 +466,7 @@ export default function Produtos() {
                                   variant="ghost"
                                   size="sm"
                                   className="h-8 gap-1 rounded-[8px]"
+                                  disabled={!canEditProdutos}
                                   onClick={() => openEdit(p)}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
@@ -443,6 +478,7 @@ export default function Produtos() {
                                   size="icon"
                                   className="h-8 w-8 rounded-[8px] text-destructive hover:text-destructive"
                                   aria-label={`Excluir ${p.nome}`}
+                                  disabled={!canDeleteProdutos}
                                   onClick={() => setProductToDelete(p)}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -506,8 +542,16 @@ export default function Produtos() {
                       <Button
                         type="button"
                         className="w-full rounded-[10px]"
-                        disabled={!canSubmitField}
+                        disabled={!canEditProdutos || !canSubmitField}
                         onClick={() => {
+                          if (!canEditProdutos) {
+                            toast({
+                              title: "Ação indisponível",
+                              description: "Seu papel nao tem permissao para cadastrar campos.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           createField.mutate(
                             {
                               nome: newFieldNome,
@@ -577,6 +621,7 @@ export default function Produtos() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-destructive"
+                                disabled={!canDeleteProdutos}
                                 onClick={() => setFieldToDelete({ id: f.id, nome: f.nome })}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -614,8 +659,16 @@ export default function Produtos() {
                   <Button
                     type="button"
                     className="rounded-[10px]"
-                    disabled={!newCategoryNome.trim() || createCategory.isPending}
+                    disabled={!canEditProdutos || !newCategoryNome.trim() || createCategory.isPending}
                     onClick={() => {
+                      if (!canEditProdutos) {
+                        toast({
+                          title: "Ação indisponível",
+                          description: "Seu papel nao tem permissao para cadastrar categorias.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       createCategory.mutate(newCategoryNome.trim(), {
                         onSuccess: () => {
                           toast({ title: "Categoria criada" });
@@ -661,6 +714,7 @@ export default function Produtos() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-destructive"
+                                disabled={!canDeleteProdutos}
                                 onClick={() => setCategoryToDelete({ id: c.id, nome: c.nome })}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -718,8 +772,16 @@ export default function Produtos() {
                   <Button
                     type="button"
                     className="rounded-[10px]"
-                    disabled={!linkProductId || setProductCats.isPending}
-                    onClick={() =>
+                    disabled={!canEditProdutos || !linkProductId || setProductCats.isPending}
+                    onClick={() => {
+                      if (!canEditProdutos) {
+                        toast({
+                          title: "Ação indisponível",
+                          description: "Seu papel nao tem permissao para salvar vínculos.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       setProductCats.mutate(
                         { productId: linkProductId, categoryIds: linkCats },
                         {
@@ -727,8 +789,8 @@ export default function Produtos() {
                           onError: (e) =>
                             toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" }),
                         },
-                      )
-                    }
+                      );
+                    }}
                   >
                     {setProductCats.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Salvar vínculos
@@ -740,7 +802,16 @@ export default function Produtos() {
         </Tabs>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen && canEditProdutos}
+        onOpenChange={(open) => {
+          if (!canEditProdutos) {
+            setDialogOpen(false);
+            return;
+          }
+          setDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-[12px] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar produto" : "Novo produto"}</DialogTitle>
@@ -805,7 +876,7 @@ export default function Produtos() {
             <Button
               type="button"
               className="rounded-[10px]"
-              disabled={createProduct.isPending || updateProduct.isPending}
+              disabled={!canEditProdutos || createProduct.isPending || updateProduct.isPending}
               onClick={() => void saveProduct()}
             >
               {(createProduct.isPending || updateProduct.isPending) && (
@@ -817,7 +888,18 @@ export default function Produtos() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={Boolean(productToDelete)} onOpenChange={(o) => !o && setProductToDelete(null)}>
+      <AlertDialog
+        open={Boolean(productToDelete) && canDeleteProdutos}
+        onOpenChange={(open) => {
+          if (!canDeleteProdutos) {
+            setProductToDelete(null);
+            return;
+          }
+          if (!open) {
+            setProductToDelete(null);
+          }
+        }}
+      >
         <AlertDialogContent className="rounded-[12px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir produto?</AlertDialogTitle>
@@ -828,14 +910,22 @@ export default function Produtos() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-[10px]" disabled={deleteProducts.isPending}>
+            <AlertDialogCancel className="rounded-[10px]" disabled={deleteProducts.isPending || !canDeleteProdutos}>
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               className="rounded-[10px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteProducts.isPending}
+              disabled={deleteProducts.isPending || !canDeleteProdutos}
               onClick={(e) => {
                 e.preventDefault();
+                if (!canDeleteProdutos) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para excluir produtos.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 if (!productToDelete) {
                   return;
                 }
@@ -871,7 +961,18 @@ export default function Produtos() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={Boolean(categoryToDelete)} onOpenChange={(o) => !o && setCategoryToDelete(null)}>
+      <AlertDialog
+        open={Boolean(categoryToDelete) && canDeleteProdutos}
+        onOpenChange={(open) => {
+          if (!canDeleteProdutos) {
+            setCategoryToDelete(null);
+            return;
+          }
+          if (!open) {
+            setCategoryToDelete(null);
+          }
+        }}
+      >
         <AlertDialogContent className="rounded-[12px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
@@ -880,10 +981,19 @@ export default function Produtos() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-[10px]" disabled={!canDeleteProdutos}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-[10px]"
+              disabled={!canDeleteProdutos}
               onClick={() => {
+                if (!canDeleteProdutos) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para excluir categorias.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 if (!categoryToDelete) return;
                 deleteCategory.mutate(categoryToDelete.id, {
                   onSuccess: () => {
@@ -901,7 +1011,18 @@ export default function Produtos() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={Boolean(fieldToDelete)} onOpenChange={(o) => !o && setFieldToDelete(null)}>
+      <AlertDialog
+        open={Boolean(fieldToDelete) && canDeleteProdutos}
+        onOpenChange={(open) => {
+          if (!canDeleteProdutos) {
+            setFieldToDelete(null);
+            return;
+          }
+          if (!open) {
+            setFieldToDelete(null);
+          }
+        }}
+      >
         <AlertDialogContent className="rounded-[12px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir campo?</AlertDialogTitle>
@@ -910,10 +1031,19 @@ export default function Produtos() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-[10px]" disabled={!canDeleteProdutos}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="rounded-[10px]"
+              disabled={!canDeleteProdutos}
               onClick={() => {
+                if (!canDeleteProdutos) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para excluir campos.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 if (!fieldToDelete) return;
                 deleteField.mutate(fieldToDelete.id, {
                   onSuccess: () => {

@@ -1153,6 +1153,7 @@ export function CustomerProfileSheet({
 
     <CustomerLeadSheet
       open={leadSheetOpen}
+      disabled={crmActionsLocked}
       onOpenChange={(next) => {
         setLeadSheetOpen(next);
         if (!next) {

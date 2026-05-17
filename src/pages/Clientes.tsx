@@ -60,6 +60,7 @@ import {
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { useRoutes } from "@/lib/api/routes";
 import { useToast } from "@/hooks/use-toast";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useAppStore } from "@/store/useAppStore";
 import { buildCustomersCsv, buildMinimalCustomerImportTemplateCsv, parseCustomersSpreadsheet } from "@/lib/customers-csv";
 import { normalizePhone } from "@/lib/phone";
@@ -219,6 +220,7 @@ export default function Clientes() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+  const { can } = useRolePermissions();
   const [search, setSearch] = useState("");
   const [filterPerfil, setFilterPerfil] = useState("todos");
   const [filterStatus, setFilterStatus] = useState("todos");
@@ -248,6 +250,8 @@ export default function Clientes() {
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canEditClientes = can("clientes", "edit");
+  const canDeleteClientes = can("clientes", "delete");
 
   const openCustomerProfile = (customerId: string) => {
     setProfileCustomerId(customerId);
@@ -724,7 +728,24 @@ export default function Clientes() {
             >
               <Calendar className="h-5 w-5" />
             </Button>
-            <Button type="button" variant="ghost" className={ui.btnSecondary} onClick={() => fileInputRef.current?.click()}>
+            <Button
+              type="button"
+              variant="ghost"
+              className={ui.btnSecondary}
+              disabled={!canEditClientes}
+              title={!canEditClientes ? "Seu papel nao tem permissao para importar contatos." : undefined}
+              onClick={() => {
+                if (!canEditClientes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para importar contatos.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+            >
               <Upload className="h-4 w-4 shrink-0" />
               Importar
             </Button>
@@ -732,7 +753,17 @@ export default function Clientes() {
               type="button"
               variant="ghost"
               className={ui.btnPrimary}
+              disabled={!canEditClientes}
+              title={!canEditClientes ? "Seu papel nao tem permissao para cadastrar clientes." : undefined}
               onClick={() => {
+                if (!canEditClientes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para cadastrar clientes.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 setSheetCustomer(null);
                 setNewCustomerPrefill(null);
                 setPendingInboxChatId(null);
@@ -749,18 +780,42 @@ export default function Clientes() {
                   <MoreHorizontal className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setQuickPasteOpen((c) => !c);
-                  }}
-                >
-                  Colar contatos
-                </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem
+                    disabled={!canEditClientes}
+                    onClick={() => {
+                      if (!canEditClientes) {
+                        toast({
+                          title: "Ação indisponível",
+                          description: "Seu papel nao tem permissao para colar contatos.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setQuickPasteOpen((c) => !c);
+                    }}
+                  >
+                    Colar contatos
+                  </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => downloadMinimalImportTemplate()}>Baixar modelo (telefone)</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => exportCustomers(filtered, "clientes-export")}>Exportar CSV</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCustomFieldsOpen(true)}>Campos personalizados</DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canEditClientes}
+                  onClick={() => {
+                    if (!canEditClientes) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para editar campos personalizados.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    setCustomFieldsOpen(true);
+                  }}
+                >
+                  Campos personalizados
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -936,7 +991,16 @@ export default function Clientes() {
                               Abrir em tela cheia
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={!canEditClientes}
                               onClick={() => {
+                                if (!canEditClientes) {
+                                  toast({
+                                    title: "Ação indisponível",
+                                    description: "Seu papel nao tem permissao para editar este contato.",
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
                                 setSheetCustomer(customer);
                                 setNewCustomerPrefill(null);
                                 setPendingInboxChatId(null);
@@ -950,6 +1014,7 @@ export default function Clientes() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
+                              disabled={!canDeleteClientes}
                               onClick={() => setDeleteTarget(customer)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -1030,9 +1095,29 @@ export default function Clientes() {
         ) : null}
       </div>
 
-      <CustomerCustomFieldsDialog open={customFieldsOpen} onOpenChange={setCustomFieldsOpen} />
+      <CustomerCustomFieldsDialog
+        open={customFieldsOpen && canEditClientes}
+        onOpenChange={(open) => {
+          if (!canEditClientes) {
+            setCustomFieldsOpen(false);
+            return;
+          }
+          setCustomFieldsOpen(open);
+        }}
+      />
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialog
+        open={Boolean(deleteTarget) && canDeleteClientes}
+        onOpenChange={(open) => {
+          if (!canDeleteClientes) {
+            setDeleteTarget(null);
+            return;
+          }
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
         <AlertDialogContent className="rounded-[12px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir contato?</AlertDialogTitle>
@@ -1043,12 +1128,20 @@ export default function Clientes() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteCustomers.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteCustomers.isPending || !canDeleteClientes}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteCustomers.isPending}
+              disabled={deleteCustomers.isPending || !canDeleteClientes}
               onClick={(e) => {
                 e.preventDefault();
+                if (!canDeleteClientes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para excluir contatos.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 if (!deleteTarget) {
                   return;
                 }
@@ -1103,9 +1196,13 @@ export default function Clientes() {
       </Sheet>
 
       <CustomerLeadSheet
-        open={dialogOpen}
+        open={dialogOpen && canEditClientes}
         customer={sheetCustomer}
         onOpenChange={(open) => {
+          if (!canEditClientes) {
+            setDialogOpen(false);
+            return;
+          }
           setDialogOpen(open);
           if (!open) {
             setSheetCustomer(null);
@@ -1178,8 +1275,14 @@ export default function Clientes() {
       />
 
       <CustomerImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
+        open={importDialogOpen && canEditClientes}
+        onOpenChange={(open) => {
+          if (!canEditClientes) {
+            setImportDialogOpen(false);
+            return;
+          }
+          setImportDialogOpen(open);
+        }}
         rows={importRows}
         errors={importErrors}
         fileName={importFileName}

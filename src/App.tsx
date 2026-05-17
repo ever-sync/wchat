@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
+import { PermissionRoute, ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Cadastro from "./pages/Cadastro";
 import CadastroPlano from "./pages/CadastroPlano";
@@ -83,18 +83,69 @@ const App = () => (
                     <Route
                       path="/inbox"
                       element={
-                        <RouteErrorBoundary title="Erro ao carregar o Inbox">
-                          <Inbox />
-                        </RouteErrorBoundary>
+                        <PermissionRoute permission="inbox">
+                          <RouteErrorBoundary title="Erro ao carregar o Inbox">
+                            <Inbox />
+                          </RouteErrorBoundary>
+                        </PermissionRoute>
                       }
                     />
-                    <Route path="/clientes" element={<Clientes />} />
-                    <Route path="/clientes/:id" element={<ClientePerfil />} />
-                    <Route path="/crm" element={<Crm />} />
-                    <Route path="/crm/negociacao/:negotiationId" element={<CrmNegotiationDetail />} />
-                    <Route path="/produtos" element={<Produtos />} />
-                    <Route path="/relatorios" element={<Relatorios />} />
-                    <Route path="/configuracoes" element={<Configuracoes />} />
+                    <Route
+                      path="/clientes"
+                      element={
+                        <PermissionRoute permission="clientes">
+                          <Clientes />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/clientes/:id"
+                      element={
+                        <PermissionRoute permission="clientes">
+                          <ClientePerfil />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/crm"
+                      element={
+                        <PermissionRoute permission="crm">
+                          <Crm />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/crm/negociacao/:negotiationId"
+                      element={
+                        <PermissionRoute permission="crm">
+                          <CrmNegotiationDetail />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/produtos"
+                      element={
+                        <PermissionRoute permission="produtos">
+                          <Produtos />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/relatorios"
+                      element={
+                        <PermissionRoute permission="relatorios">
+                          <Relatorios />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/configuracoes"
+                      element={
+                        <PermissionRoute permission="configuracoes">
+                          <Configuracoes />
+                        </PermissionRoute>
+                      }
+                    />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />

@@ -12,20 +12,22 @@ import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { cn } from "@/lib/utils";
 
 type MenuItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
+  permission: "inbox" | "crm" | "clientes" | "produtos" | "relatorios" | "configuracoes";
 };
 
 const primaryItems: MenuItem[] = [
-  { title: "Chat", url: "/inbox", icon: MessageCircle },
-  { title: "CRM", url: "/crm", icon: Briefcase },
-  { title: "Clientes", url: "/clientes", icon: Users2 },
-  { title: "Produtos", url: "/produtos", icon: Package },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Chat", url: "/inbox", icon: MessageCircle, permission: "inbox" },
+  { title: "CRM", url: "/crm", icon: Briefcase, permission: "crm" },
+  { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
+  { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
+  { title: "Relatórios", url: "/relatorios", icon: BarChart3, permission: "relatorios" },
 ];
 
 function SidebarTooltip({
@@ -84,6 +86,7 @@ export function AppSidebar() {
   const pathname = useLocation().pathname;
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
+  const { can } = useRolePermissions();
 
   const isSettingsActive = pathname === "/configuracoes" || pathname.startsWith("/configuracoes/");
   const initials =
@@ -100,7 +103,7 @@ export function AppSidebar() {
       aria-label="Navegacao principal"
     >
       <div className="flex flex-col items-center gap-1 px-2">
-        {primaryItems.map((item) => (
+        {primaryItems.filter((item) => can(item.permission, "view")).map((item) => (
           <RailNavLink key={item.url} item={item} pathname={pathname} />
         ))}
       </div>
@@ -129,22 +132,24 @@ export function AppSidebar() {
           </TooltipContent>
         </Tooltip>
 
-        <SidebarTooltip label="Configuracoes">
-          <NavLink
-            to="/configuracoes"
-            title="Configuracoes"
-            aria-label="Configuracoes"
-            className={cn(
-              "flex h-12 w-12 items-center justify-center rounded-full transition-colors duration-150",
-              isSettingsActive
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-wchat-100 hover:text-primary",
-            )}
-            activeClassName=""
-          >
-            <Settings2 className="h-[22px] w-[22px]" aria-hidden />
-          </NavLink>
-        </SidebarTooltip>
+        {can("configuracoes", "view") ? (
+          <SidebarTooltip label="Configuracoes">
+            <NavLink
+              to="/configuracoes"
+              title="Configuracoes"
+              aria-label="Configuracoes"
+              className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-full transition-colors duration-150",
+                isSettingsActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-wchat-100 hover:text-primary",
+              )}
+              activeClassName=""
+            >
+              <Settings2 className="h-[22px] w-[22px]" aria-hidden />
+            </NavLink>
+          </SidebarTooltip>
+        ) : null}
 
         <SidebarTooltip label="Sair">
           <button

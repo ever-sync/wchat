@@ -13,6 +13,7 @@ import {
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import {
   funnelStageTitleIn,
   resolveConfiguredSaleStageId,
@@ -49,8 +50,10 @@ type ChatCrmHeaderProps = {
 export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   const profileId = profile?.id;
   const canActOnChat = canAtendimentoActOnChat(profile?.role, chat.assigneeId, profileId);
+  const canEditCrm = can("crm", "edit");
 
   const { data: funnels } = useEffectiveCrmFunnels();
   const { data: negotiation } = useChatNegotiation(chat.id);
@@ -83,6 +86,14 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
 
   const handleEnsureLead = () => {
     if (!chat.customerId) return;
+    if (!canEditCrm) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para criar ou vincular lead no CRM.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!canActOnChat) {
       toast({
         title: "Assuma a conversa",
@@ -172,15 +183,25 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-emerald-700"
-            disabled={!canActOnChat || !canModifyNegotiation}
+            disabled={!canActOnChat || !canModifyNegotiation || !canEditCrm}
             title={
               !canActOnChat
                 ? chatAssigneeBlockedMessage()
                 : !canModifyNegotiation
                   ? negotiationAssigneeBlockedMessage()
+                  : !canEditCrm
+                    ? "Seu papel nao tem permissao para marcar vendido"
                   : undefined
             }
             onClick={() => {
+              if (!canEditCrm) {
+                toast({
+                  title: "Ação indisponível",
+                  description: "Seu papel nao tem permissao para marcar vendido.",
+                  variant: "destructive",
+                });
+                return;
+              }
               if (!canActOnChat || !canModifyNegotiation) {
                 toast({
                   title: !canActOnChat ? "Assuma a conversa" : "Assuma o negócio",
@@ -214,6 +235,14 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
           negotiations={customerNegotiations}
           pending={ensureLead.isPending || linkNegotiation.isPending}
           onLinkExisting={(negotiationId) => {
+            if (!canEditCrm) {
+              toast({
+                title: "Ação indisponível",
+                description: "Seu papel nao tem permissao para vincular ao CRM.",
+                variant: "destructive",
+              });
+              return;
+            }
             if (!canActOnChat) {
               toast({
                 title: "Assuma a conversa",
@@ -227,6 +256,14 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
               .then(() => setDealChoiceOpen(false));
           }}
           onCreateNew={() => {
+            if (!canEditCrm) {
+              toast({
+                title: "Ação indisponível",
+                description: "Seu papel nao tem permissao para criar lead no CRM.",
+                variant: "destructive",
+              });
+              return;
+            }
             if (!canActOnChat) {
               toast({
                 title: "Assuma a conversa",

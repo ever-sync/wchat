@@ -2,16 +2,17 @@ import { Briefcase, LogOut, MessageSquare, Package, Settings2, Users2 } from "lu
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { cn } from "@/lib/utils";
 
 type NavIcon = typeof MessageSquare;
 
-const linkItems: { title: string; url: string; icon: NavIcon }[] = [
-  { title: "Chat", url: "/inbox", icon: MessageSquare },
-  { title: "CRM", url: "/crm", icon: Briefcase },
-  { title: "Clientes", url: "/clientes", icon: Users2 },
-  { title: "Produtos", url: "/produtos", icon: Package },
-  { title: "Ajustes", url: "/configuracoes", icon: Settings2 },
+const linkItems: { title: string; url: string; icon: NavIcon; permission: "inbox" | "crm" | "clientes" | "produtos" | "configuracoes" }[] = [
+  { title: "Chat", url: "/inbox", icon: MessageSquare, permission: "inbox" },
+  { title: "CRM", url: "/crm", icon: Briefcase, permission: "crm" },
+  { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
+  { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
+  { title: "Ajustes", url: "/configuracoes", icon: Settings2, permission: "configuracoes" },
 ];
 
 function pathMatches(pathname: string, url: string) {
@@ -25,6 +26,7 @@ export function MobileNav() {
   const pathname = useLocation().pathname;
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { can } = useRolePermissions();
 
   return (
     <nav
@@ -32,7 +34,7 @@ export function MobileNav() {
       aria-label="Navegacao principal"
     >
       <div className="flex items-stretch justify-between gap-0.5">
-        {linkItems.map((item) => {
+        {linkItems.filter((item) => can(item.permission, "view")).map((item) => {
           const isActive = pathMatches(pathname, item.url);
 
           return (

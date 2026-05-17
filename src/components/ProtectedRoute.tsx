@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
+import type { PermissionAction, PermissionFunctionKey } from "@/lib/permissions/role-permissions";
 
 function FullScreenMessage({ children }: { children: ReactNode }) {
   return (
@@ -33,6 +35,30 @@ export function PublicOnlyRoute({ children }: { children: ReactNode }) {
 
   if (isAuthenticated) {
     return <Navigate to="/inbox" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+export function PermissionRoute({
+  permission,
+  action = "view",
+  fallback = "/inbox",
+  children,
+}: {
+  permission: PermissionFunctionKey;
+  action?: PermissionAction;
+  fallback?: string;
+  children: ReactNode;
+}) {
+  const { can, isLoading: permissionsLoading } = useRolePermissions();
+
+  if (permissionsLoading) {
+    return <FullScreenMessage>Carregando permissões...</FullScreenMessage>;
+  }
+
+  if (!can(permission, action)) {
+    return <Navigate to={fallback} replace />;
   }
 
   return <>{children}</>;

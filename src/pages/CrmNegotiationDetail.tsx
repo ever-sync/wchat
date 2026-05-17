@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
   type CrmNegotiationPatch,
@@ -226,7 +227,10 @@ function CrmNegotiationDetailContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   const profileId = profile?.id;
+  const canEditCrm = can("crm", "edit");
+  const canDeleteCrm = can("crm", "delete");
   const queryClient = useQueryClient();
   const updateNegotiation = useUpdateCrmNegotiation();
   const claimCrmNegotiation = useClaimCrmNegotiation();
@@ -282,6 +286,7 @@ function CrmNegotiationDetailContent({
     negotiation.assigneeId,
     profileId,
   );
+  const canManageCrm = canEditCrm && canModifyNegotiation;
 
   const showClaimNegotiation =
     isPersistedRow && isSupabaseConfigured && Boolean(profileId) && isNegotiationUnassigned(negotiation.assigneeId);
@@ -380,7 +385,7 @@ function CrmNegotiationDetailContent({
     const next = new URLSearchParams(searchParams);
     next.delete("criarTarefa");
     setSearchParams(next, { replace: true });
-    if (!canModifyNegotiation) {
+    if (!canManageCrm) {
       toast({
         title: "Assuma o negócio",
         description: negotiationAssigneeBlockedMessage(),
@@ -389,7 +394,7 @@ function CrmNegotiationDetailContent({
       return;
     }
     setTaskDialogOpen(true);
-  }, [canModifyNegotiation, searchParams, setSearchParams, toast]);
+  }, [canManageCrm, searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     if (taskDialogOpen) {
@@ -549,7 +554,9 @@ function CrmNegotiationDetailContent({
         }
         negotiationPanelCustomerLinked={Boolean(linkedCustomer)}
         negotiationPanelSavePending={updateNegotiation.isPending || updateCustomer.isPending}
-        negotiationReadOnly={!canModifyNegotiation}
+        negotiationReadOnly={!canManageCrm}
+        customerActionsDisabled={!canManageCrm}
+        crmActionsDisabled={!canManageCrm}
         mainTabDefault={searchParams.get("criarTarefa") === "1" ? "tarefas" : "historico"}
         onBack={() => navigate("/crm")}
         onRefresh={() => {
@@ -572,8 +579,8 @@ function CrmNegotiationDetailContent({
         crmTasksLoading={taskIntegration ? crmTasksLoading : false}
         crmTaskAssignees={taskIntegration ? crmTaskAssignees : undefined}
         onCompleteCrmTask={(taskId) => {
-          if (!taskIntegration || !canModifyNegotiation) {
-            if (!canModifyNegotiation) {
+          if (!taskIntegration || !canManageCrm) {
+            if (!canManageCrm) {
               toast({
                 title: "Assuma o negócio",
                 description: negotiationAssigneeBlockedMessage(),
@@ -603,7 +610,7 @@ function CrmNegotiationDetailContent({
           })();
         }}
         onReopenCrmTask={
-          taskIntegration && canModifyNegotiation
+          taskIntegration && canManageCrm
             ? (taskId) => {
                 void (async () => {
                   const merged = [...crmTasksByNegotiation, ...crmTasksCustomerUnlinked];
@@ -630,7 +637,7 @@ function CrmNegotiationDetailContent({
         crmCompleteTaskPending={updateCrmTask.isPending}
         crmDeleteTaskPending={deleteCrmTask.isPending}
         onDeleteCrmTask={
-          taskIntegration && canModifyNegotiation
+          taskIntegration && canManageCrm && canDeleteCrm
             ? (taskId) => {
                 void (async () => {
                   try {
@@ -649,7 +656,7 @@ function CrmNegotiationDetailContent({
         }
         crmEditTaskPending={updateCrmTask.isPending}
         onSaveCrmTaskEdit={
-          taskIntegration && canModifyNegotiation
+          taskIntegration && canManageCrm
             ? async ({ id: taskId, patch }) => {
                 const merged = [...crmTasksByNegotiation, ...crmTasksCustomerUnlinked];
                 const t = merged.find((x) => x.id === taskId);
@@ -673,7 +680,7 @@ function CrmNegotiationDetailContent({
             : undefined
         }
         onMarkLoss={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -699,7 +706,7 @@ function CrmNegotiationDetailContent({
           setLostDialogOpen(true);
         }}
         onMarkWin={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -725,7 +732,7 @@ function CrmNegotiationDetailContent({
           setWinDialogOpen(true);
         }}
         onEdit={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -744,7 +751,7 @@ function CrmNegotiationDetailContent({
           navigate("/clientes");
         }}
         onOpenInbox={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -755,7 +762,7 @@ function CrmNegotiationDetailContent({
           openCustomerInbox();
         }}
         onBlock={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -778,7 +785,7 @@ function CrmNegotiationDetailContent({
           setLostDialogOpen(true);
         }}
         onCreateNote={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -796,7 +803,7 @@ function CrmNegotiationDetailContent({
           });
         }}
         onCreateTask={() => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -825,7 +832,7 @@ function CrmNegotiationDetailContent({
             <CrmNegotiationDocumentsSection
               negotiationId={negotiation.id}
               enabled={taskIntegration}
-              readOnly={!canModifyNegotiation}
+              readOnly={!canManageCrm}
             />
           ) : undefined
         }
@@ -840,7 +847,7 @@ function CrmNegotiationDetailContent({
           ) : undefined
         }
         onPipelineStageChange={(idx) => {
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),
@@ -1083,7 +1090,7 @@ function CrmNegotiationDetailContent({
               className="bg-[#4E1BB1] hover:bg-[#3C1494]"
               disabled={createCustomer.isPending || updateNegotiation.isPending}
               onClick={() => {
-                if (!canModifyNegotiation) {
+                if (!canManageCrm) {
                   toast({
                     title: "Assuma o negócio",
                     description: negotiationAssigneeBlockedMessage(),
@@ -1142,7 +1149,7 @@ function CrmNegotiationDetailContent({
             toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
             return;
           }
-          if (!canModifyNegotiation) {
+          if (!canManageCrm) {
             toast({
               title: "Assuma o negócio",
               description: negotiationAssigneeBlockedMessage(),

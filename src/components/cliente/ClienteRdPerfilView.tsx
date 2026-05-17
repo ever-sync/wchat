@@ -640,6 +640,10 @@ export type ClienteRdPerfilViewProps = {
   mainTabDefault?: string;
   /** Bloqueia alterações no lead até assumir (atendimento sem responsável). */
   negotiationReadOnly?: boolean;
+  /** Bloqueia ações de cliente como editar cadastro e bloquear/reativar. */
+  customerActionsDisabled?: boolean;
+  /** Bloqueia ações do CRM como etapa, tarefa, ganho/perda e assumir/devolver. */
+  crmActionsDisabled?: boolean;
 };
 
 export function ClienteRdPerfilView({
@@ -684,6 +688,8 @@ export function ClienteRdPerfilView({
   negotiationPanelCustomerLinked,
   mainTabDefault = "historico",
   negotiationReadOnly = false,
+  customerActionsDisabled = false,
+  crmActionsDisabled = false,
 }: ClienteRdPerfilViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -894,12 +900,14 @@ export function ClienteRdPerfilView({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
                     <DropdownMenuItem
-                      disabled={negotiationReadOnly}
+                      disabled={negotiationReadOnly || customerActionsDisabled}
                       onClick={() => {
-                        if (negotiationReadOnly) {
+                        if (negotiationReadOnly || customerActionsDisabled) {
                           toast({
-                            title: "Assuma o negócio",
-                            description: negotiationAssigneeBlockedMessage(),
+                            title: "Ação indisponível",
+                            description: negotiationReadOnly
+                              ? negotiationAssigneeBlockedMessage()
+                              : "Seu papel nao tem permissao para editar este cadastro.",
                             variant: "destructive",
                           });
                           return;
@@ -910,16 +918,7 @@ export function ClienteRdPerfilView({
                       Editar cadastro
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      disabled={negotiationReadOnly}
                       onClick={() => {
-                        if (negotiationReadOnly) {
-                          toast({
-                            title: "Assuma o negócio",
-                            description: negotiationAssigneeBlockedMessage(),
-                            variant: "destructive",
-                          });
-                          return;
-                        }
                         onOpenInbox();
                       }}
                     >
@@ -928,12 +927,14 @@ export function ClienteRdPerfilView({
                     {cliente.status !== "bloqueado" ? (
                       <DropdownMenuItem
                         className="text-red-600 focus:text-red-600"
-                        disabled={negotiationReadOnly}
+                        disabled={negotiationReadOnly || customerActionsDisabled}
                         onClick={() => {
-                          if (negotiationReadOnly) {
+                          if (negotiationReadOnly || customerActionsDisabled) {
                             toast({
-                              title: "Assuma o negócio",
-                              description: negotiationAssigneeBlockedMessage(),
+                              title: "Ação indisponível",
+                              description: negotiationReadOnly
+                                ? negotiationAssigneeBlockedMessage()
+                                : "Seu papel nao tem permissao para bloquear este cliente.",
                               variant: "destructive",
                             });
                             return;
@@ -971,7 +972,7 @@ export function ClienteRdPerfilView({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 lg:shrink-0">
-            {showClaimNegotiation && onClaimNegotiation ? (
+            {showClaimNegotiation && onClaimNegotiation && !crmActionsDisabled && !negotiationReadOnly ? (
               <Button
                 type="button"
                 className="rounded-[10px] border-0 bg-primary px-4 py-2.5 font-semibold text-primary-foreground shadow-none hover:bg-primary/90"
@@ -982,7 +983,7 @@ export function ClienteRdPerfilView({
                 {claimNegotiationPending ? "Assumindo…" : "Assumir negócio"}
               </Button>
             ) : null}
-            {showReleaseNegotiation && onReleaseNegotiation ? (
+            {showReleaseNegotiation && onReleaseNegotiation && !crmActionsDisabled && !negotiationReadOnly ? (
               <Button
                 type="button"
                 variant="outline"
@@ -998,8 +999,14 @@ export function ClienteRdPerfilView({
               type="button"
               data-testid="crm-mark-loss"
               className="rounded-[10px] border-0 bg-red-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-red-700 disabled:opacity-50"
-              disabled={negotiationReadOnly}
-              title={negotiationReadOnly ? "Assuma o negócio para marcar perda" : undefined}
+              disabled={negotiationReadOnly || crmActionsDisabled}
+              title={
+                negotiationReadOnly
+                  ? "Assuma o negócio para marcar perda"
+                  : crmActionsDisabled
+                    ? "Seu papel nao tem permissao para marcar perda"
+                    : undefined
+              }
               onClick={onMarkLoss}
             >
               <ThumbsDown className="mr-2 h-4 w-4" />
@@ -1008,8 +1015,14 @@ export function ClienteRdPerfilView({
             <Button
               type="button"
               className="rounded-[10px] border-0 bg-emerald-600 px-4 py-2.5 font-semibold text-white shadow-none hover:bg-emerald-700 disabled:opacity-50"
-              disabled={negotiationReadOnly}
-              title={negotiationReadOnly ? "Assuma o negócio para marcar venda" : undefined}
+              disabled={negotiationReadOnly || crmActionsDisabled}
+              title={
+                negotiationReadOnly
+                  ? "Assuma o negócio para marcar venda"
+                  : crmActionsDisabled
+                    ? "Seu papel nao tem permissao para marcar venda"
+                    : undefined
+              }
               onClick={onMarkWin}
             >
               <ThumbsUp className="mr-2 h-4 w-4" />
@@ -1028,7 +1041,7 @@ export function ClienteRdPerfilView({
       <PipelineChevrons
         activeIndex={pipelineActiveIndex}
         daysContact={daysContact}
-        onStageSelect={negotiationReadOnly ? undefined : onPipelineStageChange}
+        onStageSelect={negotiationReadOnly || crmActionsDisabled ? undefined : onPipelineStageChange}
       />
 
       <div className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 md:px-6 lg:grid-cols-[minmax(280px,340px)_1fr] lg:items-start">
@@ -1041,7 +1054,7 @@ export function ClienteRdPerfilView({
             <div className="flex items-center justify-between border-b border-[#eceff1] bg-[#f5f5f5] px-2 py-2 pl-4 md:px-3">
               <span className="text-sm font-semibold text-[#37474f]">Negociação</span>
               <div className="flex shrink-0 items-center">
-                {onSaveNegotiationPanel && negotiationPanelSnapshot && !negotiationReadOnly ? (
+                {onSaveNegotiationPanel && negotiationPanelSnapshot && !negotiationReadOnly && !crmActionsDisabled ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -1320,8 +1333,14 @@ export function ClienteRdPerfilView({
                   type="button"
                   className="border-0 py-2.5 font-semibold text-white shadow-none hover:opacity-95 disabled:opacity-50"
                   style={{ backgroundColor: BRAND_ACCENT, borderRadius: RD_RADIUS }}
-                  disabled={negotiationReadOnly}
-                  title={negotiationReadOnly ? "Assuma o negócio para criar anotação" : undefined}
+                  disabled={negotiationReadOnly || customerActionsDisabled}
+                  title={
+                    negotiationReadOnly
+                      ? "Assuma o negócio para criar anotação"
+                      : customerActionsDisabled
+                        ? "Seu papel nao tem permissao para criar anotação"
+                        : undefined
+                  }
                   onClick={onCreateNote}
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -1402,7 +1421,7 @@ export function ClienteRdPerfilView({
                 onCreateTask={onCreateTask}
                 openTaskEdit={openTaskEdit}
                 onRequestDeleteTask={(t) => setCrmTaskDelete(t)}
-                readOnly={negotiationReadOnly}
+                readOnly={negotiationReadOnly || crmActionsDisabled}
               />
             </TabsContent>
             <TabsContent

@@ -93,6 +93,7 @@ import {
 } from "@/lib/crm/negotiation-assignee";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { isChatSnoozed } from "@/lib/inbox-chat-rules";
 import { useQuickReplies } from "@/lib/api/quick-replies";
 import { isSupabaseConfigured } from "@/lib/supabase";
@@ -226,6 +227,7 @@ function formatDateTime(value?: string | null) {
 export default function Inbox() {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   useInboxChatsRealtime(isSupabaseConfigured);
   const [searchParams, setSearchParams] = useSearchParams();
   const messagesScrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -337,6 +339,8 @@ export default function Inbox() {
   const clearSnoozeMutation = useClearChatSnooze();
 
   const profileId = profile?.id;
+  const canEditInbox = can("inbox", "edit");
+  const canEditCrm = can("crm", "edit");
 
   const inboxChatsFilter = useMemo((): InboxChatFilters => {
     const quick = inboxFiltersFromQuickFilter(quickFilter, profileId);
@@ -839,6 +843,14 @@ export default function Inbox() {
     if (!activeChat) {
       return;
     }
+    if (!canEditCrm) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para registrar vendas ou devoluções.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!canActOnChat) {
       toast({
         title: "Assuma a conversa",
@@ -1070,6 +1082,14 @@ export default function Inbox() {
   }
 
   async function handleConfirmSaleFlow() {
+    if (!canEditCrm) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para registrar vendas ou devoluções.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!canActOnChat) {
       toast({
         title: "Assuma a conversa",
@@ -1764,6 +1784,14 @@ export default function Inbox() {
       });
       return;
     }
+    if (!canEditInbox) {
+      toast({
+        title: "Ação indisponível",
+        description: "Seu papel nao tem permissao para enviar mensagens.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (sendMessage.isPending) {
       return;
@@ -1920,11 +1948,12 @@ export default function Inbox() {
                       onClick={() => void claimChatMutation.mutateAsync(activeChat.id)}
                       disabled={
                         claimChatMutation.isPending ||
+                        !canEditInbox ||
                         claimCrmNegotiation.isPending ||
                         releaseCrmNegotiation.isPending
                       }
                       className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                      title="Assumir conversa"
+                      title={!canEditInbox ? "Seu papel nao tem permissao para assumir conversa" : "Assumir conversa"}
                     >
                       <Hand className="h-4 w-4" />
                       <span className="hidden sm:inline">Assumir</span>
@@ -1953,7 +1982,8 @@ export default function Inbox() {
                       disabled={
                         claimCrmNegotiation.isPending ||
                         claimChatMutation.isPending ||
-                        releaseCrmNegotiation.isPending
+                        releaseCrmNegotiation.isPending ||
+                        !canEditCrm
                       }
                       className="inline-flex h-10 items-center gap-2 rounded-full border border-[#c4b5fd] bg-[#F3EBFC] px-3 text-sm font-medium text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
                       title="Assumir negócio do pool (CRM)"
@@ -1985,7 +2015,8 @@ export default function Inbox() {
                       disabled={
                         releaseCrmNegotiation.isPending ||
                         claimCrmNegotiation.isPending ||
-                        claimChatMutation.isPending
+                        claimChatMutation.isPending ||
+                        !canEditCrm
                       }
                       className="inline-flex h-10 items-center gap-2 rounded-full border border-[#c4b5fd] bg-[#F3EBFC] px-3 text-sm font-medium text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
                       title="Devolver negócio ao pool (CRM)"
@@ -1998,6 +2029,14 @@ export default function Inbox() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!canEditInbox) {
+                          toast({
+                            title: "Ação indisponível",
+                            description: "Seu papel nao tem permissao para adiar conversa.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         if (!canActOnChat) {
                           toast({
                             title: "Assuma a conversa",
@@ -2008,7 +2047,7 @@ export default function Inbox() {
                         }
                         void clearSnoozeMutation.mutateAsync(activeChat.id);
                       }}
-                      disabled={clearSnoozeMutation.isPending || !canActOnChat}
+                      disabled={clearSnoozeMutation.isPending || !canActOnChat || !canEditInbox}
                       className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-amber-800 transition-colors hover:bg-amber-100"
                       title="Remover adiamento"
                     >
@@ -2018,6 +2057,14 @@ export default function Inbox() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!canEditInbox) {
+                          toast({
+                            title: "Ação indisponível",
+                            description: "Seu papel nao tem permissao para adiar conversa.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
                         if (!canActOnChat) {
                           toast({
                             title: "Assuma a conversa",
@@ -2028,7 +2075,7 @@ export default function Inbox() {
                         }
                         setSnoozeDialogOpen(true);
                       }}
-                      disabled={!canActOnChat}
+                      disabled={!canActOnChat || !canEditInbox}
                       className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
                       title={canActOnChat ? "Adiar conversa" : chatAssigneeBlockedMessage()}
                     >
@@ -2038,6 +2085,14 @@ export default function Inbox() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (!canEditInbox) {
+                        toast({
+                          title: "Ação indisponível",
+                          description: "Seu papel nao tem permissao para atribuir conversa.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       if (!canActOnChat && activeChat.assigneeId) {
                         toast({
                           title: "Assuma a conversa",
@@ -2050,8 +2105,15 @@ export default function Inbox() {
                       setAssignDialogSelectedUser(activeChat.assigneeId ?? "");
                       setAssignDialogOpen(true);
                     }}
+                    disabled={!canEditInbox}
                     className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                    title={activeChat.assigneeName ? `Responsável: ${activeChat.assigneeName}` : "Atribuir ou transferir conversa"}
+                    title={
+                      !canEditInbox
+                        ? "Seu papel nao tem permissao para atribuir conversa"
+                        : activeChat.assigneeName
+                          ? `Responsável: ${activeChat.assigneeName}`
+                          : "Atribuir ou transferir conversa"
+                    }
                   >
                     <UserPlus className="h-4 w-4" />
                     {activeChat.assigneeName ? (
@@ -2092,9 +2154,11 @@ export default function Inbox() {
                   <button
                     type="button"
                     onClick={handleOpenSaleFlow}
-                    disabled={!canMarkSaleFromChat}
+                    disabled={!canMarkSaleFromChat || !canEditCrm || !canEditInbox}
                     title={
-                      !canActOnChat
+                      !canEditCrm
+                        ? "Seu papel nao tem permissao para registrar venda"
+                        : !canActOnChat
                         ? chatAssigneeBlockedMessage()
                         : !canModifyLinkedNegotiation
                           ? negotiationAssigneeBlockedMessage()
@@ -2183,7 +2247,7 @@ export default function Inbox() {
               })
             }
             syncPending={syncInbox.isPending}
-            syncDisabled={syncInbox.isPending || !activeChat}
+            syncDisabled={syncInbox.isPending || !activeChat || !canEditInbox}
             mediaUrl={mediaUrl}
             onMediaUrlChange={setMediaUrl}
             payloadText={payloadText}
@@ -2203,12 +2267,13 @@ export default function Inbox() {
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
+              !canEditInbox ||
               inboxLeadLocked ||
               (messageType === "text"
                 ? !bodyText.trim()
                 : !bodyText.trim() && !mediaUrl.trim())
             }
-            composerActionsDisabled={inboxLeadLocked}
+            composerActionsDisabled={inboxLeadLocked || !canEditInbox}
             showEmojiPicker={showEmojiPicker}
             onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
             onAppendEmoji={appendEmoji}
@@ -2241,7 +2306,7 @@ export default function Inbox() {
         onOpenChange={setProfileOpen}
         chat={activeChat}
         messages={messages}
-        crmActionsLocked={inboxLeadLocked}
+        crmActionsLocked={inboxLeadLocked || !canEditInbox || !canEditCrm}
       />
 
       {/* Diálogo de atribuição/transferência de conversa */}

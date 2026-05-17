@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
 import { useAuth } from "@/hooks/useAuth";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 import { CrmSaleItemsPreview } from "@/components/crm/CrmSaleItemsPreview";
 import { useCustomer, useUpdateCustomer } from "@/lib/api/customers";
@@ -290,6 +291,7 @@ export function ClientePerfilContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { can } = useRolePermissions();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
@@ -300,7 +302,7 @@ export function ClientePerfilContent({
   const { data: cliente, isLoading, error } = useCustomer(id);
 
   useEffect(() => {
-    if (!cliente || searchParams.get("copoPersonalizado") !== "1") {
+    if (!cliente || searchParams.get("copoPersonalizado") !== "1" || !can("clientes", "edit")) {
       return;
     }
     setDialogOpen(true);
@@ -311,7 +313,7 @@ export function ClientePerfilContent({
     const next = new URLSearchParams(searchParams);
     next.delete("copoPersonalizado");
     setSearchParams(next, { replace: true });
-  }, [cliente, searchParams, setSearchParams, toast]);
+  }, [can, cliente, searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     if (taskDialogOpen) {
@@ -324,6 +326,9 @@ export function ClientePerfilContent({
   }, [taskDialogOpen]);
 
   const crmEnabled = Boolean(id && isSupabaseConfigured);
+  const canEditCustomer = can("clientes", "edit");
+  const canEditCrm = can("crm", "edit");
+  const canDeleteCrm = can("crm", "delete");
   const profileId = profile?.id;
   const { data: customerNegotiations = [] } = useCrmNegotiationsForCustomer(id, {
     enabled: crmEnabled,
@@ -525,6 +530,8 @@ export function ClientePerfilContent({
       <ClienteRdPerfilView
         cliente={cliente}
         negotiationReadOnly={clientePerfilCrmLocked}
+        customerActionsDisabled={!canEditCustomer}
+        crmActionsDisabled={!canEditCrm}
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
         qualificationStars={qualificationFromPerfil(cliente.perfil)}
@@ -540,31 +547,35 @@ export function ClientePerfilContent({
         crmTaskScopeLabelMode={crmEnabled ? "customer-linked" : undefined}
         crmTasksLoading={crmEnabled ? crmTasksLoading : false}
         crmTaskAssignees={crmEnabled ? crmTaskAssignees : undefined}
-        onCompleteCrmTask={(taskId) => {
-          if (!crmEnabled || !id) {
-            return;
-          }
-          void (async () => {
-            const t = crmTasksRaw.find((x) => x.id === taskId);
-            try {
-              await updateCrmTask.mutateAsync({
-                id: taskId,
-                patch: { status: "concluida" },
-                customerId: id,
-                negotiationId: t?.negotiationId ?? null,
-              });
-              toast({ title: "Tarefa", description: "Marcada como concluída." });
-            } catch (e) {
-              toast({
-                title: "Não foi possível salvar",
-                description: e instanceof Error ? e.message : "Tente novamente.",
-                variant: "destructive",
-              });
-            }
-          })();
-        }}
+        onCompleteCrmTask={
+          crmEnabled && canEditCrm
+            ? (taskId) => {
+                if (!id) {
+                  return;
+                }
+                void (async () => {
+                  const t = crmTasksRaw.find((x) => x.id === taskId);
+                  try {
+                    await updateCrmTask.mutateAsync({
+                      id: taskId,
+                      patch: { status: "concluida" },
+                      customerId: id,
+                      negotiationId: t?.negotiationId ?? null,
+                    });
+                    toast({ title: "Tarefa", description: "Marcada como concluída." });
+                  } catch (e) {
+                    toast({
+                      title: "Não foi possível salvar",
+                      description: e instanceof Error ? e.message : "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  }
+                })();
+              }
+            : undefined
+        }
         onReopenCrmTask={
-          crmEnabled
+          crmEnabled && canEditCrm
             ? (taskId) => {
                 if (!id) {
                   return;
@@ -593,7 +604,7 @@ export function ClientePerfilContent({
         crmCompleteTaskPending={updateCrmTask.isPending}
         crmDeleteTaskPending={deleteCrmTask.isPending}
         onDeleteCrmTask={
-          crmEnabled
+          crmEnabled && canDeleteCrm
             ? (taskId) => {
                 void (async () => {
                   try {
@@ -612,7 +623,7 @@ export function ClientePerfilContent({
         }
         crmEditTaskPending={updateCrmTask.isPending}
         onSaveCrmTaskEdit={
-          crmEnabled
+          crmEnabled && canEditCrm
             ? async ({ id: taskId, patch }) => {
                 if (!id) {
                   return;
@@ -637,14 +648,38 @@ export function ClientePerfilContent({
               }
             : undefined
         }
-        onMarkLoss={() => void handleMarkLoss()}
-        onMarkWin={() => {
+        onMarkLoss={canEditCrm ? () => void handleMarkLoss() : () => {
           toast({
-            title: "Marcar venda",
-            description: "Registre a venda na aba CRM (área expandida) ou pelo Inbox.",
+            title: "Ação indisponível",
+            description: "Seu papel nao tem permissao para marcar perda.",
+            variant: "destructive",
           });
         }}
+        onMarkWin={
+          canEditCrm
+            ? () => {
+                toast({
+                  title: "Marcar venda",
+                  description: "Registre a venda na aba CRM (área expandida) ou pelo Inbox.",
+                });
+              }
+            : () => {
+                toast({
+                  title: "Ação indisponível",
+                  description: "Seu papel nao tem permissao para marcar venda.",
+                  variant: "destructive",
+                });
+              }
+        }
         onEdit={() => {
+          if (!canEditCustomer) {
+            toast({
+              title: "Ação indisponível",
+              description: "Seu papel nao tem permissao para editar este cadastro.",
+              variant: "destructive",
+            });
+            return;
+          }
           if (clientePerfilCrmLocked) {
             toast({
               title: "Assuma o negócio",
@@ -656,9 +691,33 @@ export function ClientePerfilContent({
           setDialogOpen(true);
         }}
         onOpenInbox={openCustomerInbox}
-        onBlock={() => void handleMarkLoss()}
-        onCreateNote={() => setDialogOpen(true)}
+        onBlock={canEditCustomer ? () => void handleMarkLoss() : () => {
+          toast({
+            title: "Ação indisponível",
+            description: "Seu papel nao tem permissao para bloquear este cliente.",
+            variant: "destructive",
+          });
+        }}
+        onCreateNote={() => {
+          if (!canEditCustomer) {
+            toast({
+              title: "Ação indisponível",
+              description: "Seu papel nao tem permissao para criar anotação.",
+              variant: "destructive",
+            });
+            return;
+          }
+          setDialogOpen(true);
+        }}
         onCreateTask={() => {
+          if (!canEditCrm) {
+            toast({
+              title: "Ação indisponível",
+              description: "Seu papel nao tem permissao para criar tarefas.",
+              variant: "destructive",
+            });
+            return;
+          }
           if (clientePerfilCrmLocked) {
             toast({
               title: "Assuma o negócio",
