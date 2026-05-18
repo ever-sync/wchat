@@ -163,6 +163,42 @@ describe("resolveInboxAttachmentPresentation", () => {
     expect(result?.url).toBe("https://uazapi.example.com/files/voice.opus");
   });
 
+  it("usa `imageMessage` como pista mesmo sem extensao na URL", () => {
+    const message = baseMessage({
+      messageType: "media",
+      mediaUrl: null,
+      rawEvent: {
+        message: {
+          imageMessage: {
+            url: "https://uazapi.example.com/files/abc123",
+            mimetype: "image/jpeg",
+          },
+        },
+      },
+    });
+
+    expect(resolveInboxAttachmentPresentation(message)).toEqual({
+      kind: "image",
+      url: "https://uazapi.example.com/files/abc123",
+    });
+  });
+
+  it("usa urls achatadas do payload, como imageUrl", () => {
+    const message = baseMessage({
+      messageType: "media",
+      mediaUrl: null,
+      payloadJson: {
+        imageUrl: "https://cdn.example.com/sem-extensao",
+        mimeType: "image/png",
+      },
+    });
+
+    expect(resolveInboxAttachmentPresentation(message)).toEqual({
+      kind: "image",
+      url: "https://cdn.example.com/sem-extensao",
+    });
+  });
+
   it("prefere mirroredMediaUrl do payload quando media_url ainda aponta ao CDN", () => {
     const mirrored =
       "https://projeto.supabase.co/storage/v1/object/public/whatsapp-media/tenant-1/abc_photo.jpg";

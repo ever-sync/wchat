@@ -11,11 +11,9 @@ import {
   QrCode,
   RefreshCw,
   ShieldCheck,
-  Tag,
   Trash2,
   UserCog,
   Users,
-  Zap,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +92,11 @@ import {
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
 import { ChatTagsSettingsSection } from "@/components/settings/ChatTagsSettingsSection";
 import {
+  ChatConfigSectionNav,
+  parseChatConfigSectionParam,
+  type ChatConfigSettingsSection,
+} from "@/components/settings/ChatConfigSectionNav";
+import {
   CollaboratorsSectionNav,
   parseCollaboratorsSectionParam,
   type CollaboratorsSettingsSection,
@@ -119,7 +122,13 @@ const roleLabels: Record<UserRole, string> = {
   atendimento: "Atendimento",
 };
 
-const SETTINGS_TAB_VALUES = ["perfil", "integracoes", "colaboradores", "funis", "respostas", "etiquetas"] as const;
+const SETTINGS_TAB_VALUES = [
+  "perfil",
+  "integracoes",
+  "colaboradores",
+  "funis",
+  "configuracao-chat",
+] as const;
 type SettingsTab = (typeof SETTINGS_TAB_VALUES)[number];
 
 function parseSettingsTabParam(raw: string | null): SettingsTab {
@@ -146,6 +155,9 @@ export default function Configuracoes() {
   );
   const [integrationsSection, setIntegrationsSection] = useState<IntegrationsSettingsSection>(() =>
     parseIntegrationsSectionParam(searchParams.get("secao")),
+  );
+  const [chatConfigSection, setChatConfigSection] = useState<ChatConfigSettingsSection>(() =>
+    parseChatConfigSectionParam(searchParams.get("secao")),
   );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -195,6 +207,8 @@ export default function Configuracoes() {
       setCollaboratorsSection(parseCollaboratorsSectionParam(secaoKey));
     } else if (currentTab === "integracoes") {
       setIntegrationsSection(parseIntegrationsSectionParam(secaoKey));
+    } else if (currentTab === "configuracao-chat") {
+      setChatConfigSection(parseChatConfigSectionParam(secaoKey));
     }
   }, [abaKey, secaoKey]);
 
@@ -206,6 +220,26 @@ export default function Configuracoes() {
           const p = new URLSearchParams(prev);
           p.set("aba", "integracoes");
           if (section === "whatsapp") {
+            p.delete("secao");
+          } else {
+            p.set("secao", section);
+          }
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleChatConfigSectionChange = useCallback(
+    (section: ChatConfigSettingsSection) => {
+      setChatConfigSection(section);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.set("aba", "configuracao-chat");
+          if (section === "respostas") {
             p.delete("secao");
           } else {
             p.set("secao", section);
@@ -256,6 +290,10 @@ export default function Configuracoes() {
             }
           } else if (next === "integracoes") {
             if (secao !== "whatsapp" && secao !== "automacao") {
+              p.delete("secao");
+            }
+          } else if (next === "configuracao-chat") {
+            if (secao !== "respostas" && secao !== "etiquetas") {
               p.delete("secao");
             }
           } else {
@@ -553,8 +591,7 @@ export default function Configuracoes() {
             </TabsTrigger>
           ) : null}
           <TabsTrigger value="funis"><BarChart3 className="mr-2 h-4 w-4" />Funis CRM</TabsTrigger>
-          <TabsTrigger value="respostas"><Zap className="mr-2 h-4 w-4" />Respostas Rapidas</TabsTrigger>
-          <TabsTrigger value="etiquetas"><Tag className="mr-2 h-4 w-4" />Etiquetas</TabsTrigger>
+          <TabsTrigger value="configuracao-chat"><MessageSquare className="mr-2 h-4 w-4" />Configuracao do chat</TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1589,131 +1626,138 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="respostas" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Respostas Rapidas</CardTitle>
-                  <CardDescription>
-                    Mensagens pré-definidas acessíveis no chat pelo botão ⚡ ou digitando /.
-                    Globais são visíveis a toda a equipe; Minhas são só suas.
-                  </CardDescription>
-                </div>
-                <Button
-                  size="sm"
-                  className="rounded-xl"
-                  disabled={!canEditConfiguracoes}
-                  onClick={() => {
-                    if (!canEditConfiguracoes) {
-                      toast({
-                        title: "Ação indisponível",
-                        description: "Seu papel nao tem permissao para criar respostas rápidas.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    setQrEditingId(null);
-                    setQrTitle("");
-                    setQrShortcut("");
-                    setQrBodyText("");
-                    setQrScope("global");
-                    setQrDialogOpen(true);
-                  }}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nova resposta
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {quickRepliesList.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                  Nenhuma resposta cadastrada. Clique em "Nova resposta" para começar.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {quickRepliesList.map((qr) => (
-                    <div
-                      key={qr.id}
-                      className="flex items-start gap-3 rounded-xl border border-border/60 bg-card/60 px-4 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{qr.title}</span>
-                          {qr.shortcut ? (
-                            <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                              /{qr.shortcut}
-                            </span>
-                          ) : null}
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${qr.scope === "global" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"}`}>
-                            {qr.scope === "global" ? "Global" : "Minha"}
-                          </span>
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{qr.bodyText}</p>
+        <TabsContent value="configuracao-chat" className="space-y-6">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <ChatConfigSectionNav value={chatConfigSection} onChange={handleChatConfigSectionChange} />
+            <div className="min-w-0 flex-1 space-y-6">
+              {chatConfigSection === "respostas" ? (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Respostas rapidas</CardTitle>
+                        <CardDescription>
+                          Mensagens pré-definidas acessíveis no chat pelo botão ⚡ ou digitando /.
+                          Globais são visíveis a toda a equipe; Minhas são só suas.
+                        </CardDescription>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-lg"
-                          disabled={!canEditConfiguracoes}
-                          onClick={() => {
-                            if (!canEditConfiguracoes) {
-                              toast({
-                                title: "Ação indisponível",
-                                description: "Seu papel nao tem permissao para editar respostas rápidas.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            setQrEditingId(qr.id);
-                            setQrTitle(qr.title);
-                            setQrShortcut(qr.shortcut ?? "");
-                            setQrBodyText(qr.bodyText);
-                            setQrScope(qr.scope);
-                            setQrDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                          disabled={deleteQR.isPending || !canDeleteConfiguracoes}
-                          onClick={() => {
-                            if (!canDeleteConfiguracoes) {
-                              toast({
-                                title: "Ação indisponível",
-                                description: "Seu papel nao tem permissao para excluir respostas rápidas.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            void deleteQR.mutateAsync(qr.id).then(() => {
-                              toast({ title: "Resposta removida" });
-                            }).catch((e: Error) => {
-                              toast({ title: "Erro ao remover", description: e.message, variant: "destructive" });
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={!canEditConfiguracoes}
+                        onClick={() => {
+                          if (!canEditConfiguracoes) {
+                            toast({
+                              title: "Ação indisponível",
+                              description: "Seu papel nao tem permissao para criar respostas rápidas.",
+                              variant: "destructive",
                             });
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                            return;
+                          }
+                          setQrEditingId(null);
+                          setQrTitle("");
+                          setQrShortcut("");
+                          setQrBodyText("");
+                          setQrScope("global");
+                          setQrDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Nova resposta
+                      </Button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  </CardHeader>
+                  <CardContent>
+                    {quickRepliesList.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+                        Nenhuma resposta cadastrada. Clique em "Nova resposta" para começar.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {quickRepliesList.map((qr) => (
+                          <div
+                            key={qr.id}
+                            className="flex items-start gap-3 rounded-xl border border-border/60 bg-card/60 px-4 py-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{qr.title}</span>
+                                {qr.shortcut ? (
+                                  <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                    /{qr.shortcut}
+                                  </span>
+                                ) : null}
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${qr.scope === "global" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"}`}>
+                                  {qr.scope === "global" ? "Global" : "Minha"}
+                                </span>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{qr.bodyText}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg"
+                                disabled={!canEditConfiguracoes}
+                                onClick={() => {
+                                  if (!canEditConfiguracoes) {
+                                    toast({
+                                      title: "Ação indisponível",
+                                      description: "Seu papel nao tem permissao para editar respostas rápidas.",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  setQrEditingId(qr.id);
+                                  setQrTitle(qr.title);
+                                  setQrShortcut(qr.shortcut ?? "");
+                                  setQrBodyText(qr.bodyText);
+                                  setQrScope(qr.scope);
+                                  setQrDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
+                                disabled={deleteQR.isPending || !canDeleteConfiguracoes}
+                                onClick={() => {
+                                  if (!canDeleteConfiguracoes) {
+                                    toast({
+                                      title: "Ação indisponível",
+                                      description: "Seu papel nao tem permissao para excluir respostas rápidas.",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  void deleteQR.mutateAsync(qr.id).then(() => {
+                                    toast({ title: "Resposta removida" });
+                                  }).catch((e: Error) => {
+                                    toast({ title: "Erro ao remover", description: e.message, variant: "destructive" });
+                                  });
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
 
-        <TabsContent value="etiquetas" className="space-y-6">
-          <ChatTagsSettingsSection
-            canEdit={canEditConfiguracoes}
-            canDelete={canDeleteConfiguracoes}
-          />
+              {chatConfigSection === "etiquetas" ? (
+                <ChatTagsSettingsSection
+                  canEdit={canEditConfiguracoes}
+                  canDelete={canDeleteConfiguracoes}
+                />
+              ) : null}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -20,7 +20,6 @@ import type { MessageType, QuickReply } from "@/types/domain";
 import { useCalculadora } from "@/contexts/CalculadoraContext";
 import { QUICK_EMOJIS } from "./inboxComposerOptions";
 import { QuickReplyPicker } from "./QuickReplyPicker";
-import { TemplatePicker } from "./TemplatePicker";
 
 export type MessageInputProps = {
   bodyTextareaRef: RefObject<HTMLTextAreaElement>;
@@ -44,15 +43,11 @@ export type MessageInputProps = {
   onSend: () => void;
   sendDisabled: boolean;
   sendPending?: boolean;
-  /** Bloqueia anexo, template, áudio e emoji (ex.: lead não assumido). */
+  /** Bloqueia anexo, áudio e emoji (ex.: lead não assumido). */
   composerActionsDisabled?: boolean;
   showEmojiPicker: boolean;
   onToggleEmojiPicker: () => void;
   onAppendEmoji: (emoji: string) => void;
-  templateOpen: boolean;
-  onTemplateOpenChange: (open: boolean) => void;
-  selectedTemplateId: string | null;
-  onSelectTemplate: (id: string) => void;
   onAttachmentButtonClick: () => void;
   onAttachmentChange: (event: ChangeEvent<HTMLInputElement>) => void;
   attachmentUploading?: boolean;
@@ -98,10 +93,6 @@ export function MessageInput({
   showEmojiPicker,
   onToggleEmojiPicker,
   onAppendEmoji,
-  templateOpen,
-  onTemplateOpenChange,
-  selectedTemplateId,
-  onSelectTemplate,
   onAttachmentButtonClick,
   onAttachmentChange,
   attachmentUploading = false,
@@ -319,13 +310,6 @@ export function MessageInput({
           >
             <Calculator className="h-4 w-4" />
           </button>
-          <TemplatePicker
-            open={templateOpen}
-            onOpenChange={onTemplateOpenChange}
-            value={selectedTemplateId}
-            onSelect={onSelectTemplate}
-            disabled={composerActionsDisabled}
-          />
           {onSelectQuickReply ? (
             <QuickReplyPicker
               open={quickReplyOpen}

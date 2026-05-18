@@ -72,6 +72,23 @@ function extensionHint(url: string): string {
   return dot >= 0 ? path.slice(dot) : "";
 }
 
+function pickFirstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function pickFirstUrl(...values: Array<unknown>): string | undefined {
+  const candidate = pickFirstString(...values);
+  if (!candidate) {
+    return undefined;
+  }
+  return isHttpOrDataUrl(candidate) ? candidate : undefined;
+}
+
 function normalizeAttachmentUrl(rawUrl: string): string {
   const url = rawUrl.trim();
   const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
@@ -94,6 +111,62 @@ function normalizeAttachmentUrl(rawUrl: string): string {
   }
 
   return url;
+}
+
+function getMediaBlocks(
+  payload: Record<string, unknown> | null | undefined,
+): Record<string, unknown>[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const message = payload.message as Record<string, unknown> | undefined;
+  const v2Content =
+    message?.content && typeof message.content === "object" && !Array.isArray(message.content)
+      ? (message.content as Record<string, unknown>)
+      : undefined;
+
+  return [
+    payload,
+    message,
+    v2Content,
+    message?.imageMessage as Record<string, unknown> | undefined,
+    message?.videoMessage as Record<string, unknown> | undefined,
+    message?.audioMessage as Record<string, unknown> | undefined,
+    message?.documentMessage as Record<string, unknown> | undefined,
+    message?.stickerMessage as Record<string, unknown> | undefined,
+    message?.mediaMessage as Record<string, unknown> | undefined,
+    payload.media as Record<string, unknown> | undefined,
+    message?.media as Record<string, unknown> | undefined,
+  ].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+}
+
+function inferKindFromPayloadHints(
+  payload: Record<string, unknown> | null | undefined,
+): "image" | "video" | "audio" | "document" | null {
+  const blocks = getMediaBlocks(payload);
+  for (const block of blocks) {
+    const hint = String(
+      (block.messageType as string | undefined) ??
+        (block.mediaType as string | undefined) ??
+        (block.mediatype as string | undefined) ??
+        (block.type as string | undefined) ??
+        "",
+    ).toLowerCase();
+    if (hint.includes("image") || hint.includes("sticker")) return "image";
+    if (hint.includes("video")) return "video";
+    if (hint.includes("audio") || hint.includes("ptt") || hint.includes("voice")) return "audio";
+    if (hint.includes("document") || hint.includes("file")) return "document";
+  }
+
+  const message = payload?.message as Record<string, unknown> | undefined;
+  if (message?.imageMessage) return "image";
+  if (message?.videoMessage) return "video";
+  if (message?.audioMessage) return "audio";
+  if (message?.documentMessage) return "document";
+  if (message?.stickerMessage) return "image";
+
+  return null;
 }
 
 function inferKindFromMimeOrUrl(
@@ -156,64 +229,36 @@ function isHttpOrDataUrl(value: string) {
 }
 
 function findAttachmentUrl(payload: Record<string, unknown> | null | undefined): string | undefined {
-  if (!payload || typeof payload !== "object") {
-    return undefined;
-  }
+  const blocks = getMediaBlocks(payload);
 
-  const message = payload.message as Record<string, unknown> | undefined;
-  /* uazapi v2 entrega midia em `message.content` que e um objeto com `URL`,
-   * `mimetype`, `fileName`, `mediaKey` etc. */
-  const v2Content =
-    message?.content && typeof message.content === "object" && !Array.isArray(message.content)
-      ? (message.content as Record<string, unknown>)
-      : undefined;
-  const nested = [
-    payload,
-    message,
-    v2Content,
-    message?.imageMessage as Record<string, unknown> | undefined,
-    message?.videoMessage as Record<string, unknown> | undefined,
-    message?.audioMessage as Record<string, unknown> | undefined,
-    message?.documentMessage as Record<string, unknown> | undefined,
-    message?.stickerMessage as Record<string, unknown> | undefined,
-    message?.mediaMessage as Record<string, unknown> | undefined,
-    payload.media as Record<string, unknown> | undefined,
-    message?.media as Record<string, unknown> | undefined,
-  ].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
-
-  /* Inclui campos comuns do uazapi v2: `URL` (maiusculo), `content`, `fileURL`,
-   * `image`, `video`, `audio`, `document`, `sticker`, `body`. Tambem
-   * `mirroredMediaUrl` quando o webhook ja salvou a midia no Storage. */
-  const KEYS = [
-    "mirroredMediaUrl",
-    "publicUrl",
-    "URL",
-    "mediaUrl",
-    "url",
-    "fileUrl",
-    "fileURL",
-    "downloadUrl",
-    "directUrl",
-    "directURL",
-    "directPath",
-    "content",
-    "image",
-    "video",
-    "audio",
-    "document",
-    "sticker",
-    "body",
-  ] as const;
-
-  for (const entry of nested) {
-    for (const key of KEYS) {
-      const value = entry[key];
-      if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (trimmed && isHttpOrDataUrl(trimmed)) {
-          return trimmed;
-        }
-      }
+  for (const entry of blocks) {
+    const direct = pickFirstUrl(
+      entry.mirroredMediaUrl,
+      entry.publicUrl,
+      entry.URL,
+      entry.mediaUrl,
+      entry.url,
+      entry.imageUrl,
+      entry.videoUrl,
+      entry.audioUrl,
+      entry.documentUrl,
+      entry.stickerUrl,
+      entry.fileUrl,
+      entry.fileURL,
+      entry.downloadUrl,
+      entry.directUrl,
+      entry.directURL,
+      entry.directPath,
+      entry.content,
+      entry.image,
+      entry.video,
+      entry.audio,
+      entry.document,
+      entry.sticker,
+      entry.body,
+    );
+    if (direct) {
+      return direct;
     }
   }
 
@@ -221,30 +266,9 @@ function findAttachmentUrl(payload: Record<string, unknown> | null | undefined):
 }
 
 function findAttachmentMimeType(payload: Record<string, unknown> | null | undefined): string | undefined {
-  if (!payload || typeof payload !== "object") {
-    return undefined;
-  }
+  const blocks = getMediaBlocks(payload);
 
-  const message = payload.message as Record<string, unknown> | undefined;
-  const v2Content =
-    message?.content && typeof message.content === "object" && !Array.isArray(message.content)
-      ? (message.content as Record<string, unknown>)
-      : undefined;
-  const nested = [
-    payload,
-    message,
-    v2Content,
-    message?.imageMessage as Record<string, unknown> | undefined,
-    message?.videoMessage as Record<string, unknown> | undefined,
-    message?.audioMessage as Record<string, unknown> | undefined,
-    message?.documentMessage as Record<string, unknown> | undefined,
-    message?.stickerMessage as Record<string, unknown> | undefined,
-    message?.mediaMessage as Record<string, unknown> | undefined,
-    payload.media as Record<string, unknown> | undefined,
-    message?.media as Record<string, unknown> | undefined,
-  ].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
-
-  for (const entry of nested) {
+  for (const entry of blocks) {
     for (const key of ["mimeType", "mimetype", "contentType"] as const) {
       const value = entry[key];
       if (typeof value === "string" && value.trim()) {
@@ -254,7 +278,7 @@ function findAttachmentMimeType(payload: Record<string, unknown> | null | undefi
   }
 
   /* Heuristica final: usar `messageType`/`mediaType`/`type` como pista. */
-  for (const entry of nested) {
+  for (const entry of blocks) {
     const hint = String(
       (entry.messageType as string | undefined) ??
         (entry.mediaType as string | undefined) ??
@@ -330,7 +354,10 @@ export function resolveInboxAttachmentPresentation(
     return null;
   }
 
+  const hintedKind =
+    inferKindFromPayloadHints(message.rawEvent) ?? inferKindFromPayloadHints(message.payloadJson);
   const inferredKind =
+    hintedKind ??
     inferKindFromMimeOrUrl(findAttachmentMimeType(message.rawEvent), url) ??
     inferKindFromMimeOrUrl(findAttachmentMimeType(message.payloadJson), url);
   const fromPayload = fileNameFromPayload(message);

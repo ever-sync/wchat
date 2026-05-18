@@ -35,7 +35,6 @@ import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
 import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
-import { INBOX_TEMPLATE_OPTIONS } from "@/components/inbox/inboxComposerOptions";
 import { MessageInput } from "@/components/inbox/MessageInput";
 import { MessageThread } from "@/components/inbox/MessageThread";
 import { dialogCloseInset } from "@/lib/dialog-close-inset";
@@ -283,9 +282,7 @@ export default function Inbox() {
   const [microphoneState, setMicrophoneState] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationSec, setRecordingDurationSec] = useState(0);
-  const [templateOpen, setTemplateOpen] = useState(false);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedAttachmentName, setSelectedAttachmentName] = useState<string | null>(null);
   const [attachmentMimeType, setAttachmentMimeType] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -1485,18 +1482,6 @@ export default function Inbox() {
     }
   }
 
-  function applyTemplate(templateId: string) {
-    const template = INBOX_TEMPLATE_OPTIONS.find((option) => option.id === templateId);
-    if (!template) {
-      return;
-    }
-
-    setSelectedTemplateId(templateId);
-    resetComposerAttachmentState();
-    setBodyText(template.body);
-    focusBodyComposer();
-  }
-
   function clearRecordingTimer() {
     if (recordingTimerRef.current != null) {
       window.clearInterval(recordingTimerRef.current);
@@ -2536,10 +2521,6 @@ export default function Inbox() {
             showEmojiPicker={showEmojiPicker}
             onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
             onAppendEmoji={appendEmoji}
-            templateOpen={templateOpen}
-            onTemplateOpenChange={setTemplateOpen}
-            selectedTemplateId={selectedTemplateId}
-            onSelectTemplate={applyTemplate}
             onAttachmentButtonClick={() => attachmentInputRef.current?.click()}
             onAttachmentChange={handleAttachmentSelection}
             attachmentUploading={attachmentUploading}
