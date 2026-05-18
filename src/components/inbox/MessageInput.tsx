@@ -42,7 +42,6 @@ export type MessageInputProps = {
   bodyText: string;
   onBodyTextChange: (value: string) => void;
   onSend: () => void;
-  sendPending: boolean;
   sendDisabled: boolean;
   /** Bloqueia anexo, template, áudio e emoji (ex.: lead não assumido). */
   composerActionsDisabled?: boolean;
@@ -90,7 +89,6 @@ export function MessageInput({
   bodyText,
   onBodyTextChange,
   onSend,
-  sendPending,
   sendDisabled,
   composerActionsDisabled = false,
   showEmojiPicker,
@@ -380,33 +378,21 @@ export function MessageInput({
               "h-11 shrink-0 rounded-full px-5 text-foreground shadow-none",
               noteMode ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-wchat-700 text-primary-foreground",
             )}
-            disabled={sendDisabled || composerActionsDisabled}
-            aria-busy={sendPending || attachmentUploading}
+            disabled={sendDisabled || composerActionsDisabled || attachmentUploading}
+            aria-busy={attachmentUploading}
             onClick={() => {
               void onSend();
             }}
           >
             {noteMode ? (
-              sendPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Nota
-                </>
-              )
+              <>
+                <PenLine className="mr-2 h-4 w-4" />
+                Nota
+              </>
             ) : attachmentUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Subindo arquivo...
-              </>
-            ) : sendPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Enviando...
               </>
             ) : (
               <>

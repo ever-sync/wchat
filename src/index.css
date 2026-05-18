@@ -111,3 +111,14 @@
     display: none;
   }
 }
+
+/* Swagger UI — página /configuracoes/api-docs */
+.api-docs-swagger .swagger-ui {
+  background: transparent;
+}
+.api-docs-swagger .swagger-ui .topbar {
+  display: none;
+}
+.api-docs-swagger .swagger-ui .info {
+  margin: 1rem 0;
+}

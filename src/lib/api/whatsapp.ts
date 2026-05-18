@@ -695,6 +695,31 @@ function shouldCollapseOutboundGroup(arr: WhatsappMessage[]): boolean {
     return true;
   }
 
+  const outboundKeys = new Set(
+    arr
+      .filter((m) => m.direction === "outbound")
+      .map((m) => outboundContentDedupeKey(m))
+      .filter((k): k is string => Boolean(k)),
+  );
+  if (outboundKeys.size === 1) {
+    const withPid = arr
+      .map((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId))
+      .filter((id) => Boolean(id));
+    const distinctProviderIds = new Set(withPid);
+    if (distinctProviderIds.size > 1) {
+      return false;
+    }
+
+    const times = arr.map(outboundMessageTimeMs);
+    if (times.every((t) => t <= 0)) {
+      return true;
+    }
+    const spread = Math.max(...times) - Math.min(...times);
+    if (spread <= OUTBOUND_DEDUPE_TIME_SPREAD_MS) {
+      return true;
+    }
+  }
+
   const withPid = arr.filter((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId));
   if (withPid.length >= 2) {
     const first = withPid[0]!;
@@ -858,6 +883,48 @@ function stripRedundantOutboundTempsFromPages(pages: InboxMessagesPageResult[]):
     ...page,
     messages: page.messages.filter((m) => !remove.has(m.id)),
   }));
+}
+
+/**
+ * Aplica a mesma deduplicacao de `flattenInboxMessagePages` no cache do React Query
+ * (otimista + INSERT/UPDATE Realtime). Evita duas bolhas ao mudar status sent→delivered.
+ */
+function sanitizeInboxMessagePages(pages: InboxMessagesPageResult[]): InboxMessagesPageResult[] {
+  const flat = pages.flatMap((p) => p.messages);
+  if (flat.length < 2) {
+    return pages;
+  }
+
+  const deduped = dedupeInboxMessagesById(flat);
+  const keepIds = new Set(deduped.map((m) => m.id));
+  const latestById = new Map(deduped.map((m) => [m.id, m]));
+
+  if (keepIds.size === flat.length && flat.every((m, i) => m.id === deduped[i]?.id && m.status === deduped[i]?.status)) {
+    return pages;
+  }
+
+  return pages.map((page) => ({
+    ...page,
+    messages: page.messages
+      .filter((m) => keepIds.has(m.id))
+      .map((m) => latestById.get(m.id) ?? m),
+  }));
+}
+
+function patchInboxMessagesCache(
+  queryClient: QueryClient,
+  chatId: string,
+  updater: (current: InfiniteData<InboxMessagesPageResult> | undefined) => InfiniteData<InboxMessagesPageResult> | undefined,
+) {
+  const queryKey = ["inbox-messages", chatId] as const;
+  queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+    const next = updater(current);
+    if (!next?.pages?.length) {
+      return next;
+    }
+    const pages = sanitizeInboxMessagePages(next.pages);
+    return pages === next.pages ? next : { ...next, pages };
+  });
 }
 
 /**
@@ -1385,9 +1452,7 @@ function applyRealtimeMessageInsert(
   chatId: string,
   message: WhatsappMessage,
 ) {
-  const queryKey = ["inbox-messages", chatId] as const;
-
-  queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+  patchInboxMessagesCache(queryClient, chatId, (current) => {
     if (!current?.pages?.length) {
       return {
         pageParams: [null],
@@ -1401,7 +1466,7 @@ function applyRealtimeMessageInsert(
       ),
     );
     if (alreadyExists) {
-      const cleaned = stripRedundantOutboundTempsFromPages(current.pages);
+      const cleaned = sanitizeInboxMessagePages(stripRedundantOutboundTempsFromPages(current.pages));
       return cleaned === current.pages ? current : { ...current, pages: cleaned };
     }
 
@@ -1420,7 +1485,7 @@ function applyRealtimeMessageInsert(
           ),
         };
       });
-      return { ...current, pages: stripRedundantOutboundTempsFromPages(pages) };
+      return { ...current, pages: sanitizeInboxMessagePages(stripRedundantOutboundTempsFromPages(pages)) };
     }
 
     const pages = current.pages.map((page, index) => {
@@ -1458,9 +1523,7 @@ function applyRealtimeMessageUpdate(
   chatId: string,
   message: WhatsappMessage,
 ) {
-  const queryKey = ["inbox-messages", chatId] as const;
-
-  queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+  patchInboxMessagesCache(queryClient, chatId, (current) => {
     if (!current?.pages?.length) return current;
 
     const replaceById = (): { pages: InboxMessagesPageResult[]; mutated: boolean } => {
@@ -1506,10 +1569,8 @@ function applyRealtimeMessageUpdate(
      * (enviado vs entregue).
      */
     if (!mutated && message.direction === "outbound") {
-      const tempDup = findOptimisticTempMatch(
-        current.pages.flatMap((p) => p.messages),
-        message,
-      );
+      const flat = current.pages.flatMap((p) => p.messages);
+      const tempDup = findOptimisticTempMatch(flat, message);
       if (tempDup) {
         mutated = true;
         pages = current.pages.map((page) => {
@@ -1523,6 +1584,36 @@ function applyRealtimeMessageUpdate(
             ),
           };
         });
+      } else {
+        const contentKey = outboundContentDedupeKey(message);
+        const twin = contentKey
+          ? flat.find(
+              (m) =>
+                m.id !== message.id &&
+                m.direction === "outbound" &&
+                outboundContentDedupeKey(m) === contentKey &&
+                shouldCollapseOutboundGroup([m, message]),
+            )
+          : undefined;
+        if (twin) {
+          mutated = true;
+          pages = current.pages.map((page) => ({
+            ...page,
+            messages: page.messages
+              .map((existing) => {
+                if (existing.id === twin.id || existing.id === message.id) {
+                  return message;
+                }
+                return existing;
+              })
+              .filter((existing, idx, arr) => {
+                if (existing.id !== message.id) {
+                  return true;
+                }
+                return arr.findIndex((x) => x.id === message.id) === idx;
+              }),
+          }));
+        }
       }
     }
 
@@ -1531,9 +1622,10 @@ function applyRealtimeMessageUpdate(
       nextPages = stripOutboundTempDuplicateOf(nextPages, message);
     }
     let finalPages = stripRedundantOutboundTempsFromPages(nextPages);
-    if (mutated && message.direction === "outbound") {
+    if (message.direction === "outbound") {
       finalPages = stripOutboundDuplicatesOfIncoming(finalPages, message);
     }
+
     if (!mutated && finalPages === current.pages) {
       return current;
     }
@@ -1727,7 +1819,6 @@ export function useSendWhatsappMessage(
     ...options,
     onMutate: async (variables) => {
       const queryKey = ["inbox-messages", variables.chatId] as const;
-      await queryClient.cancelQueries({ queryKey });
 
       const previous = queryClient.getQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey);
       const previousChats = snapshotInboxChats(queryClient);
@@ -1748,7 +1839,7 @@ export function useSendWhatsappMessage(
         createdAt: optimisticTimestamp,
       };
 
-      queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+      patchInboxMessagesCache(queryClient, variables.chatId, (current) => {
         if (!current?.pages?.length) {
           return {
             pageParams: [null],
@@ -1790,7 +1881,7 @@ export function useSendWhatsappMessage(
     onSuccess: (data, variables, context) => {
       let replaced = false;
       if (context?.queryKey && context.tempId) {
-        queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(context.queryKey, (old) => {
+        patchInboxMessagesCache(queryClient, variables.chatId, (old) => {
           if (!old?.pages?.length) {
             return old;
           }
@@ -1800,7 +1891,10 @@ export function useSendWhatsappMessage(
             return old;
           }
           replaced = true;
-          return { ...old, pages: stripRedundantOutboundTempsFromPages(reconciled.pages) };
+          return {
+            ...old,
+            pages: stripRedundantOutboundTempsFromPages(reconciled.pages),
+          };
         });
       }
       if (!replaced) {

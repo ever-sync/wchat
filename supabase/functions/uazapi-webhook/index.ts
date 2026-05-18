@@ -4,6 +4,7 @@ import {
   isPersonalRemoteJid,
   normalizeWebhookEvent,
   persistWebhookEvent,
+  normalizeUazapiMessageId,
   processMessagePayload,
   refreshCampaignStats,
   tryClaimWebhookDelivery,
@@ -183,9 +184,17 @@ Deno.serve(async (request) => {
       const updatePayload = (payload.event && typeof payload.event === "object"
         ? payload.event
         : payload) as Record<string, unknown>;
-      const messageIds = Array.isArray(updatePayload.MessageIDs)
+      const rawMessageIds = Array.isArray(updatePayload.MessageIDs)
         ? updatePayload.MessageIDs.map((value) => String(value)).filter(Boolean)
         : [];
+      const messageIds = [
+        ...new Set(
+          rawMessageIds.flatMap((id) => {
+            const normalized = normalizeUazapiMessageId(id);
+            return normalized && normalized !== id ? [id, normalized] : [id];
+          }),
+        ),
+      ];
       const nextStatus = normalizeReceiptStatus(payload.state ?? updatePayload.Type ?? payload.type);
 
       if (messageIds.length > 0 && nextStatus) {
@@ -215,7 +224,8 @@ Deno.serve(async (request) => {
             await refreshCampaignStats(admin, cId).catch(() => {});
           }
         }
-      } else if (payload.message) {
+      } else if (payload.message && !nextStatus) {
+        // Recibo (delivered/read) sem MessageIDs nao deve reinserir a mensagem no inbox.
         const messages = unwrapIncomingWebhookMessageRecords(payload);
         for (const message of messages) {
           await processMessagePayload(admin, instance, mergeWebhookMessageEnvelope(payload, message));

@@ -23,6 +23,7 @@ const Inbox = lazy(() => import("./pages/Inbox"));
 const Clientes = lazy(() => import("./pages/Clientes"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const ConfiguracoesFila = lazy(() => import("./pages/ConfiguracoesFila"));
+const ApiDocs = lazy(() => import("./pages/ApiDocs"));
 const ClientePerfil = lazy(() => import("./pages/ClientePerfil"));
 const Crm = lazy(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
@@ -152,6 +153,14 @@ const App = () => (
                       element={
                         <PermissionRoute permission="configuracoes">
                           <ConfiguracoesFila />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/configuracoes/api-docs"
+                      element={
+                        <PermissionRoute permission="configuracoes">
+                          <ApiDocs />
                         </PermissionRoute>
                       }
                     />

@@ -1875,10 +1875,6 @@ export default function Inbox() {
       return;
     }
 
-    if (sendMessage.isPending) {
-      return;
-    }
-
     const hasBody = Boolean(bodyText.trim());
     const hasMedia = Boolean(mediaUrl.trim());
 
@@ -1910,43 +1906,41 @@ export default function Inbox() {
       }
     }
 
-    try {
-      const sendPromise = sendMessage.mutateAsync({
-        instanceId: activeChat.instanceId,
-        chatId: activeChat.id,
-        remoteJid: activeChat.remoteJid,
-        messageType,
-        bodyText,
-        mediaUrl: mediaUrl || undefined,
-        payload,
-        simulateTypingMs: simulateTyping ? 600 : undefined,
-      });
+    const sendVars = {
+      instanceId: activeChat.instanceId,
+      chatId: activeChat.id,
+      remoteJid: activeChat.remoteJid,
+      messageType,
+      bodyText,
+      mediaUrl: mediaUrl || undefined,
+      payload,
+      simulateTypingMs: simulateTyping ? 600 : undefined,
+    };
 
-      setBodyText("");
-      setMediaUrl("");
-      setPayloadText("{}");
-      setSelectedAttachmentName(null);
-      setAttachmentMimeType(null);
-      // Limpa o rascunho persistido para nao reaparecer quando o usuario voltar
-      // ao chat.
-      clearInboxChatDraft(activeChat.id);
-      // Sucesso silencioso: o usuario ja ve a bolha aparecer no thread (otimismo
-      // local + realtime). Toast/notificacao por envio gerava ruido em uso real
-      // (atendimento manda dezenas de mensagens em sequencia).
-      await sendPromise;
-    } catch (error) {
-      const envioErroMsg = error instanceof Error ? error.message : "Tente novamente.";
-      toast({
-        title: "Falha ao enviar",
-        description: envioErroMsg,
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Falha ao enviar mensagem",
-        descricao: envioErroMsg,
-      });
-    }
+    setBodyText("");
+    setMediaUrl("");
+    setPayloadText("{}");
+    setSelectedAttachmentName(null);
+    setAttachmentMimeType(null);
+    clearInboxChatDraft(activeChat.id);
+
+    // Envio em background: bolha otimista no onMutate; botao permanece habilitado
+    // para varias mensagens em sequencia.
+    sendMessage.mutate(sendVars, {
+      onError: (error) => {
+        const envioErroMsg = error instanceof Error ? error.message : "Tente novamente.";
+        toast({
+          title: "Falha ao enviar",
+          description: envioErroMsg,
+          variant: "destructive",
+        });
+        useAppStore.getState().addNotification({
+          tipo: "erro",
+          titulo: "Falha ao enviar mensagem",
+          descricao: envioErroMsg,
+        });
+      },
+    });
   }
 
   return (
@@ -2467,7 +2461,6 @@ export default function Inbox() {
               setBodyText(value);
             }}
             onSend={handleSendMessage}
-            sendPending={sendMessage.isPending}
             sendDisabled={
               attachmentUploading ||
               !activeChat ||

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
+  BookOpen,
   Loader2,
   Mail,
   MessageSquare,
@@ -945,11 +946,20 @@ export default function Configuracoes() {
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
               <CardTitle className="text-lg">IA no n8n</CardTitle>
-              <CardDescription>
-                Webhook para o n8n responder leads no mesmo WhatsApp. Use a edge function{" "}
-                <code className="text-xs">n8n-reply</code> para enviar mensagens. A IA só é acionada
-                quando as regras de negócio permitem (sem atendente no chat, negócio sem responsável,
-                cliente sem opt-out, etc.).
+              <CardDescription className="space-y-2">
+                <span className="block">
+                  Webhook para o n8n responder leads no mesmo WhatsApp. Use a edge function{" "}
+                  <code className="text-xs">n8n-reply</code> para enviar mensagens. A IA só é acionada
+                  quando as regras de negócio permitem (sem atendente no chat, negócio sem responsável,
+                  cliente sem opt-out, etc.). Para CRM e envios genéricos, use a API REST{" "}
+                  <code className="text-xs">wchat-api</code>.
+                </span>
+                <Button variant="link" className="h-auto p-0 text-accent" asChild>
+                  <Link to="/configuracoes/api-docs">
+                    <BookOpen className="mr-1 inline h-3.5 w-3.5" />
+                    Documentação Swagger (duas APIs)
+                  </Link>
+                </Button>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

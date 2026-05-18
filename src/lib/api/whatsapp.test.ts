@@ -146,6 +146,48 @@ describe("dedupeInboxMessagesById", () => {
     expect(result).toEqual([first, second]);
   });
 
+  it("collapses four cache entries (two texts x temp+delivered) like rapid send + status update", () => {
+    const now = new Date().toISOString();
+    const messages = [
+      { ...makeMessage("temp-a", "teste"), status: "queued" as const, createdAt: now, sentAt: now },
+      { ...makeMessage("temp-b", "kkkkk"), status: "queued" as const, createdAt: now, sentAt: now },
+      {
+        ...makeMessage("real-a", "teste"),
+        status: "sent" as const,
+        createdAt: now,
+        sentAt: now,
+        uazapiMessageId: "3EB0A",
+      },
+      {
+        ...makeMessage("real-b", "kkkkk"),
+        status: "sent" as const,
+        createdAt: now,
+        sentAt: now,
+        uazapiMessageId: "3EB0B",
+      },
+      {
+        ...makeMessage("real-a", "teste"),
+        status: "delivered" as const,
+        createdAt: now,
+        sentAt: now,
+        uazapiMessageId: "3EB0A",
+      },
+      {
+        ...makeMessage("real-b", "kkkkk"),
+        status: "delivered" as const,
+        createdAt: now,
+        sentAt: now,
+        uazapiMessageId: "3EB0B",
+      },
+    ];
+
+    const result = dedupeInboxMessagesById(messages);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((m) => m.bodyText).sort()).toEqual(["kkkkk", "teste"]);
+    expect(result.every((m) => m.status === "delivered")).toBe(true);
+  });
+
   it("collapses two persisted rows without provider id when status diverges (sent vs delivered)", () => {
     const now = new Date().toISOString();
     const staleSent = {

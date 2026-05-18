@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,9 +67,18 @@ export function ApiKeysSettingsCard({ canEdit, disabled }: Props) {
           <KeyRound className="h-5 w-5 text-accent" />
           API para integrações
         </CardTitle>
-        <CardDescription>
-          Conecte n8n, Zapier, Make ou sistemas próprios com chaves Bearer. Use a edge function{" "}
-          <code className="text-xs">wchat-api</code> — autenticação separada do webhook n8n legado.
+        <CardDescription className="space-y-2">
+          <span className="block">
+            Conecte n8n, Zapier, Make ou sistemas próprios com chaves Bearer. Use a edge function{" "}
+            <code className="text-xs">wchat-api</code> — autenticação separada da API{" "}
+            <code className="text-xs">n8n-reply</code> (IA).
+          </span>
+          <Button variant="link" className="h-auto p-0 text-accent" asChild>
+            <Link to="/configuracoes/api-docs">
+              <BookOpen className="mr-1 inline h-3.5 w-3.5" />
+              Abrir documentação Swagger
+            </Link>
+          </Button>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
