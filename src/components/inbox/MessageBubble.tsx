@@ -1,8 +1,10 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertCircle, FileText, RotateCcw } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock3, FileText, RotateCcw, Trash2 } from "lucide-react";
 import { memo, useState } from "react";
+import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import type { BubbleGroupPosition } from "@/lib/inboxMessageGroups";
+import { getInboxMessageFailureReason } from "@/lib/inboxMessageFailure";
 import { getInboxMessagePreviewText } from "@/lib/inboxMessageBody";
 import { resolveInboxAttachmentPresentation } from "@/lib/inboxMessageMedia";
 import { isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
@@ -137,11 +139,30 @@ function MessageAttachment({
   }
 }
 
+function getOutboundStatusMeta(status: WhatsappMessage["status"]) {
+  switch (status) {
+    case "queued":
+      return { label: "Na fila", icon: Clock3, className: "text-primary-foreground/75" };
+    case "sent":
+      return { label: "Enviado", icon: Check, className: "text-primary-foreground/75" };
+    case "delivered":
+      return { label: "Entregue", icon: CheckCheck, className: "text-primary-foreground/80" };
+    case "read":
+      return { label: "Lida", icon: CheckCheck, className: "text-primary-foreground" };
+    case "failed":
+      return { label: "Falha no envio", icon: AlertCircle, className: "text-red-200" };
+    default:
+      return { label: "Enviado", icon: Check, className: "text-primary-foreground/75" };
+  }
+}
+
 type MessageBubbleProps = {
   message: WhatsappMessage;
   groupPosition?: BubbleGroupPosition;
   activeChatName: string;
+  activeChatAvatarUrl?: string | null;
   onRetry?: (message: WhatsappMessage) => void;
+  onDiscard?: (message: WhatsappMessage) => void;
   retryPending?: boolean;
 };
 
@@ -176,16 +197,20 @@ function BubbleTail({ outbound }: { outbound: boolean }) {
 function MessageMeta({
   timestamp,
   isOutbound,
+  showMeta,
   message,
-  onRetry,
-  retryPending,
 }: {
   timestamp: string | null;
   isOutbound: boolean;
+  showMeta: boolean;
   message: WhatsappMessage;
-  onRetry?: (message: WhatsappMessage) => void;
-  retryPending?: boolean;
 }) {
+  const statusMeta = isOutbound ? getOutboundStatusMeta(message.status) : null;
+
+  if (!showMeta) {
+    return null;
+  }
+
   return (
     <span
       className={cn(
@@ -194,20 +219,11 @@ function MessageMeta({
         isOutbound ? "text-primary-foreground/75" : "text-muted-foreground",
       )}
     >
-      {message.status === "failed" && onRetry ? (
-        <button
-          type="button"
-          onClick={() => onRetry(message)}
-          disabled={retryPending}
-          className="mr-1 inline-flex items-center gap-0.5 rounded border border-white/30 bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-          title="Tentar enviar de novo"
-        >
-          <RotateCcw className={cn("h-3 w-3", retryPending && "animate-spin")} />
-        </button>
-      ) : null}
       <span>{formatMessageTime(timestamp)}</span>
-      {message.status === "failed" ? (
-        <AlertCircle className="h-3.5 w-3.5 text-red-300" aria-label="Falha no envio" />
+      {statusMeta ? (
+        <span title={statusMeta.label} aria-label={statusMeta.label}>
+          <statusMeta.icon className={cn("h-3.5 w-3.5 shrink-0", statusMeta.className)} />
+        </span>
       ) : null}
     </span>
   );
@@ -217,7 +233,9 @@ function MessageBubbleImpl({
   message,
   groupPosition = "single",
   activeChatName,
+  activeChatAvatarUrl,
   onRetry,
+  onDiscard,
   retryPending = false,
 }: MessageBubbleProps) {
   const isOutbound = message.direction === "outbound";
@@ -235,68 +253,135 @@ function MessageBubbleImpl({
   const showTail = showBubbleTail(groupPosition);
   const showInboundHeader =
     !isOutbound && (groupPosition === "single" || groupPosition === "first");
+  const showInboundAvatar = !isOutbound && (groupPosition === "single" || groupPosition === "first");
+  const showMeta = groupPosition === "single" || groupPosition === "last";
+  const failureReason = message.status === "failed" ? getInboxMessageFailureReason(message) : null;
 
   return (
     <div
       className={cn("flex", isOutbound ? "justify-end pr-1" : "justify-start pl-0.5")}
     >
-      <div
-        className={cn(
-          "flex min-w-0 max-w-[min(420px,92%)] flex-col",
-          isOutbound ? "items-end" : "items-start",
-        )}
-      >
-        {showInboundHeader ? (
-          <div className="mb-0.5 px-0.5">
-            <span className="truncate text-[12px] font-medium text-muted-foreground">{activeChatName}</span>
+      <div className={cn("flex min-w-0 max-w-[min(420px,92%)]", isOutbound ? "justify-end" : "justify-start")}>
+        {!isOutbound ? (
+          <div className="w-10 shrink-0 pt-0.5" aria-hidden={!showInboundAvatar}>
+            {showInboundAvatar ? (
+              <ConversationAvatar name={activeChatName} avatarUrl={activeChatAvatarUrl} size="xs" />
+            ) : null}
           </div>
         ) : null}
 
-        <div className={cn("relative inline-block max-w-full", isOutbound ? "ml-auto" : "")}>
-          {!isOutbound && showTail ? <BubbleTail outbound={false} /> : null}
+        <div className={cn("flex min-w-0 flex-col", isOutbound ? "items-end" : "items-start")}>
+          {showInboundHeader ? (
+            <div className="mb-0.5 px-0.5">
+              <span className="truncate text-[12px] font-medium text-muted-foreground">{activeChatName}</span>
+            </div>
+          ) : null}
 
-          <div
-            className={cn(
-              "relative z-[1] min-w-[56px] px-2 py-1.5 sm:px-2.5",
-              bubbleShellRadius(isOutbound, groupPosition),
-              isOutbound
-                ? "bg-primary text-primary-foreground shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
-                : "border border-border bg-card text-foreground shadow-[0_1px_0.5px_rgba(11,20,26,0.08)]",
-            )}
-          >
-            {presentation ? (
-              <div className={bodyText ? "mb-1" : undefined}>
-                <MessageAttachment presentation={presentation} isOutbound={isOutbound} />
-              </div>
-            ) : null}
+          <div className={cn("relative inline-block max-w-full", isOutbound ? "ml-auto" : "")}>
+            {!isOutbound && showTail ? <BubbleTail outbound={false} /> : null}
 
-            {bodyText ? (
-              <div className="flex flex-wrap items-end gap-x-1">
-                <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[14.2px] leading-[1.42]">
-                  {bodyText}
-                </p>
-                <MessageMeta
-                  timestamp={timestamp}
-                  isOutbound={isOutbound}
-                  message={message}
-                  onRetry={isOutbound ? onRetry : undefined}
-                  retryPending={retryPending}
-                />
-              </div>
-            ) : (
-              <div className="flex justify-end pt-0.5">
-                <MessageMeta
-                  timestamp={timestamp}
-                  isOutbound={isOutbound}
-                  message={message}
-                  onRetry={isOutbound ? onRetry : undefined}
-                  retryPending={retryPending}
-                />
-              </div>
-            )}
+            <div
+              className={cn(
+                "relative z-[1] min-w-[56px] px-2 py-1.5 sm:px-2.5",
+                bubbleShellRadius(isOutbound, groupPosition),
+                isOutbound
+                  ? "bg-primary text-primary-foreground shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+                  : "border border-border bg-card text-foreground shadow-[0_1px_0.5px_rgba(11,20,26,0.08)]",
+              )}
+            >
+              {presentation ? (
+                <div className={bodyText ? "mb-1" : undefined}>
+                  <MessageAttachment presentation={presentation} isOutbound={isOutbound} />
+                </div>
+              ) : null}
+
+              {bodyText ? (
+                <div className="flex flex-wrap items-end gap-x-1">
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[14.2px] leading-[1.42]">
+                    {bodyText}
+                  </p>
+                  <MessageMeta
+                    timestamp={timestamp}
+                    isOutbound={isOutbound}
+                    showMeta={showMeta}
+                    message={message}
+                  />
+                </div>
+              ) : (
+                <div className="flex justify-end pt-0.5">
+                  <MessageMeta
+                    timestamp={timestamp}
+                    isOutbound={isOutbound}
+                    showMeta={showMeta}
+                    message={message}
+                  />
+                </div>
+              )}
+
+              {message.status === "failed" ? (
+                <div
+                  className={cn(
+                    "mt-2 rounded-xl border px-3 py-2 text-[12px] leading-5",
+                    isOutbound
+                      ? "border-red-300/50 bg-red-950/20 text-red-50"
+                      : "border-red-200 bg-red-50 text-red-800",
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertCircle
+                      className={cn("mt-0.5 h-4 w-4 shrink-0", isOutbound ? "text-red-200" : "text-red-600")}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">Falha no envio</p>
+                      <p className={cn("mt-0.5 text-[11.5px]", isOutbound ? "text-red-100/90" : "text-red-700")}>
+                        {failureReason ?? "Esta mensagem não conseguiu sair. Você pode reenviar ou descartar."}
+                      </p>
+                    </div>
+                  </div>
+                  {(onRetry || onDiscard) ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {onRetry ? (
+                        <button
+                          type="button"
+                          onClick={() => onRetry(message)}
+                          disabled={retryPending}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-60",
+                            isOutbound
+                              ? "bg-red-50 text-red-950 hover:bg-white"
+                              : "bg-red-600 text-white hover:bg-red-700",
+                          )}
+                          title="Tentar enviar de novo"
+                        >
+                          <RotateCcw className={cn("h-3.5 w-3.5", retryPending && "animate-spin")} />
+                          Reenviar
+                        </button>
+                      ) : null}
+                      {onDiscard ? (
+                        <button
+                          type="button"
+                          onClick={() => onDiscard(message)}
+                          disabled={retryPending}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-60",
+                            isOutbound
+                              ? "border-red-300/40 bg-transparent text-red-50 hover:bg-red-900/20"
+                              : "border-red-200 bg-white text-red-700 hover:bg-red-50",
+                          )}
+                          title="Descartar esta mensagem"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Descartar
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            {isOutbound && showTail ? <BubbleTail outbound /> : null}
           </div>
-
-          {isOutbound && showTail ? <BubbleTail outbound /> : null}
         </div>
       </div>
     </div>
@@ -307,6 +392,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps) {
   if (prev.groupPosition !== next.groupPosition) return false;
   if (prev.activeChatName !== next.activeChatName) return false;
   if (prev.onRetry !== next.onRetry) return false;
+  if (prev.onDiscard !== next.onDiscard) return false;
   if (prev.retryPending !== next.retryPending) return false;
   const a = prev.message;
   const b = next.message;

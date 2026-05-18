@@ -43,12 +43,13 @@ export function QuickReplyPicker({
       <PopoverContent
         side="top"
         align="start"
-        className="mb-1 w-[360px] rounded-[20px] border-border bg-card p-0 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
+        className="mb-1 w-[min(360px,calc(100vw-24px))] rounded-[20px] border-border bg-card p-0 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
       >
         <Command className="bg-transparent">
           <CommandInput
             placeholder="Buscar resposta..."
             className="border-b border-border text-foreground placeholder:text-muted-foreground"
+            autoFocus
           />
           <CommandList className="max-h-72">
             <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">

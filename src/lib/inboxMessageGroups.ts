@@ -155,10 +155,10 @@ export function bubbleGroupSpacingClass(position: BubbleGroupPosition): string {
   switch (position) {
     case "first":
     case "middle":
-      return "pb-[3px]";
+      return "pb-[1px]";
     case "last":
     case "single":
     default:
-      return "pb-2.5";
+      return "pb-2";
   }
 }

@@ -255,6 +255,8 @@ export default function Inbox() {
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const recentSendFingerprintsRef = useRef<Map<string, number>>(new Map());
+  const lastSendErrorToastRef = useRef<{ key: string; at: number } | null>(null);
+  const threadAtBottomRef = useRef(true);
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [instanceId, setInstanceId] = useState<string>("all");
@@ -290,6 +292,7 @@ export default function Inbox() {
   const [attachmentProgress, setAttachmentProgress] = useState<number | null>(null);
   const attachmentAbortRef = useRef<AbortController | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [jumpToLatestVisible, setJumpToLatestVisible] = useState(false);
   const [saleFlowOpen, setSaleFlowOpen] = useState(false);
   const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
   const [saleStep, setSaleStep] = useState<1 | 2 | 3>(1);
@@ -1337,6 +1340,17 @@ export default function Inbox() {
     });
   }
 
+  function resetComposerAttachmentState(options?: { keepBodyText?: boolean }) {
+    if (!options?.keepBodyText) {
+      setBodyText("");
+    }
+    setMessageType("text");
+    setMediaUrl("");
+    setPayloadText("{}");
+    setSelectedAttachmentName(null);
+    setAttachmentMimeType(null);
+  }
+
   async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
     const original = event.target.files?.[0];
     event.target.value = "";
@@ -1478,12 +1492,8 @@ export default function Inbox() {
     }
 
     setSelectedTemplateId(templateId);
-    setMessageType("text");
+    resetComposerAttachmentState();
     setBodyText(template.body);
-    setMediaUrl("");
-    setPayloadText("{}");
-    setSelectedAttachmentName(null);
-    setAttachmentMimeType(null);
     focusBodyComposer();
   }
 
@@ -1697,6 +1707,8 @@ export default function Inbox() {
   function forceScrollToLatestMessage() {
     skipAutoScrollToBottomRef.current = false;
     lastScrollStateRef.current = { chatId: null, messageCount: 0 };
+    threadAtBottomRef.current = true;
+    setJumpToLatestVisible(false);
 
     requestAnimationFrame(() => {
       scrollMessagesToBottom("auto");
@@ -1743,6 +1755,16 @@ export default function Inbox() {
     });
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const handleThreadScrollStateChange = useCallback(
+    ({ atBottom }: { atBottom: boolean; distanceFromBottom: number }) => {
+      threadAtBottomRef.current = atBottom;
+      if (atBottom) {
+        setJumpToLatestVisible(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!activeChat?.id || messagesLoading) {
       return;
@@ -1765,9 +1787,16 @@ export default function Inbox() {
       return;
     }
 
-    requestAnimationFrame(() => {
-      scrollMessagesToBottom(chatChanged ? "auto" : "smooth");
-    });
+    const shouldAutoScroll = chatChanged || threadAtBottomRef.current;
+
+    if (shouldAutoScroll) {
+      requestAnimationFrame(() => {
+        scrollMessagesToBottom(chatChanged ? "auto" : "smooth");
+      });
+      setJumpToLatestVisible(false);
+    } else if (messageCountChanged && !skipAutoScrollToBottomRef.current) {
+      setJumpToLatestVisible(true);
+    }
 
     lastScrollStateRef.current = {
       chatId: activeChat.id,
@@ -1783,22 +1812,6 @@ export default function Inbox() {
 
       setRetryingMessageId(failed.id);
       try {
-        // Remove a bolha falhada do cache; o reenvio insere a linha via API/Realtime.
-        const queryKey = ["inbox-messages", failed.chatId] as const;
-        queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(
-          queryKey,
-          (current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              pages: current.pages.map((page) => ({
-                ...page,
-                messages: page.messages.filter((m) => m.id !== failed.id),
-              })),
-            };
-          },
-        );
-
         await sendMessage.mutateAsync({
           instanceId: failed.instanceId,
           chatId: failed.chatId,
@@ -1809,24 +1822,45 @@ export default function Inbox() {
           payload: (failed.payloadJson ?? {}) as Record<string, unknown>,
           quotedMessageId: failed.quotedMessageId ?? undefined,
         });
+
+        const queryKey = ["inbox-messages", failed.chatId] as const;
+        queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              messages: page.messages.filter((m) => m.id !== failed.id),
+            })),
+          };
+        });
       } catch (error) {
-        const msg =
-          error instanceof Error ? error.message : "Falha ao reenviar a mensagem.";
-        toast({
-          title: "Falha ao reenviar",
-          description: msg,
-          variant: "destructive",
-        });
-        useAppStore.getState().addNotification({
-          tipo: "erro",
-          titulo: "Falha ao reenviar mensagem",
-          descricao: msg,
-        });
+        console.error("Falha ao reenviar mensagem no inbox:", error);
       } finally {
         setRetryingMessageId(null);
       }
     },
-    [activeChat, queryClient, retryingMessageId, sendMessage, toast],
+    [activeChat, queryClient, retryingMessageId, sendMessage],
+  );
+
+  const handleDiscardMessage = useCallback(
+    (failed: WhatsappMessage) => {
+      if (!activeChat) return;
+      if (failed.direction !== "outbound" || failed.status !== "failed") return;
+
+      const queryKey = ["inbox-messages", failed.chatId] as const;
+      queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          pages: current.pages.map((page) => ({
+            ...page,
+            messages: page.messages.filter((m) => m.id !== failed.id),
+          })),
+        };
+      });
+    },
+    [activeChat, queryClient],
   );
 
   async function handleClaimChatAndNegotiation() {
@@ -1935,11 +1969,7 @@ export default function Inbox() {
     }
     recentSendFingerprintsRef.current.set(sendFingerprint, now);
 
-    setBodyText("");
-    setMediaUrl("");
-    setPayloadText("{}");
-    setSelectedAttachmentName(null);
-    setAttachmentMimeType(null);
+    resetComposerAttachmentState();
     clearInboxChatDraft(activeChat.id);
 
     // Envio em background; botao permanece habilitado para varias mensagens em sequencia.
@@ -1947,16 +1977,25 @@ export default function Inbox() {
       onError: (error) => {
         recentSendFingerprintsRef.current.delete(sendFingerprint);
         const envioErroMsg = error instanceof Error ? error.message : "Tente novamente.";
-        toast({
-          title: "Falha ao enviar",
-          description: envioErroMsg,
-          variant: "destructive",
-        });
-        useAppStore.getState().addNotification({
-          tipo: "erro",
-          titulo: "Falha ao enviar mensagem",
-          descricao: envioErroMsg,
-        });
+        const toastKey = `${sendVars.chatId}\0${envioErroMsg}`;
+        const nowToast = Date.now();
+        const lastToast = lastSendErrorToastRef.current;
+        const shouldToast = !lastToast || lastToast.key !== toastKey || nowToast - lastToast.at > 10_000;
+        if (shouldToast) {
+          lastSendErrorToastRef.current = { key: toastKey, at: nowToast };
+          toast({
+            title: "Falha ao enviar",
+            description: envioErroMsg,
+            variant: "destructive",
+          });
+          useAppStore.getState().addNotification({
+            tipo: "erro",
+            titulo: "Falha ao enviar mensagem",
+            descricao: envioErroMsg,
+          });
+        } else {
+          console.error("Falha repetida ao enviar mensagem no inbox:", envioErroMsg);
+        }
       },
     });
   }
@@ -2443,7 +2482,11 @@ export default function Inbox() {
                 isLoadingOlder={isFetchingNextPage}
                 onLoadOlder={handleLoadOlderMessages}
                 onRetryMessage={handleRetryMessage}
+                onDiscardMessage={handleDiscardMessage}
                 retryingMessageId={retryingMessageId}
+                jumpToLatestVisible={jumpToLatestVisible}
+                onJumpToLatest={forceScrollToLatestMessage}
+                onScrollStateChange={handleThreadScrollStateChange}
               />
             )}
           </div>
@@ -2479,6 +2522,7 @@ export default function Inbox() {
               setBodyText(value);
             }}
             onSend={handleSendMessage}
+            sendPending={sendMessage.isPending}
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
@@ -2507,12 +2551,14 @@ export default function Inbox() {
             quickReplies={quickReplies}
             quickReplyOpen={quickReplyOpen}
             onQuickReplyOpenChange={setQuickReplyOpen}
+            onQuickReplyShortcutOpen={() => setQuickReplyOpen(true)}
             onSelectQuickReply={(reply) => {
               setBodyText(reply.bodyText);
               setMessageType("text");
               setQuickReplyOpen(false);
               setTimeout(() => bodyTextareaRef.current?.focus(), 50);
             }}
+            onClearAttachment={() => resetComposerAttachmentState({ keepBodyText: true })}
           />
             </>
           )}

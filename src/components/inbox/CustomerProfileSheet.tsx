@@ -57,9 +57,10 @@ import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
+import { buildInboxConversationSummary } from "@/lib/inboxConversationSummary";
 import {
   type ChatResolution,
-  type CrmNegotiation,
+  type CrmNegotiationRecord,
   type CrmNegotiationStatus,
   type Customer,
   type InboxChat,
@@ -119,7 +120,7 @@ function infoValue(value?: string | null) {
   return value?.trim() ? value : "Nao informado";
 }
 
-function profileHeaderPhone(customer: Customer | undefined, chat: InboxChat | null): string {
+function profileHeaderPhone(customer: Customer | null | undefined, chat: InboxChat | null): string {
   const phone =
     customer?.telefone?.trim() ||
     chat?.remotePhoneE164?.trim() ||
@@ -623,6 +624,7 @@ function CustomerQuickFacts({
   customer,
   chat,
   messageCount,
+  conversationSummary,
   linkedNegotiationAssigneeLabel,
   canEditIdentity,
   showIdentityEditButton,
@@ -631,6 +633,7 @@ function CustomerQuickFacts({
   customer: Customer;
   chat: InboxChat | null;
   messageCount: number;
+  conversationSummary: ReturnType<typeof buildInboxConversationSummary>;
   linkedNegotiationAssigneeLabel?: string | null;
   canEditIdentity: boolean;
   showIdentityEditButton: boolean;
@@ -640,6 +643,49 @@ function CustomerQuickFacts({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-[20px] border border-[#e1e8dc] bg-[#fdfefc] p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
+          Resumo rápido da conversa
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-[#334047]">{conversationSummary.headline}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[#6f7b76]">{conversationSummary.supportingText}</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {conversationSummary.facts.map((fact) => (
+            <div
+              key={fact.label}
+              className="rounded-xl border border-[#e8eee8] bg-white px-3 py-2"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
+                {fact.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-medium text-[#334047]">{fact.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-2">
+          {conversationSummary.lastCustomerMessage ? (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-900/70">
+                Última mensagem do cliente
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-violet-950">
+                {conversationSummary.lastCustomerMessage}
+              </p>
+            </div>
+          ) : null}
+          {conversationSummary.lastTeamMessage ? (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-900/70">
+                Última mensagem da equipe
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-emerald-950">
+                {conversationSummary.lastTeamMessage}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Identificação</p>
         <div className="mt-3 grid gap-2">
@@ -703,8 +749,8 @@ function ProfileNegotiationsPanel({
   effectiveCrmFunnels,
   resolveAttendantName,
 }: {
-  negotiations: CrmNegotiation[];
-  negotiationsForDisplay: CrmNegotiation[];
+  negotiations: CrmNegotiationRecord[];
+  negotiationsForDisplay: CrmNegotiationRecord[];
   negLoading: boolean;
   chat: InboxChat;
   effectiveCrmFunnels: CrmFunnel[];
@@ -759,22 +805,60 @@ function ProfileNegotiationsPanel({
   );
 }
 
-function ChatOnlyQuickFacts({ chat }: { chat: InboxChat }) {
-  const phone = chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "";
-  const row = (label: string, value: string) => (
-    <div className="flex justify-between gap-3 text-sm">
-      <span className="shrink-0 text-[#6f7b76]">{label}</span>
-      <span className="min-w-0 break-words text-right font-medium text-[#334047]">{value}</span>
-    </div>
-  );
-
+function ChatOnlyConversationSummary({
+  chat,
+  summary,
+}: {
+  chat: InboxChat;
+  summary: ReturnType<typeof buildInboxConversationSummary>;
+}) {
   return (
-    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Conversa</p>
-      <div className="mt-3 space-y-2">
-        {row("Atendente", chatAttendantLabel(chat))}
-        {row("Telefone", infoValue(phone))}
-        {row("Última mensagem", formatDateTime(chat.lastMessageAt))}
+    <div className="space-y-4">
+      <div className="rounded-[20px] border border-[#e1e8dc] bg-[#fdfefc] p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
+          Resumo rápido da conversa
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-[#334047]">{summary.headline}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[#6f7b76]">{summary.supportingText}</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {summary.facts.map((fact) => (
+            <div key={fact.label} className="rounded-xl border border-[#e8eee8] bg-white px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
+                {fact.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-medium text-[#334047]">{fact.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-2">
+          {summary.lastCustomerMessage ? (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-900/70">
+                Última mensagem do cliente
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-violet-950">
+                {summary.lastCustomerMessage}
+              </p>
+            </div>
+          ) : null}
+          {summary.lastTeamMessage ? (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-900/70">
+                Última mensagem da equipe
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-emerald-950">{summary.lastTeamMessage}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Conversa</p>
+        <div className="mt-3 space-y-2">
+          <QuickFactRow label="Atendente" value={chatAttendantLabel(chat)} />
+          <QuickFactRow label="Telefone" value={infoValue(chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "")} />
+          <QuickFactRow label="Última mensagem" value={formatDateTime(chat.lastMessageAt)} />
+        </div>
       </div>
     </div>
   );
@@ -916,6 +1000,17 @@ export function CustomerProfileSheet({
   const showArquivosTab = Boolean(isSupabaseConfigured && canViewCrm);
   const canEditCustomerIdentityInInbox = canEditClientes || canEditInbox;
   const showCustomerIdentityEditButton = Boolean(customer) && canEditCustomerIdentityInInbox;
+  const summaryChat = chat ?? {
+    id: "chat-summary-placeholder",
+    instanceId: "",
+    instanceName: "",
+    displayName: "",
+    remoteJid: "",
+    unreadCount: 0,
+    status: "open",
+    resolution: "open",
+    aiMode: "off",
+  };
   const customerIdentityEditBlockedMessage = useMemo(() => {
     if (!canEditCustomerIdentityInInbox) {
       return "Seu papel não tem permissão para editar contatos no Inbox.";
@@ -926,6 +1021,10 @@ export function CustomerProfileSheet({
     return null;
   }, [canEditCustomerIdentityInInbox, chat, canActOnChat]);
   const canEditCustomerIdentity = showCustomerIdentityEditButton && !customerIdentityEditBlockedMessage;
+  const conversationSummary = useMemo(() => buildInboxConversationSummary(summaryChat, messages), [
+    messages,
+    summaryChat,
+  ]);
 
   useEffect(() => {
     setProfileTab("resumo");
@@ -1187,20 +1286,21 @@ export function CustomerProfileSheet({
                   ) : null}
                 </TabsList>
 
-                <TabsContent value="resumo" className="mt-0 space-y-5 focus-visible:outline-none">
+                  <TabsContent value="resumo" className="mt-0 space-y-5 focus-visible:outline-none">
                   {customer ? (
                     <CustomerQuickFacts
                       customer={customer}
                       chat={chat}
                       messageCount={totalMessages}
+                      conversationSummary={conversationSummary}
                       linkedNegotiationAssigneeLabel={linkedNegotiationAssigneeLabel}
                       canEditIdentity={canEditCustomerIdentity}
                       showIdentityEditButton={showCustomerIdentityEditButton}
                       identityEditBlockedMessage={customerIdentityEditBlockedMessage}
                     />
-                  ) : isSupabaseConfigured ? (
-                    <ChatOnlyQuickFacts chat={chat} />
-                  ) : null}
+                  ) : (
+                    <ChatOnlyConversationSummary chat={chat} summary={conversationSummary} />
+                  )}
                 </TabsContent>
 
                 {showCrmTab && customer ? (

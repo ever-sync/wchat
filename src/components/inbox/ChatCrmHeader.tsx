@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, ExternalLink } from "lucide-react";
+import { Briefcase, ExternalLink, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
@@ -26,6 +26,7 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   const { toast } = useToast();
   const { profile } = useAuth();
   const { can } = useRolePermissions();
+  const aiMode = chat.aiMode ?? "off";
   const profileId = profile?.id;
   const canActOnChat = canAtendimentoActOnChat(profile?.role, chat.assigneeId, profileId);
   const canEditCrm = can("crm", "edit");
@@ -79,6 +80,9 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   return (
     <>
       <div className="mt-1 flex flex-wrap items-center gap-2" role="group" aria-label="CRM e resolução">
+        <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
+          {aiMode === "off" ? "IA desativada" : `IA: ${aiMode}`}
+        </Badge>
         {negotiation ? (
           <>
             <Badge variant="secondary" className="text-xs font-medium">
@@ -112,6 +116,12 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
           >
             {needsDealChoice ? "Vincular ao CRM" : "Criar lead no CRM"}
           </Button>
+        ) : null}
+        {aiMode !== "off" ? (
+          <Badge variant="secondary" className="inline-flex items-center gap-1 text-xs font-medium">
+            <Sparkles className="h-3 w-3" />
+            {aiMode === "full" ? "IA completa" : aiMode === "qualifying" ? "IA de qualificação" : "IA de handoff"}
+          </Badge>
         ) : null}
       </div>
 

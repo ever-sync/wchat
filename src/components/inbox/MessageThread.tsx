@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 import {
   bubbleGroupSpacingClass,
   flattenMessageGroups,
@@ -41,7 +41,11 @@ export type MessageThreadProps = {
   isLoadingOlder?: boolean;
   onLoadOlder?: () => void | Promise<void>;
   onRetryMessage?: (message: WhatsappMessage) => void;
+  onDiscardMessage?: (message: WhatsappMessage) => void;
   retryingMessageId?: string | null;
+  jumpToLatestVisible?: boolean;
+  onJumpToLatest?: () => void;
+  onScrollStateChange?: (state: { atBottom: boolean; distanceFromBottom: number }) => void;
 };
 
 /**
@@ -83,7 +87,11 @@ export function MessageThread({
   isLoadingOlder = false,
   onLoadOlder,
   onRetryMessage,
+  onDiscardMessage,
   retryingMessageId = null,
+  jumpToLatestVisible = false,
+  onJumpToLatest,
+  onScrollStateChange,
 }: MessageThreadProps) {
   const flat = useMemo(() => flattenMessageGroups(messageGroups), [messageGroups]);
 
@@ -102,9 +110,26 @@ export function MessageThread({
 
   const loadOlderArmedRef = useRef(true);
 
+  const reportScrollState = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node || !onScrollStateChange) {
+      return;
+    }
+
+    const distanceFromBottom = Math.max(0, node.scrollHeight - node.scrollTop - node.clientHeight);
+    onScrollStateChange({
+      atBottom: distanceFromBottom <= 96,
+      distanceFromBottom,
+    });
+  }, [onScrollStateChange, scrollRef]);
+
   useEffect(() => {
     loadOlderArmedRef.current = true;
   }, [messageGroups]);
+
+  useEffect(() => {
+    reportScrollState();
+  }, [flat.length, isLoadingOlder, reportScrollState]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -118,8 +143,11 @@ export function MessageThread({
     function onScroll() {
       const node = scrollRef.current;
       if (!node || !loadOlderArmedRef.current || isLoadingOlder) {
+        reportScrollState();
         return;
       }
+
+      reportScrollState();
 
       if (node.scrollTop < thresholdPx) {
         loadOlderArmedRef.current = false;
@@ -131,61 +159,78 @@ export function MessageThread({
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [scrollRef, onLoadOlder, hasMoreOlder, isLoadingOlder]);
+  }, [scrollRef, onLoadOlder, hasMoreOlder, isLoadingOlder, reportScrollState]);
 
   return (
-    <div
-      ref={scrollRef}
-      className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-none bg-background bg-[length:360px_360px] px-3 py-2 scrollbar-hide md:px-12"
-      style={{ backgroundImage: WHATSAPP_CHAT_BG, backgroundRepeat: "repeat", backgroundBlendMode: "normal" }}
-    >
-      {isLoadingOlder ? (
-        <div className="flex justify-center py-2">
-          <span className="inline-flex items-center gap-2 rounded-full bg-wchat-50 px-3 py-1 text-xs font-semibold text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Carregando mensagens antigas...
-          </span>
-        </div>
-      ) : null}
+    <div className="relative h-full min-h-0">
       <div
-        className="relative w-full"
-        style={{ height: virtualizer.getTotalSize() }}
+        ref={scrollRef}
+        className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-none bg-background bg-[length:360px_360px] px-3 py-2 scrollbar-hide md:px-12"
+        style={{ backgroundImage: WHATSAPP_CHAT_BG, backgroundRepeat: "repeat", backgroundBlendMode: "normal" }}
       >
-        {virtualizer.getVirtualItems().map((v) => {
-          const item = flat[v.index];
-          return (
-            <div
-              key={v.key}
-              data-index={v.index}
-              ref={virtualizer.measureElement}
-              className="absolute left-0 top-0 w-full"
-              style={{ transform: `translateY(${v.start}px)` }}
-            >
-              {item.kind === "day" ? (
-                <div className="mb-5 flex justify-center px-8 pt-2">
-                  <span className="rounded-lg bg-card px-4 py-1.5 text-[12px] font-medium text-muted-foreground shadow-sm ring-1 ring-border">
-                    {item.label}
-                  </span>
-                </div>
-              ) : item.kind === "note" ? (
-                <div className="pb-3">
-                  <NoteBubble note={item.note} />
-                </div>
-              ) : (
-                <div className={bubbleGroupSpacingClass(item.groupPosition)}>
-                  <MessageBubble
+        {isLoadingOlder ? (
+          <div className="flex justify-center py-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-wchat-50 px-3 py-1 text-xs font-semibold text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Carregando mensagens antigas...
+            </span>
+          </div>
+        ) : null}
+        <div
+          className="relative w-full"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((v) => {
+            const item = flat[v.index];
+            return (
+              <div
+                key={v.key}
+                data-index={v.index}
+                ref={virtualizer.measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{ transform: `translateY(${v.start}px)` }}
+              >
+                {item.kind === "day" ? (
+                  <div className="mb-4 flex justify-center px-8 pt-2">
+                    <span className="rounded-lg bg-card/80 px-3.5 py-[5px] text-[11.5px] font-medium text-muted-foreground shadow-sm ring-1 ring-border/70">
+                      {item.label}
+                    </span>
+                  </div>
+                ) : item.kind === "note" ? (
+                  <div className="pb-3">
+                    <NoteBubble note={item.note} />
+                  </div>
+                ) : (
+                  <div className={bubbleGroupSpacingClass(item.groupPosition)}>
+                    <MessageBubble
                     message={item.message}
                     groupPosition={item.groupPosition}
                     activeChatName={activeChatName}
+                    activeChatAvatarUrl={activeChatAvatarUrl}
                     onRetry={onRetryMessage}
+                    onDiscard={onDiscardMessage}
                     retryPending={retryingMessageId === item.message.id}
                   />
-                </div>
-              )}
-            </div>
-          );
-        })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {jumpToLatestVisible && onJumpToLatest ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
+          <button
+            type="button"
+            onClick={onJumpToLatest}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground shadow-lg shadow-black/10 transition-colors hover:bg-wchat-50"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Novas mensagens
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

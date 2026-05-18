@@ -295,7 +295,7 @@ export function CrmCreateNegotiationDialog({
       customerId = selectedCustomerId;
       negotiationTitle =
         selectedCustomer?.nome?.trim() ||
-        fallbackCustomerDisplayName(selectedCustomer?.telefone, "Negociação");
+        fallbackCustomerDisplayName(selectedCustomer?.telefone ?? "", "Negociação");
     } else {
       const name = newContactName.trim();
       const phoneRaw = newContactPhone.trim();

@@ -43,6 +43,7 @@ export type MessageInputProps = {
   onBodyTextChange: (value: string) => void;
   onSend: () => void;
   sendDisabled: boolean;
+  sendPending?: boolean;
   /** Bloqueia anexo, template, áudio e emoji (ex.: lead não assumido). */
   composerActionsDisabled?: boolean;
   showEmojiPicker: boolean;
@@ -64,9 +65,11 @@ export type MessageInputProps = {
   quickReplies?: QuickReply[];
   quickReplyOpen?: boolean;
   onQuickReplyOpenChange?: (open: boolean) => void;
+  onQuickReplyShortcutOpen?: () => void;
   onSelectQuickReply?: (reply: QuickReply) => void;
   noteMode?: boolean;
   onNoteModeChange?: (value: boolean) => void;
+  onClearAttachment?: () => void;
 };
 
 export function MessageInput({
@@ -90,6 +93,7 @@ export function MessageInput({
   onBodyTextChange,
   onSend,
   sendDisabled,
+  sendPending = false,
   composerActionsDisabled = false,
   showEmojiPicker,
   onToggleEmojiPicker,
@@ -109,9 +113,11 @@ export function MessageInput({
   quickReplies = [],
   quickReplyOpen = false,
   onQuickReplyOpenChange,
+  onQuickReplyShortcutOpen,
   onSelectQuickReply,
   noteMode = false,
   onNoteModeChange,
+  onClearAttachment,
 }: MessageInputProps) {
   const { openCalculadora } = useCalculadora();
   const previewKind = resolveComposerAttachmentPreview(
@@ -119,6 +125,16 @@ export function MessageInput({
     mediaUrl,
     attachmentMimeType,
   );
+  const previewTitle =
+    previewKind === "image"
+      ? "Imagem"
+      : previewKind === "video"
+        ? "Video"
+        : previewKind === "audio"
+          ? "Audio"
+          : previewKind === "document"
+            ? "Documento"
+            : null;
 
   return (
     <div className="relative z-10 shrink-0 border-t border-border bg-card px-3 py-2 md:px-5 md:py-3">
@@ -128,13 +144,28 @@ export function MessageInput({
             Anexos: ate {WHATSAPP_MEDIA_MAX_BYTES / (1024 * 1024)} MB por arquivo (imagens, video, audio,
             PDF e documentos comuns).
           </p>
-          {selectedAttachmentName ? (
-            <div className="mb-2 inline-flex items-center rounded-full border border-[#dfe7d9] bg-[#f4fbf2] px-3 py-1 text-xs font-semibold text-[#55705f]">
-              Arquivo: {selectedAttachmentName}
-            </div>
-          ) : null}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {selectedAttachmentName ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe7d9] bg-[#f4fbf2] px-3 py-1 text-xs font-semibold text-[#55705f]">
+                <span>{previewTitle ?? "Arquivo"}</span>
+                <span className="max-w-[220px] truncate font-medium">{selectedAttachmentName}</span>
+              </div>
+            ) : null}
+            {onClearAttachment ? (
+              <button
+                type="button"
+                disabled={attachmentUploading}
+                onClick={onClearAttachment}
+                className="inline-flex items-center gap-1 rounded-full border border-[#e2e8de] bg-white px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[#f3f6f1] disabled:pointer-events-none disabled:opacity-50"
+                title="Remover anexo"
+              >
+                <X className="h-3.5 w-3.5" />
+                Remover
+              </button>
+            ) : null}
+          </div>
           {attachmentUploading && attachmentProgress !== null ? (
-            <div className="mb-2 w-full max-w-[320px]">
+            <div className="mb-2 w-full max-w-[360px] rounded-2xl border border-[#dfe7d9] bg-[#f4fbf2] px-3 py-2">
               <div className="mb-1 flex items-center justify-between text-[11px] text-[#55705f]">
                 <span>Subindo arquivo...</span>
                 <span className="tabular-nums">{Math.round(attachmentProgress * 100)}%</span>
@@ -149,6 +180,16 @@ export function MessageInput({
           ) : null}
           {previewKind && mediaUrl.trim() ? (
             <div className="mb-3 overflow-hidden rounded-[22px] border border-[#e2e8de] bg-[#f8faf7] p-2 shadow-[0_10px_24px_rgba(37,63,51,0.04)]">
+              <div className="mb-2 flex items-center justify-between gap-2 px-1 pt-0.5">
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {previewTitle ?? "Anexo"}
+                  </p>
+                  {selectedAttachmentName ? (
+                    <p className="truncate text-xs text-[#445159]">{selectedAttachmentName}</p>
+                  ) : null}
+                </div>
+              </div>
               {previewKind === "image" ? (
                 <img
                   src={mediaUrl}
@@ -326,6 +367,18 @@ export function MessageInput({
           data-grammarly-ignore="true"
           onChange={(event) => onBodyTextChange(event.target.value)}
           onKeyDown={(event) => {
+            if (event.key === "/" && !event.shiftKey && !event.metaKey && !event.ctrlKey && bodyText.length === 0) {
+              event.preventDefault();
+              onQuickReplyShortcutOpen?.();
+              return;
+            }
+
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              void onSend();
+              return;
+            }
+
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               void onSend();
@@ -393,6 +446,11 @@ export function MessageInput({
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Subindo arquivo...
+              </>
+            ) : sendPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Enviando...
               </>
             ) : (
               <>
