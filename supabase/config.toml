@@ -9,3 +9,11 @@ verify_jwt = false
 # n8n envia com HMAC ou N8N_SERVICE_KEY — sem JWT de usuario
 [functions.n8n-reply]
 verify_jwt = false
+
+# API publica: Bearer wchat_<secret> (sem JWT de usuario)
+[functions.wchat-api]
+verify_jwt = false
+
+# Gestao de chaves: JWT do admin no app
+[functions.wchat-api-keys]
+verify_jwt = true

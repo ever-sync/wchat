@@ -48,6 +48,7 @@ async function getValidAccessToken() {
 export async function invokeAuthedFunction<TResponse>(
   functionName: string,
   body?: unknown,
+  method: "GET" | "POST" | "DELETE" = "POST",
 ) {
   const supabase = requireSupabase();
 
@@ -57,13 +58,13 @@ export async function invokeAuthedFunction<TResponse>(
 
   const accessToken = await getValidAccessToken();
   const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       apikey: supabaseAnonKey,
       Authorization: `Bearer ${accessToken}`,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: method === "GET" || body === undefined ? undefined : JSON.stringify(body),
   });
 
   const rawText = await response.text();

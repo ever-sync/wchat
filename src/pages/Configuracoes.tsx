@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useToast } from "@/hooks/use-toast";
+import { ApiKeysSettingsCard } from "@/components/settings/ApiKeysSettingsCard";
 import {
   useCollaboratorInvites,
   useInviteCollaborator,
@@ -940,6 +941,7 @@ export default function Configuracoes() {
               ) : null}
 
               {integrationsSection === "automacao" ? (
+          <>
           <Card className="border-border/60 bg-card/80">
             <CardHeader>
               <CardTitle className="text-lg">IA no n8n</CardTitle>
@@ -1070,6 +1072,12 @@ export default function Configuracoes() {
               </Button>
             </CardContent>
           </Card>
+
+          <ApiKeysSettingsCard
+            canEdit={canEditConfiguracoes}
+            disabled={!canUseAuthenticatedActions}
+          />
+          </>
               ) : null}
             </div>
           </div>
