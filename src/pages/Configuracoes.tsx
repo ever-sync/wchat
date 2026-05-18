@@ -55,6 +55,7 @@ import {
   useTenantCrmFunnelConfig,
   useUpsertTenantCrmFunnelConfig,
 } from "@/lib/api/crm-funnel-config";
+import { PlatformLogSection } from "@/components/settings/PlatformLogSection";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import {
   useConnectWhatsappInstance,
@@ -128,6 +129,7 @@ const SETTINGS_TAB_VALUES = [
   "colaboradores",
   "funis",
   "configuracao-chat",
+  "log",
 ] as const;
 type SettingsTab = (typeof SETTINGS_TAB_VALUES)[number];
 
@@ -296,6 +298,8 @@ export default function Configuracoes() {
             if (secao !== "respostas" && secao !== "etiquetas") {
               p.delete("secao");
             }
+          } else if (next === "log") {
+            p.delete("secao");
           } else {
             p.delete("secao");
           }
@@ -592,6 +596,7 @@ export default function Configuracoes() {
           ) : null}
           <TabsTrigger value="funis"><BarChart3 className="mr-2 h-4 w-4" />Funis CRM</TabsTrigger>
           <TabsTrigger value="configuracao-chat"><MessageSquare className="mr-2 h-4 w-4" />Configuracao do chat</TabsTrigger>
+          <TabsTrigger value="log"><BookOpen className="mr-2 h-4 w-4" />Log da plataforma</TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1758,6 +1763,10 @@ export default function Configuracoes() {
               ) : null}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="log" className="space-y-6">
+          <PlatformLogSection />
         </TabsContent>
       </Tabs>
 
