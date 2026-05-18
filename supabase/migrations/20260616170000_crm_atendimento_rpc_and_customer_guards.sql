@@ -148,6 +148,8 @@ begin
 end;
 $$;
 
+drop function if exists public.ensure_lead_from_chat(uuid, boolean);
+
 create or replace function public.ensure_lead_from_chat(
   p_chat_id uuid,
   p_auto_assign boolean default false,

@@ -40,7 +40,6 @@ grant execute on function public.touch_crm_negotiation_interaction(uuid, timesta
 create or replace function public.resolve_negotiation_for_chat(p_chat_id uuid)
 returns uuid
 language plpgsql
-stable
 security definer
 set search_path = public
 as $$

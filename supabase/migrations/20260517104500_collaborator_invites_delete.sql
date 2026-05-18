@@ -1,3 +1,14 @@
+-- Helper: current user role (stable, cached per transaction)
+create or replace function public.current_user_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role from public.profiles where id = auth.uid() limit 1
+$$;
+
 -- Permite excluir convites (admin) e auto-remover ao aceitar (convidado).
 
 drop policy if exists "collaborator_invites_admin_delete" on public.collaborator_invites;
@@ -18,7 +29,7 @@ using (
 );
 
 create or replace function public.clear_collaborator_invite_after_accept(
-  target_user_id uuid,
+  _target_user_id uuid,
   target_email text,
   target_tenant_id uuid
 )

@@ -62,7 +62,7 @@ begin
   insert into public.trendii_sellers (tenant_id, user_id, name, email, role, active)
   values (
     v_profile.tenant_id,
-    p_profile.id,
+    p_profile_id,
     v_profile.nome,
     v_profile.email,
     case when v_profile.role = 'admin' then 'admin' when v_profile.role = 'operacao' then 'gerente' else 'vendedor' end,

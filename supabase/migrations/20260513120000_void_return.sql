@@ -173,8 +173,8 @@ declare
   v_customer_balance numeric(12,2);
   v_payment_method text;
   v_sale_notes text;
-  v_line_idx int;
   v_item jsonb;
+  v_prepared_items jsonb := '[]'::jsonb;
   v_line_qty numeric(12,3);
   v_line_unit numeric(12,2);
   v_used_custom boolean;
@@ -200,15 +200,7 @@ begin
       raise exception 'Usuario responsavel pela venda e obrigatorio.';
     end if;
 
-    drop table if exists _rsf_lines;
-    create temporary table _rsf_lines (
-      product_id uuid not null,
-      product_name text not null,
-      quantity numeric(12,3) not null,
-      list_price numeric(12,2) not null,
-      unit_price numeric(12,2) not null,
-      used_custom boolean not null
-    ) on commit drop;
+    v_amount := 0;
 
     if p_sale_items is not null
       and jsonb_typeof(p_sale_items) = 'array'
@@ -257,14 +249,15 @@ begin
           raise exception 'Preco unitario invalido no item % (produto %).', v_line_idx + 1, v_product_name;
         end if;
 
-        insert into _rsf_lines values (
-          v_product_id,
-          v_product_name,
-          v_line_qty,
-          v_product_list_price,
-          v_line_unit,
-          v_used_custom
+        v_prepared_items := v_prepared_items || jsonb_build_object(
+          'product_id', v_product_id,
+          'product_name', v_product_name,
+          'quantity', v_line_qty,
+          'list_price', v_product_list_price,
+          'unit_price', v_line_unit,
+          'used_custom', v_used_custom
         );
+        v_amount := v_amount + (v_line_qty * v_line_unit);
       end loop;
 
     elsif p_sale_product_id is not null then
@@ -288,19 +281,18 @@ begin
         raise exception 'Valor da venda invalido.';
       end if;
 
-      insert into _rsf_lines values (
-        v_product_id,
-        v_product_name,
-        1::numeric(12,3),
-        v_product_list_price,
-        v_line_unit,
-        coalesce(p_sale_other_price, false)
+      v_prepared_items := v_prepared_items || jsonb_build_object(
+        'product_id', v_product_id,
+        'product_name', v_product_name,
+        'quantity', 1::numeric(12,3),
+        'list_price', v_product_list_price,
+        'unit_price', v_line_unit,
+        'used_custom', coalesce(p_sale_other_price, false)
       );
+      v_amount := v_amount + (1::numeric(12,3) * v_line_unit);
     else
       raise exception 'Informe os itens da venda (p_sale_items) ou um produto (modo legado).';
     end if;
-
-    select coalesce(sum(quantity * unit_price), 0) into v_amount from _rsf_lines;
 
     if v_amount is null or v_amount <= 0 then
       raise exception 'Valor total da venda invalido.';
@@ -406,13 +398,13 @@ begin
     select
       v_tenant_id,
       v_sale_id,
-      product_id,
-      product_name,
-      quantity,
-      list_price,
-      unit_price,
-      used_custom
-    from _rsf_lines;
+      (value->>'product_id')::uuid,
+      value->>'product_name',
+      (value->>'quantity')::numeric(12,3),
+      (value->>'list_price')::numeric(12,2),
+      (value->>'unit_price')::numeric(12,2),
+      (value->>'used_custom')::boolean
+    from jsonb_array_elements(v_prepared_items);
 
     if v_sale_credit > 0 then
       insert into public.customer_credits (
