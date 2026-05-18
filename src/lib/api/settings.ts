@@ -6,7 +6,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import { invokeAuthedFunction } from "@/lib/api/functions";
-import { getAppUrl } from "@/lib/app-url";
+import { getAppUrl, isLocalhostAppUrl } from "@/lib/app-url";
 import { getCurrentTenantId, getCurrentUserId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type { CollaboratorInvite, ProfileSettings, UserRole } from "@/types/domain";
@@ -177,9 +177,10 @@ export async function inviteCollaborator(input: InviteCollaboratorInput) {
     throw new Error("Configure o Supabase antes de criar acessos.");
   }
 
+  const appUrl = getAppUrl();
   const data = await invokeAuthedFunction<{ invite: InviteRow; emailSent?: boolean; warning?: string | null }>(
     "invite-collaborator",
-    { ...input, appUrl: getAppUrl() },
+    isLocalhostAppUrl(appUrl) ? input : { ...input, appUrl },
   );
   return {
     invite: mapInvite(data.invite),

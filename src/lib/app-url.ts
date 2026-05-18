@@ -11,3 +11,12 @@ export function getAppUrl() {
 
   return "http://localhost:8080";
 }
+
+export function isLocalhostAppUrl(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}

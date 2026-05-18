@@ -39,6 +39,17 @@ function normalizePublicOrigin(raw: string | null | undefined) {
   }
 }
 
+function isLocalhostOrigin(raw: string | null | undefined) {
+  const normalized = normalizePublicOrigin(raw);
+  if (!normalized) return false;
+  try {
+    const parsed = new URL(normalized);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function resolveAppUrl(request: Request, bodyAppUrl?: unknown) {
   const envCandidates = [
     Deno.env.get("APP_SITE_URL"),
@@ -48,7 +59,7 @@ function resolveAppUrl(request: Request, bodyAppUrl?: unknown) {
 
   for (const candidate of envCandidates) {
     const normalized = normalizePublicOrigin(candidate);
-    if (normalized) {
+    if (normalized && !isLocalhostOrigin(normalized)) {
       return normalized;
     }
   }
@@ -57,6 +68,12 @@ function resolveAppUrl(request: Request, bodyAppUrl?: unknown) {
   const fromBody = normalizePublicOrigin(typeof bodyAppUrl === "string" ? bodyAppUrl : null);
 
   if (fromBody) {
+    if (isLocalhostOrigin(fromBody)) {
+      throw new Error(
+        "O convite recebeu uma URL local (localhost). Defina APP_SITE_URL nos secrets da Edge Function e VITE_APP_URL no frontend para um dominio publico.",
+      );
+    }
+
     if (origin && fromBody !== origin) {
       throw new Error("URL publica do app nao confere com a origem da requisicao.");
     }
@@ -66,22 +83,25 @@ function resolveAppUrl(request: Request, bodyAppUrl?: unknown) {
 
   const referer = request.headers.get("referer");
   const fromReferer = referer ? normalizePublicOrigin(referer) : null;
-  if (fromReferer) {
+  if (fromReferer && !isLocalhostOrigin(fromReferer)) {
     return fromReferer;
   }
 
-  if (origin) {
+  if (origin && !isLocalhostOrigin(origin)) {
     return origin;
   }
 
   const forwardedHost = request.headers.get("x-forwarded-host");
   if (forwardedHost?.trim()) {
     const forwardedProto = request.headers.get("x-forwarded-proto")?.trim() || "https";
-    return normalizePublicOrigin(`${forwardedProto}://${forwardedHost.trim()}`);
+    const forwarded = normalizePublicOrigin(`${forwardedProto}://${forwardedHost.trim()}`);
+    if (forwarded && !isLocalhostOrigin(forwarded)) {
+      return forwarded;
+    }
   }
 
   throw new Error(
-    "Nao foi possivel resolver a URL publica do app para o convite. Defina APP_SITE_URL nos secrets da Edge Function.",
+    "Nao foi possivel resolver a URL publica do app para o convite. Defina APP_SITE_URL nos secrets da Edge Function e VITE_APP_URL no frontend.",
   );
 }
 
