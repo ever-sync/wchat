@@ -35,7 +35,8 @@ type CustomerCustomFieldInputProps = {
 };
 
 function boolFromValue(value: string): boolean {
-  return value === "1" || value === "true" || value === "sim";
+  const v = value.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "sim" || v === "yes";
 }
 
 function FieldShell({

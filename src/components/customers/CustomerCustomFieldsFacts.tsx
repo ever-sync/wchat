@@ -8,7 +8,10 @@ import {
   useCustomerCustomFields,
   useCustomerCustomFieldValues,
 } from "@/lib/api/customer-custom-fields";
-import { buildCustomerCustomFieldsDisplayList } from "@/lib/customer-custom-field-display";
+import {
+  buildCustomerCustomFieldsDisplayList,
+  buildCustomerCustomFieldsDraftValues,
+} from "@/lib/customer-custom-field-display";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +21,8 @@ type CustomerCustomFieldsFactsProps = {
   sourceColumns?: Record<string, string> | null;
   className?: string;
   readOnly?: boolean;
+  /** Mensagem quando readOnly por bloqueio de atendimento (ex.: conversa não assumida). */
+  editBlockedMessage?: string | null;
 };
 
 function CustomFieldRow({ label, value }: { label: string; value: string }) {
@@ -44,15 +49,12 @@ function CustomFieldRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function draftFromItems(items: { field: { id: string }; value: string }[]): Record<string, string> {
-  return Object.fromEntries(items.map(({ field, value }) => [field.id, value]));
-}
-
 export function CustomerCustomFieldsFacts({
   customerId,
   sourceColumns,
   className,
   readOnly = false,
+  editBlockedMessage,
 }: CustomerCustomFieldsFactsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -77,25 +79,37 @@ export function CustomerCustomFieldsFacts({
       return;
     }
     setDraft(
-      draftFromItems(
-        buildCustomerCustomFieldsDisplayList({
-          fields: fieldDefs,
-          valueRows,
-          sourceColumns,
-        }),
-      ),
+      buildCustomerCustomFieldsDraftValues({
+        fields: fieldDefs,
+        valueRows,
+        sourceColumns,
+      }),
     );
   }, [customerId, fieldDefs, isLoading, valueRows, sourceColumns]);
 
-  const filledCount = useMemo(
-    () => Object.values(draft).filter((v) => v.trim().length > 0).length,
-    [draft],
+  const baselineDraft = useMemo(
+    () =>
+      buildCustomerCustomFieldsDraftValues({
+        fields: fieldDefs,
+        valueRows,
+        sourceColumns,
+      }),
+    [fieldDefs, valueRows, sourceColumns],
   );
 
+  const filledCount = useMemo(() => {
+    return fieldDefs.filter((field) => {
+      const v = (draft[field.id] ?? "").trim();
+      if (field.kind === "booleano") {
+        return v === "1";
+      }
+      return v.length > 0;
+    }).length;
+  }, [draft, fieldDefs]);
+
   const isDirty = useMemo(() => {
-    const baseline = draftFromItems(items);
-    return fieldDefs.some((field) => (draft[field.id] ?? "") !== (baseline[field.id] ?? ""));
-  }, [draft, fieldDefs, items]);
+    return fieldDefs.some((field) => (draft[field.id] ?? "") !== (baselineDraft[field.id] ?? ""));
+  }, [draft, fieldDefs, baselineDraft]);
 
   if (fieldDefs.length === 0) {
     return null;
@@ -103,6 +117,13 @@ export function CustomerCustomFieldsFacts({
 
   const handleSave = async () => {
     if (readOnly || saving) {
+      if (readOnly && editBlockedMessage) {
+        toast({
+          title: "Edição indisponível",
+          description: editBlockedMessage,
+          variant: "destructive",
+        });
+      }
       return;
     }
     setSaving(true);
@@ -140,6 +161,11 @@ export function CustomerCustomFieldsFacts({
       </div>
 
       <div className="mt-3">
+        {readOnly && editBlockedMessage ? (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-950">
+            {editBlockedMessage}
+          </p>
+        ) : null}
         {isLoading ? (
           <div className="space-y-3" aria-busy="true">
             {[0, 1, 2].map((i) => (

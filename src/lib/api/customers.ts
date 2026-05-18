@@ -943,6 +943,41 @@ export async function updateCustomer(id: string, input: CustomerUpsertInput) {
   return mapRowToCustomer(data as unknown as CustomerRow);
 }
 
+/** Propaga nome do cadastro para conversas vinculadas e negociações do cliente. */
+export async function syncCustomerNomeToChatsAndCrm(customerId: string, nome: string): Promise<void> {
+  if (!isSupabaseConfigured || !customerId.trim()) {
+    return;
+  }
+
+  const trimmed = nome.trim();
+  if (trimmed.length < 2) {
+    return;
+  }
+
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+
+  const { error: chatError } = await supabase
+    .from("whatsapp_chats")
+    .update({ display_name: trimmed })
+    .eq("tenant_id", tenantId)
+    .eq("customer_id", customerId);
+
+  if (chatError) {
+    throw new Error(chatError.message);
+  }
+
+  const { error: negError } = await supabase
+    .from("crm_negotiations")
+    .update({ title: trimmed })
+    .eq("tenant_id", tenantId)
+    .eq("customer_id", customerId);
+
+  if (negError) {
+    throw new Error(negError.message);
+  }
+}
+
 export async function deleteCustomers(ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
   if (!uniqueIds.length) {

@@ -1,32 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, CheckCircle2, ExternalLink } from "lucide-react";
+import { Briefcase, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
-import {
-  funnelStageTitleIn,
-  resolveConfiguredSaleStageId,
-} from "@/data/crm-funnels";
+import { funnelStageTitleIn } from "@/data/crm-funnels";
 import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import {
   useChatNegotiation,
   useEnsureLeadFromChat,
   useLinkChatNegotiation,
-  useSetChatResolution,
 } from "@/lib/api/crm-lead";
-import { useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
-import {
-  canAtendimentoActOnChat,
-  canAtendimentoModifyNegotiation,
-  chatAssigneeBlockedMessage,
-  negotiationAssigneeBlockedMessage,
-} from "@/lib/crm/negotiation-assignee";
-import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
+import { canAtendimentoActOnChat, chatAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import type { InboxChat } from "@/types/domain";
 
 type ChatCrmHeaderProps = {
@@ -43,19 +32,12 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
 
   const { data: funnels } = useEffectiveCrmFunnels();
   const { data: negotiation } = useChatNegotiation(chat.id);
-  const canModifyNegotiation = canAtendimentoModifyNegotiation(
-    profile?.role,
-    negotiation?.assigneeId,
-    profileId,
-  );
   const { data: customerNegotiations = [] } = useCrmNegotiationsForCustomer(
     chat.customerId ?? undefined,
     { enabled: Boolean(chat.customerId) },
   );
   const ensureLead = useEnsureLeadFromChat();
   const linkNegotiation = useLinkChatNegotiation();
-  const setResolution = useSetChatResolution();
-  const updateNegotiation = useUpdateCrmNegotiation();
   const [dealChoiceOpen, setDealChoiceOpen] = useState(false);
 
   const funnel = funnels.find((f) => f.id === negotiation?.funnelId) ?? funnels[0];
@@ -131,56 +113,6 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
             {needsDealChoice ? "Vincular ao CRM" : "Criar lead no CRM"}
           </Button>
         ) : null}
-
-        {negotiation && negotiation.status === "em_andamento" && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-emerald-700"
-            disabled={!canActOnChat || !canModifyNegotiation || !canEditCrm}
-            title={
-              !canActOnChat
-                ? chatAssigneeBlockedMessage()
-                : !canModifyNegotiation
-                  ? negotiationAssigneeBlockedMessage()
-                  : !canEditCrm
-                    ? "Seu papel nao tem permissao para marcar vendido"
-                  : undefined
-            }
-            onClick={() => {
-              if (!canEditCrm) {
-                toast({
-                  title: "Ação indisponível",
-                  description: "Seu papel nao tem permissao para marcar vendido.",
-                  variant: "destructive",
-                });
-                return;
-              }
-              if (!canActOnChat || !canModifyNegotiation) {
-                toast({
-                  title: !canActOnChat ? "Assuma a conversa" : "Assuma o negócio",
-                  description: !canActOnChat
-                    ? chatAssigneeBlockedMessage()
-                    : negotiationAssigneeBlockedMessage(),
-                  variant: "destructive",
-                });
-                return;
-              }
-              void updateNegotiation.mutateAsync({
-                id: negotiation.id,
-                patch: {
-                  status: "vendido",
-                  stageId: resolveConfiguredSaleStageId(funnels, negotiation.funnelId),
-                },
-              });
-              void setResolution.mutateAsync({ chatId: chat.id, resolution: "resolved" });
-            }}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Marcar vendido
-          </Button>
-        )}
       </div>
 
       {chat.customerId ? (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCustomerCustomFieldsDisplayList,
+  buildCustomerCustomFieldsDraftValues,
   customerCustomFieldSourceColumnKeys,
   readCustomerCustomFieldFromSourceColumns,
 } from "@/lib/customer-custom-field-display";
@@ -51,5 +52,44 @@ describe("buildCustomerCustomFieldsDisplayList", () => {
       sourceColumns: { doenca: "Artrite" },
     });
     expect(items[0]?.value).toBe("Artrite");
+  });
+});
+
+describe("buildCustomerCustomFieldsDraftValues", () => {
+  it("mantém booleano como 1/0 para o switch, não Sim/Não", () => {
+    const boolField: CustomerCustomFieldDefinition = {
+      id: "b1",
+      nome: "Paga imposto",
+      kind: "booleano",
+      sortOrder: 0,
+      options: [],
+    };
+    const draft = buildCustomerCustomFieldsDraftValues({
+      fields: [boolField],
+      valueRows: [{ fieldId: "b1", valueText: "1", valueNumeric: null, valueDate: null }],
+    });
+    expect(draft.b1).toBe("1");
+
+    const items = buildCustomerCustomFieldsDisplayList({
+      fields: [boolField],
+      valueRows: [{ fieldId: "b1", valueText: "1", valueNumeric: null, valueDate: null }],
+    });
+    expect(items[0]?.value).toBe("Sim");
+  });
+
+  it("normaliza Sim legado em source_columns para 1", () => {
+    const boolField: CustomerCustomFieldDefinition = {
+      id: "b2",
+      nome: "Ativo",
+      kind: "booleano",
+      sortOrder: 0,
+      options: [],
+    };
+    const draft = buildCustomerCustomFieldsDraftValues({
+      fields: [boolField],
+      valueRows: [],
+      sourceColumns: { Ativo: "Sim" },
+    });
+    expect(draft.b2).toBe("1");
   });
 });

@@ -66,7 +66,10 @@ import {
   useCustomerCustomFieldValues,
   useCustomerCustomFields,
 } from "@/lib/api/customer-custom-fields";
-import { buildCustomerCustomFieldsDisplayList } from "@/lib/customer-custom-field-display";
+import {
+  buildCustomerCustomFieldsDisplayList,
+  buildCustomerCustomFieldsDraftValues,
+} from "@/lib/customer-custom-field-display";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CrmTask, Customer } from "@/types/domain";
@@ -763,9 +766,11 @@ export function ClienteRdPerfilView({
       campanha: sourceColumn(cliente, "campanha", "Campanha"),
       telefone: cliente.telefone ?? "",
       email: cliente.email ?? "",
-      customFieldValues: Object.fromEntries(
-        customFieldsById.map(({ field, value }) => [field.id, value]),
-      ),
+      customFieldValues: buildCustomerCustomFieldsDraftValues({
+        fields: customFieldDefs,
+        valueRows: customFieldValueRows,
+        sourceColumns: cliente.sourceColumns,
+      }),
     });
     setNegoPanelEditing(true);
   };

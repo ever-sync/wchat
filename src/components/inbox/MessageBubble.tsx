@@ -45,7 +45,7 @@ function MessageAttachment({
     ? "border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/15"
     : "border-border bg-muted text-foreground hover:bg-wchat-100";
 
-  if (mediaBlocked || isMetaCdnLikelyToBlockInlineEmbed(presentation.url)) {
+  if (mediaBlocked) {
     return (
       <a
         href={presentation.url}
@@ -58,9 +58,9 @@ function MessageAttachment({
       >
         <FileText className="h-5 w-5 shrink-0 opacity-90" />
         <span className="min-w-0 flex-1 truncate">
-          {isMetaCdnLikelyToBlockInlineEmbed(presentation.url) && !mediaBlocked
-            ? "Preview bloqueado pela rede Meta no navegador. Abra o link para ver."
-            : "Midia indisponivel no preview. Clique para tentar abrir."}
+          {isMetaCdnLikelyToBlockInlineEmbed(presentation.url)
+            ? "Não foi possível exibir aqui. Abra o link para ver a mídia."
+            : "Mídia indisponível no preview. Clique para tentar abrir."}
         </span>
         <span className="shrink-0 text-xs underline underline-offset-2">Abrir</span>
       </a>
@@ -80,6 +80,7 @@ function MessageAttachment({
             src={presentation.url}
             alt=""
             loading="lazy"
+            referrerPolicy="no-referrer"
             className="max-h-64 w-full max-w-[min(100%,320px)] object-contain"
             onError={() => setMediaBlocked(true)}
           />
@@ -92,6 +93,7 @@ function MessageAttachment({
           src={presentation.url}
           className="max-h-64 w-full max-w-[min(100%,320px)] rounded-xl"
           preload="metadata"
+          referrerPolicy="no-referrer"
           onError={() => setMediaBlocked(true)}
         />
       );
@@ -101,6 +103,7 @@ function MessageAttachment({
           controls
           src={presentation.url}
           className={cn("h-10 w-[min(70vw,320px)] max-w-full", isOutbound ? "opacity-95" : "")}
+          referrerPolicy="no-referrer"
           onError={() => setMediaBlocked(true)}
         />
       );

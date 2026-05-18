@@ -69,18 +69,58 @@ const EMPTY_VALUE_ROW: CustomerCustomFieldValueRow = {
   valueDate: null,
 };
 
+function normalizeBooleanDraftValue(raw: string): string {
+  const v = raw.trim().toLowerCase();
+  if (!v) {
+    return "0";
+  }
+  if (v === "1" || v === "true" || v === "sim" || v === "yes") {
+    return "1";
+  }
+  if (v === "0" || v === "false" || v === "nao" || v === "não" || v === "no") {
+    return "0";
+  }
+  return raw;
+}
+
+function rawCustomFieldValueForField(
+  field: CustomerCustomFieldDefinition,
+  valueRows: CustomerCustomFieldValueRow[],
+  sourceColumns?: Record<string, string> | null,
+): string {
+  const values = new Map(valueRows.map((row) => [row.fieldId, row]));
+  const row = values.get(field.id);
+  let raw = customFieldValueToString(field.kind, row ?? { ...EMPTY_VALUE_ROW, fieldId: field.id });
+  if (!raw.trim()) {
+    raw = readCustomerCustomFieldFromSourceColumns(sourceColumns, field.nome);
+  }
+  if (field.kind === "booleano") {
+    return normalizeBooleanDraftValue(raw);
+  }
+  return raw;
+}
+
+/** Valores no formato do formulário (ex.: booleano como "1"/"0", não "Sim"/"Não"). */
+export function buildCustomerCustomFieldsDraftValues(input: {
+  fields: CustomerCustomFieldDefinition[];
+  valueRows: CustomerCustomFieldValueRow[];
+  sourceColumns?: Record<string, string> | null;
+}): Record<string, string> {
+  return Object.fromEntries(
+    input.fields.map((field) => [
+      field.id,
+      rawCustomFieldValueForField(field, input.valueRows, input.sourceColumns),
+    ]),
+  );
+}
+
 export function buildCustomerCustomFieldsDisplayList(input: {
   fields: CustomerCustomFieldDefinition[];
   valueRows: CustomerCustomFieldValueRow[];
   sourceColumns?: Record<string, string> | null;
 }): CustomerCustomFieldDisplayItem[] {
-  const values = new Map(input.valueRows.map((row) => [row.fieldId, row]));
   return input.fields.map((field) => {
-    const row = values.get(field.id);
-    let raw = customFieldValueToString(field.kind, row ?? { ...EMPTY_VALUE_ROW, fieldId: field.id });
-    if (!raw.trim()) {
-      raw = readCustomerCustomFieldFromSourceColumns(input.sourceColumns, field.nome);
-    }
+    const raw = rawCustomFieldValueForField(field, input.valueRows, input.sourceColumns);
     const display = raw.trim() ? formatCustomFieldValueForDisplay(field.kind, raw) : "";
     return { field, value: display };
   });

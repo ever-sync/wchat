@@ -16,6 +16,27 @@ function baseMessage(overrides: Partial<WhatsappMessage>): WhatsappMessage {
 }
 
 describe("resolveInboxAttachmentPresentation", () => {
+  it("ignora nome de arquivo solto (evita 403 no dominio do app)", () => {
+    const message = baseMessage({
+      messageType: "media",
+      mediaUrl: "549882941_707333488792507_4239322882866302707_n.jpg",
+    });
+    expect(resolveInboxAttachmentPresentation(message)).toBeNull();
+  });
+
+  it("mantém URL do CDN do WhatsApp para tentativa de preview (fallback no balão)", () => {
+    const waUrl =
+      "https://pps.whatsapp.net/v/t61.24694-24/306469471_605864137918683_2200323229137782967_n.jpg";
+    const message = baseMessage({
+      messageType: "media",
+      mediaUrl: waUrl,
+    });
+    expect(resolveInboxAttachmentPresentation(message)).toEqual({
+      kind: "image",
+      url: waUrl,
+    });
+  });
+
   it("returns image for media type with jpg url", () => {
     const message = baseMessage({
       messageType: "media",
@@ -140,6 +161,20 @@ describe("resolveInboxAttachmentPresentation", () => {
     const result = resolveInboxAttachmentPresentation(message);
     expect(result?.kind).toBe("audio");
     expect(result?.url).toBe("https://uazapi.example.com/files/voice.opus");
+  });
+
+  it("prefere mirroredMediaUrl do payload quando media_url ainda aponta ao CDN", () => {
+    const mirrored =
+      "https://projeto.supabase.co/storage/v1/object/public/whatsapp-media/tenant-1/abc_photo.jpg";
+    const message = baseMessage({
+      messageType: "media",
+      mediaUrl: "https://pps.whatsapp.net/v/t61.24694-24/old.jpg",
+      payloadJson: { mirroredMediaUrl: mirrored },
+    });
+    expect(resolveInboxAttachmentPresentation(message)).toEqual({
+      kind: "image",
+      url: mirrored,
+    });
   });
 
   it("normalizes /storage relative URL to supabase host", () => {

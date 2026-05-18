@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
+import { isInlineMediaUrlAllowed } from "@/lib/restricted-media-hosts";
 import { cn } from "@/lib/utils";
 
 function getInitials(name: string) {
@@ -36,8 +36,7 @@ export function ConversationAvatar({
   avatarUrl?: string | null;
   size?: "xs" | "sm" | "md";
 }) {
-  const safeAvatarUrl =
-    avatarUrl && !isMetaCdnLikelyToBlockInlineEmbed(avatarUrl) ? avatarUrl : null;
+  const safeAvatarUrl = avatarUrl && isInlineMediaUrlAllowed(avatarUrl) ? avatarUrl : null;
 
   return (
     <Avatar

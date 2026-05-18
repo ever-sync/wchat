@@ -1,3 +1,4 @@
+import { isBareMediaFilename, isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
 import type { WhatsappMessage } from "@/types/domain";
 
 export type InboxAttachmentPresentation =
@@ -31,6 +32,10 @@ function isAllowedMediaUrl(url: string): boolean {
 
   /* URLs cruas do WhatsApp sao criptografadas — nao adianta tentar carregar. */
   if (isEncryptedWhatsappMediaUrl(t)) {
+    return false;
+  }
+
+  if (isBareMediaFilename(t)) {
     return false;
   }
 
@@ -276,16 +281,46 @@ function fileNameFromUrl(url: string): string {
   }
 }
 
+function isMirroredWhatsappStorageUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes("/storage/v1/object/public/whatsapp-media/") ||
+    lower.includes("whatsapp-media/") ||
+    (lower.includes("supabase.co") && lower.includes("/storage/"))
+  );
+}
+
+/** Prioriza cópia no Storage; evita URL expirada do CDN quando o payload já tem espelho. */
+function resolvePrimaryMediaUrl(message: WhatsappMessage): string | undefined {
+  const dbUrl = message.mediaUrl?.trim();
+  const payloadUrl =
+    findAttachmentUrl(message.rawEvent) ?? findAttachmentUrl(message.payloadJson);
+
+  if (payloadUrl && isMirroredWhatsappStorageUrl(payloadUrl)) {
+    return payloadUrl;
+  }
+
+  if (dbUrl && !isEncryptedWhatsappMediaUrl(dbUrl)) {
+    if (
+      payloadUrl &&
+      isMetaCdnLikelyToBlockInlineEmbed(dbUrl) &&
+      isMirroredWhatsappStorageUrl(payloadUrl)
+    ) {
+      return payloadUrl;
+    }
+    return dbUrl;
+  }
+
+  return payloadUrl ?? dbUrl;
+}
+
 /**
  * Decide como renderizar anexo no balão (imagem/vídeo/áudio/documento).
  */
 export function resolveInboxAttachmentPresentation(
   message: WhatsappMessage,
 ): InboxAttachmentPresentation | null {
-  const rawUrl =
-    message.mediaUrl?.trim() ||
-    findAttachmentUrl(message.rawEvent) ||
-    findAttachmentUrl(message.payloadJson);
+  const rawUrl = resolvePrimaryMediaUrl(message);
   if (!rawUrl) {
     return null;
   }
