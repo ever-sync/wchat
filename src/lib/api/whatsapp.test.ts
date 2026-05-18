@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WhatsappMessage } from "@/types/domain";
 import {
   dedupeInboxMessagesById,
+  findOutboundCacheTarget,
   reconcileOptimisticInboxMessage,
   type InboxMessagesPageResult,
 } from "@/lib/api/whatsapp";
@@ -126,24 +127,69 @@ describe("dedupeInboxMessagesById", () => {
     expect(result).toEqual([real]);
   });
 
-  it("does not collapse two outbound sends in the same minute with different provider ids", () => {
+  it("collapses placeholder uuid provider id with real whatsapp id for same body", () => {
     const now = new Date().toISOString();
+    const placeholder = {
+      ...makeMessage("m-placeholder", "ola"),
+      uazapiMessageId: "550e8400-e29b-41d4-a716-446655440000",
+      status: "sent" as const,
+      createdAt: now,
+      sentAt: now,
+    };
+    const real = {
+      ...makeMessage("m-real", "ola"),
+      uazapiMessageId: "3EB0REAL",
+      status: "delivered" as const,
+      createdAt: now,
+      sentAt: now,
+    };
+
+    const result = dedupeInboxMessagesById([placeholder, real]);
+
+    expect(result).toEqual([real]);
+  });
+
+  it("does not collapse two outbound sends in the same minute with different provider ids", () => {
+    const firstTime = "2026-05-10T10:21:00.000Z";
+    const secondTime = "2026-05-10T10:21:30.000Z";
     const first = {
       ...makeMessage("m-a", "x"),
       uazapiMessageId: "3EB0AAA",
-      createdAt: now,
-      sentAt: now,
+      createdAt: firstTime,
+      sentAt: firstTime,
     };
     const second = {
       ...makeMessage("m-b", "x"),
       uazapiMessageId: "3EB0BBB",
-      createdAt: now,
-      sentAt: now,
+      createdAt: secondTime,
+      sentAt: secondTime,
     };
 
     const result = dedupeInboxMessagesById([first, second]);
 
     expect(result).toEqual([first, second]);
+  });
+
+  it("collapses rapid duplicate outbound sends even when provider ids differ", () => {
+    const firstTime = "2026-05-10T10:21:00.000Z";
+    const secondTime = "2026-05-10T10:21:02.000Z";
+    const first = {
+      ...makeMessage("m-a", "ola"),
+      uazapiMessageId: "3EB0AAA",
+      createdAt: firstTime,
+      sentAt: firstTime,
+    };
+    const second = {
+      ...makeMessage("m-b", "ola"),
+      uazapiMessageId: "3EB0BBB",
+      status: "delivered" as const,
+      createdAt: secondTime,
+      sentAt: secondTime,
+    };
+
+    const result = dedupeInboxMessagesById([first, second]);
+
+    expect(result).toEqual([second]);
   });
 
   it("collapses four cache entries (two texts x temp+delivered) like rapid send + status update", () => {
@@ -208,6 +254,46 @@ describe("dedupeInboxMessagesById", () => {
     const result = dedupeInboxMessagesById([staleSent, delivered]);
 
     expect(result).toEqual([delivered]);
+  });
+});
+
+describe("findOutboundCacheTarget", () => {
+  it("finds persisted twin by content when status diverges (sent vs delivered)", () => {
+    const now = new Date().toISOString();
+    const stale = {
+      ...makeMessage("ghost", "ola"),
+      status: "sent" as const,
+      createdAt: now,
+      sentAt: now,
+    };
+    const delivered = {
+      ...makeMessage("real", "ola"),
+      status: "delivered" as const,
+      createdAt: now,
+      sentAt: now,
+      uazapiMessageId: "3EB0X",
+    };
+
+    expect(findOutboundCacheTarget([stale], delivered)?.id).toBe("ghost");
+    expect(findOutboundCacheTarget([stale, delivered], delivered)?.id).toBe("real");
+  });
+
+  it("finds optimistic temp before persisted row exists", () => {
+    const now = new Date().toISOString();
+    const temp = {
+      ...makeMessage("temp-1", "vc esta bem"),
+      status: "queued" as const,
+      createdAt: now,
+      sentAt: now,
+    };
+    const sent = {
+      ...makeMessage("msg-1", "vc esta bem"),
+      status: "sent" as const,
+      createdAt: now,
+      sentAt: now,
+    };
+
+    expect(findOutboundCacheTarget([temp], sent)?.id).toBe("temp-1");
   });
 });
 

@@ -323,6 +323,106 @@ export function normalizeUazapiMessageId(value: string | null | undefined): stri
   return trimmed;
 }
 
+/** UUID gerado no servidor quando a API nao devolve id — nao e id do WhatsApp. */
+export function isSyntheticProviderMessageId(value: string | null | undefined): boolean {
+  const id = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+const OUTBOUND_MERGE_WINDOW_MS = 120_000;
+
+/**
+ * Evita segunda linha outbound quando o envio ja gravou placeholder (UUID/null)
+ * e o webhook MESSAGES_UPSERT chega com o id real do WhatsApp.
+ */
+export async function insertOrDedupeOutboundMessage(
+  admin: AdminClient,
+  instance: InstanceRecord,
+  chatId: string,
+  params: {
+    uazapiMessageId?: string | null;
+    campaignId?: string | null;
+    campaignRecipientId?: string | null;
+    messageType: string;
+    status: string;
+    bodyText?: string | null;
+    mediaUrl?: string | null;
+    payloadJson?: Record<string, unknown>;
+    rawEvent?: Record<string, unknown> | null;
+    quotedMessageId?: string | null;
+    sentAt?: string | null;
+    receivedAt?: string | null;
+    actorType?: "human" | "ai" | "system";
+  },
+) {
+  const providerId = normalizeUazapiMessageId(params.uazapiMessageId ?? null);
+
+  if (providerId) {
+    const { data: existing } = await admin
+      .from("whatsapp_messages")
+      .select("*")
+      .eq("instance_id", instance.id)
+      .eq("uazapi_message_id", providerId)
+      .maybeSingle();
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const body = String(params.bodyText ?? "").trim();
+  if (body) {
+    const since = new Date(Date.now() - OUTBOUND_MERGE_WINDOW_MS).toISOString();
+    const { data: recent } = await admin
+      .from("whatsapp_messages")
+      .select("*")
+      .eq("chat_id", chatId)
+      .eq("direction", "outbound")
+      .eq("body_text", body)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    for (const row of recent ?? []) {
+      const rowProvider = normalizeUazapiMessageId(row.uazapi_message_id);
+
+      if (providerId && rowProvider === providerId) {
+        return row;
+      }
+
+      const shouldLinkProvider =
+        Boolean(providerId) &&
+        !isSyntheticProviderMessageId(providerId) &&
+        (!rowProvider || isSyntheticProviderMessageId(row.uazapi_message_id));
+
+      if (shouldLinkProvider) {
+        const { data: updated, error } = await admin
+          .from("whatsapp_messages")
+          .update({
+            uazapi_message_id: providerId,
+            status: params.status,
+            media_url: params.mediaUrl ?? row.media_url,
+            payload_json: params.payloadJson ?? row.payload_json,
+            raw_event: params.rawEvent ?? row.raw_event,
+            sent_at: params.sentAt ?? row.sent_at,
+          })
+          .eq("id", row.id)
+          .select("*")
+          .single();
+
+        if (!error && updated) {
+          return updated;
+        }
+      }
+    }
+  }
+
+  return insertMessage(admin, instance, chatId, {
+    ...params,
+    direction: "outbound",
+    uazapiMessageId: providerId || null,
+  });
+}
+
 function extractBodyText(value: Record<string, unknown>) {
   const message = getMessageLikeBlock(value);
 
@@ -1559,18 +1659,29 @@ export async function processMessagePayload(
     }
   }
 
-  const message = await insertMessage(admin, instance, chat.id, {
-    uazapiMessageId: messageId ?? undefined,
-    direction,
-    messageType: detectMessageType(payload),
-    status: direction === "inbound" ? "received" : "sent",
-    bodyText,
-    mediaUrl,
-    payloadJson,
-    rawEvent: payload,
-    sentAt: direction === "outbound" ? occurredAt : null,
-    receivedAt: direction === "inbound" ? occurredAt : null,
-  });
+  const message =
+    direction === "outbound"
+      ? await insertOrDedupeOutboundMessage(admin, instance, chat.id, {
+          uazapiMessageId: messageId ?? undefined,
+          messageType: detectMessageType(payload),
+          status: "sent",
+          bodyText,
+          mediaUrl,
+          payloadJson,
+          rawEvent: payload,
+          sentAt: occurredAt,
+        })
+      : await insertMessage(admin, instance, chat.id, {
+          uazapiMessageId: messageId ?? undefined,
+          direction,
+          messageType: detectMessageType(payload),
+          status: "received",
+          bodyText,
+          mediaUrl,
+          payloadJson,
+          rawEvent: payload,
+          receivedAt: occurredAt,
+        });
 
   if (direction === "inbound") {
     await markCampaignAsResponded(admin, instance, remoteJid, chat.id);

@@ -1,7 +1,12 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { Loader2 } from "lucide-react";
-import { flattenMessageGroups, type MessageDayGroup, type ThreadFlattenItem } from "@/lib/inboxMessageGroups";
+import {
+  bubbleGroupSpacingClass,
+  flattenMessageGroups,
+  type MessageDayGroup,
+  type ThreadFlattenItem,
+} from "@/lib/inboxMessageGroups";
 import type { ChatNote, WhatsappMessage } from "@/types/domain";
 import { MessageBubble } from "./MessageBubble";
 import { WHATSAPP_CHAT_BG } from "./whatsappChatBg";
@@ -167,11 +172,11 @@ export function MessageThread({
                   <NoteBubble note={item.note} />
                 </div>
               ) : (
-                <div className="pb-5">
+                <div className={bubbleGroupSpacingClass(item.groupPosition)}>
                   <MessageBubble
                     message={item.message}
+                    groupPosition={item.groupPosition}
                     activeChatName={activeChatName}
-                    activeChatAvatarUrl={activeChatAvatarUrl}
                     onRetry={onRetryMessage}
                     retryPending={retryingMessageId === item.message.id}
                   />

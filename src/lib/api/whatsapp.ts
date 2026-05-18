@@ -653,6 +653,7 @@ function outboundContentDedupeKey(m: WhatsappMessage): string | null {
 }
 
 const OUTBOUND_DEDUPE_TIME_SPREAD_MS = 600_000;
+const OUTBOUND_RAPID_DUPLICATE_SPREAD_MS = 5_000;
 
 function outboundMessageTimeMs(m: WhatsappMessage): number {
   const t = Date.parse(m.sentAt ?? m.createdAt ?? "") || 0;
@@ -691,64 +692,65 @@ function shouldCollapseOutboundGroup(arr: WhatsappMessage[]): boolean {
   if (arr.length < 2) {
     return false;
   }
+  if (!arr.every((m) => m.direction === "outbound")) {
+    return false;
+  }
   if (arr.some((m) => m.id.startsWith("temp-"))) {
     return true;
   }
 
-  const outboundKeys = new Set(
-    arr
-      .filter((m) => m.direction === "outbound")
-      .map((m) => outboundContentDedupeKey(m))
-      .filter((k): k is string => Boolean(k)),
-  );
-  if (outboundKeys.size === 1) {
-    const withPid = arr
-      .map((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId))
-      .filter((id) => Boolean(id));
-    const distinctProviderIds = new Set(withPid);
-    if (distinctProviderIds.size > 1) {
+  const contentKeys = arr
+    .map((m) => outboundContentDedupeKey(m))
+    .filter((k): k is string => Boolean(k));
+  if (contentKeys.length !== arr.length || new Set(contentKeys).size !== 1) {
+    return false;
+  }
+
+  const times = arr.map(outboundMessageTimeMs);
+  if (times.every((t) => t > 0)) {
+    const spread = Math.max(...times) - Math.min(...times);
+    if (spread > OUTBOUND_DEDUPE_TIME_SPREAD_MS) {
       return false;
     }
+  }
 
-    const times = arr.map(outboundMessageTimeMs);
-    if (times.every((t) => t <= 0)) {
+  const providerIds = arr
+    .map((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId))
+    .filter(Boolean);
+  const uniqueProviders = new Set(providerIds);
+
+  if (uniqueProviders.size > 1) {
+    const ids = arr
+      .map((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId))
+      .filter(Boolean);
+    const hasSynthetic = ids.some(isSyntheticOutboundProviderId);
+    const hasReal = ids.some((id) => !isSyntheticOutboundProviderId(id));
+    /** Eco do webhook + envio com UUID placeholder no mesmo texto. */
+    if (hasSynthetic && hasReal) {
       return true;
     }
-    const spread = Math.max(...times) - Math.min(...times);
-    if (spread <= OUTBOUND_DEDUPE_TIME_SPREAD_MS) {
-      return true;
+    if (times.every((t) => t > 0)) {
+      const spread = Math.max(...times) - Math.min(...times);
+      if (spread <= OUTBOUND_RAPID_DUPLICATE_SPREAD_MS) {
+        return true;
+      }
+    }
+    if (arr.every((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId))) {
+      return false;
     }
   }
 
-  const withPid = arr.filter((m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId));
-  if (withPid.length >= 2) {
-    const first = withPid[0]!;
-    return withPid.every((m) => hasSameProviderMessageId(m, first));
-  }
+  return true;
+}
 
-  if (withPid.length === 1 && arr.length >= 2) {
-    return true;
-  }
-
-  /**
-   * Duas linhas persistidas sem `uazapi_message_id` no cache (fantasma + linha
-   * atualizada) com o mesmo texto — classico sent vs delivered em duas bolhas.
-   */
-  if (
-    withPid.length === 0 &&
-    arr.length === 2 &&
-    !arr.some((m) => m.id.startsWith("temp-")) &&
-    new Set(arr.map((m) => m.status)).size >= 2
-  ) {
-    return true;
-  }
-
-  return false;
+/** UUID usado como fallback quando a API nao devolve id do WhatsApp. */
+function isSyntheticOutboundProviderId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 /**
  * Apos aplicar UPDATE outbound, remove outras bolhas no cache que sao a mesma
-   * mensagem (conteudo + janela de tempo), mantendo o payload do evento.
+ * mensagem (conteudo + janela de tempo), mantendo o payload do evento.
  */
 function stripOutboundDuplicatesOfIncoming(
   pages: InboxMessagesPageResult[],
@@ -889,6 +891,21 @@ function stripRedundantOutboundTempsFromPages(pages: InboxMessagesPageResult[]):
  * Aplica a mesma deduplicacao de `flattenInboxMessagePages` no cache do React Query
  * (otimista + INSERT/UPDATE Realtime). Evita duas bolhas ao mudar status sent→delivered.
  */
+function hasDuplicateOutboundContentKeys(messages: WhatsappMessage[]): boolean {
+  const seen = new Set<string>();
+  for (const m of messages) {
+    const k = outboundContentDedupeKey(m);
+    if (!k) {
+      continue;
+    }
+    if (seen.has(k)) {
+      return true;
+    }
+    seen.add(k);
+  }
+  return false;
+}
+
 function sanitizeInboxMessagePages(pages: InboxMessagesPageResult[]): InboxMessagesPageResult[] {
   const flat = pages.flatMap((p) => p.messages);
   if (flat.length < 2) {
@@ -899,7 +916,12 @@ function sanitizeInboxMessagePages(pages: InboxMessagesPageResult[]): InboxMessa
   const keepIds = new Set(deduped.map((m) => m.id));
   const latestById = new Map(deduped.map((m) => [m.id, m]));
 
-  if (keepIds.size === flat.length && flat.every((m, i) => m.id === deduped[i]?.id && m.status === deduped[i]?.status)) {
+  const unchanged =
+    keepIds.size === flat.length &&
+    !hasDuplicateOutboundContentKeys(flat) &&
+    flat.every((m, i) => m.id === deduped[i]?.id && m.status === deduped[i]?.status);
+
+  if (unchanged) {
     return pages;
   }
 
@@ -1344,6 +1366,96 @@ function normalizeOutboundBodyForMatch(value: string | null | undefined): string
 }
 
 /**
+ * Localiza a bolha outbound existente no cache que representa o mesmo envio
+ * (id, provider id, temp otimista ou mesmo conteudo na janela de tempo).
+ */
+export function findOutboundCacheTarget(
+  messages: WhatsappMessage[],
+  incoming: WhatsappMessage,
+): WhatsappMessage | undefined {
+  if (incoming.direction !== "outbound") {
+    return undefined;
+  }
+
+  const byId = messages.find((m) => m.id === incoming.id);
+  if (byId) {
+    return byId;
+  }
+
+  const incomingProviderId = normalizeWhatsappProviderMessageId(incoming.uazapiMessageId);
+  if (incomingProviderId) {
+    const byProvider = messages.find(
+      (m) => normalizeWhatsappProviderMessageId(m.uazapiMessageId) === incomingProviderId,
+    );
+    if (byProvider) {
+      return byProvider;
+    }
+  }
+
+  const temp = findOptimisticTempMatch(messages, incoming);
+  if (temp) {
+    return temp;
+  }
+
+  const contentKey = outboundContentDedupeKey(incoming);
+  if (!contentKey) {
+    return undefined;
+  }
+
+  return messages.find(
+    (m) =>
+      m.direction === "outbound" &&
+      outboundContentDedupeKey(m) === contentKey &&
+      shouldCollapseOutboundGroup([m, incoming]),
+  );
+}
+
+function replaceMessageIdInPages(
+  pages: InboxMessagesPageResult[],
+  replaceId: string,
+  incoming: WhatsappMessage,
+): InboxMessagesPageResult[] {
+  return pages.map((page) => ({
+    ...page,
+    messages: page.messages
+      .map((m) => (m.id === replaceId ? incoming : m))
+      .filter((m, idx, arr) => {
+        if (m.id !== incoming.id) {
+          return true;
+        }
+        return arr.findIndex((x) => x.id === incoming.id) === idx;
+      }),
+  }));
+}
+
+/** Upsert outbound: nunca acrescenta segunda bolha para o mesmo envio. */
+function upsertOutboundInboxMessagePages(
+  pages: InboxMessagesPageResult[],
+  incoming: WhatsappMessage,
+): InboxMessagesPageResult[] {
+  const flat = pages.flatMap((p) => p.messages);
+  const target = findOutboundCacheTarget(flat, incoming);
+  if (target) {
+    const merged = preferOutboundDedupeWinner(target, incoming);
+    let next = replaceMessageIdInPages(pages, target.id, merged);
+    next = stripOutboundDuplicatesOfIncoming(next, merged);
+    return stripRedundantOutboundTempsFromPages(next);
+  }
+
+  if (pages.length === 0) {
+    return [{ messages: [incoming], hasMore: false }];
+  }
+
+  const next = pages.map((page, index) => {
+    if (index !== 0) {
+      return page;
+    }
+    return { ...page, messages: [...page.messages, incoming] };
+  });
+  return stripRedundantOutboundTempsFromPages(next);
+}
+
+/**
  * Tenta substituir uma mensagem otimista (id `temp-...`) recente que ainda nao
  * recebeu o INSERT real. Util quando o evento realtime chega antes do
  * `onSuccess` de `useSendWhatsappMessage`.
@@ -1460,62 +1572,28 @@ function applyRealtimeMessageInsert(
       };
     }
 
-    const alreadyExists = current.pages.some((page) =>
-      page.messages.some((existing) =>
-        existing.id === message.id || hasSameProviderMessageId(existing, message),
-      ),
-    );
-    if (alreadyExists) {
-      const cleaned = sanitizeInboxMessagePages(stripRedundantOutboundTempsFromPages(current.pages));
-      return cleaned === current.pages ? current : { ...current, pages: cleaned };
+    if (message.direction === "outbound") {
+      return {
+        ...current,
+        pages: upsertOutboundInboxMessagePages(current.pages, message),
+      };
     }
 
-    const allMessages = current.pages.flatMap((page) => page.messages);
-    const tempMatch = findOptimisticTempMatch(allMessages, message);
-
-    if (tempMatch) {
-      const pages = current.pages.map((page) => {
-        if (!page.messages.some((existing) => existing.id === tempMatch.id)) {
-          return page;
-        }
-        return {
-          ...page,
-          messages: page.messages.map((existing) =>
-            existing.id === tempMatch.id ? message : existing,
-          ),
-        };
-      });
-      return { ...current, pages: sanitizeInboxMessagePages(stripRedundantOutboundTempsFromPages(pages)) };
+    const alreadyExists = current.pages.some((page) =>
+      page.messages.some((existing) => existing.id === message.id),
+    );
+    if (alreadyExists) {
+      return current;
     }
 
     const pages = current.pages.map((page, index) => {
-      if (index !== 0) return page;
+      if (index !== 0) {
+        return page;
+      }
       return { ...page, messages: [...page.messages, message] };
     });
-    return { ...current, pages: stripRedundantOutboundTempsFromPages(pages) };
+    return { ...current, pages };
   });
-}
-
-/** Remove bolha `temp-*` que duplica a mesma linha ja aplicada com id do servidor (sent vs delivered). */
-function stripOutboundTempDuplicateOf(
-  pages: InboxMessagesPageResult[],
-  incoming: WhatsappMessage,
-): InboxMessagesPageResult[] {
-  if (!incoming.id || incoming.id.startsWith("temp-") || incoming.direction !== "outbound") {
-    return pages;
-  }
-  const flat = pages.flatMap((p) => p.messages);
-  if (!flat.some((m) => m.id === incoming.id)) {
-    return pages;
-  }
-  const tempDup = findOptimisticTempMatch(flat, incoming);
-  if (!tempDup || tempDup.id === incoming.id) {
-    return pages;
-  }
-  return pages.map((page) => ({
-    ...page,
-    messages: page.messages.filter((m) => m.id !== tempDup.id),
-  }));
 }
 
 function applyRealtimeMessageUpdate(
@@ -1524,112 +1602,31 @@ function applyRealtimeMessageUpdate(
   message: WhatsappMessage,
 ) {
   patchInboxMessagesCache(queryClient, chatId, (current) => {
-    if (!current?.pages?.length) return current;
-
-    const replaceById = (): { pages: InboxMessagesPageResult[]; mutated: boolean } => {
-      let mutated = false;
-      const pages = current.pages.map((page) => {
-        if (!page.messages.some((existing) => existing.id === message.id)) {
-          return page;
-        }
-        mutated = true;
-        return {
-          ...page,
-          messages: page.messages.map((existing) =>
-            existing.id === message.id ? message : existing,
-          ),
-        };
-      });
-      return { pages, mutated };
-    };
-
-    let { pages, mutated } = replaceById();
-
-    const incomingNorm = normalizeWhatsappProviderMessageId(message.uazapiMessageId);
-    if (!mutated && incomingNorm) {
-      const next = current.pages.map((page) => {
-        const idx = page.messages.findIndex(
-          (existing) => normalizeWhatsappProviderMessageId(existing.uazapiMessageId) === incomingNorm,
-        );
-        if (idx === -1) return page;
-        mutated = true;
-        const messages = [...page.messages];
-        messages[idx] = message;
-        return { ...page, messages };
-      });
-      if (mutated) {
-        pages = next;
-      }
-    }
-
-    /**
-     * INSERT pode ter anexado a linha real enquanto a otimista continuou no cache
-     * (pareamento falhou por diff minimo no texto). O UPDATE so traz o id do servidor —
-     * substitui a bolha temp pelo mesmo conteudo em vez de deixar duas bolhas
-     * (enviado vs entregue).
-     */
-    if (!mutated && message.direction === "outbound") {
-      const flat = current.pages.flatMap((p) => p.messages);
-      const tempDup = findOptimisticTempMatch(flat, message);
-      if (tempDup) {
-        mutated = true;
-        pages = current.pages.map((page) => {
-          if (!page.messages.some((existing) => existing.id === tempDup.id)) {
-            return page;
-          }
-          return {
-            ...page,
-            messages: page.messages.map((existing) =>
-              existing.id === tempDup.id ? message : existing,
-            ),
-          };
-        });
-      } else {
-        const contentKey = outboundContentDedupeKey(message);
-        const twin = contentKey
-          ? flat.find(
-              (m) =>
-                m.id !== message.id &&
-                m.direction === "outbound" &&
-                outboundContentDedupeKey(m) === contentKey &&
-                shouldCollapseOutboundGroup([m, message]),
-            )
-          : undefined;
-        if (twin) {
-          mutated = true;
-          pages = current.pages.map((page) => ({
-            ...page,
-            messages: page.messages
-              .map((existing) => {
-                if (existing.id === twin.id || existing.id === message.id) {
-                  return message;
-                }
-                return existing;
-              })
-              .filter((existing, idx, arr) => {
-                if (existing.id !== message.id) {
-                  return true;
-                }
-                return arr.findIndex((x) => x.id === message.id) === idx;
-              }),
-          }));
-        }
-      }
-    }
-
-    let nextPages = mutated ? pages : current.pages;
-    if (mutated) {
-      nextPages = stripOutboundTempDuplicateOf(nextPages, message);
-    }
-    let finalPages = stripRedundantOutboundTempsFromPages(nextPages);
-    if (message.direction === "outbound") {
-      finalPages = stripOutboundDuplicatesOfIncoming(finalPages, message);
-    }
-
-    if (!mutated && finalPages === current.pages) {
+    if (!current?.pages?.length) {
       return current;
     }
-    return { ...current, pages: finalPages };
+
+    if (message.direction === "outbound") {
+      return {
+        ...current,
+        pages: upsertOutboundInboxMessagePages(current.pages, message),
+      };
+    }
+
+    const hasId = current.pages.some((page) =>
+      page.messages.some((existing) => existing.id === message.id),
+    );
+    if (!hasId) {
+      return current;
+    }
+
+    const pages = current.pages.map((page) => ({
+      ...page,
+      messages: page.messages.map((existing) =>
+        existing.id === message.id ? message : existing,
+      ),
+    }));
+    return { ...current, pages };
   });
 }
 
@@ -1818,88 +1815,39 @@ export function useSendWhatsappMessage(
     mutationFn: sendWhatsappMessage,
     ...options,
     onMutate: async (variables) => {
-      const queryKey = ["inbox-messages", variables.chatId] as const;
-
-      const previous = queryClient.getQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey);
       const previousChats = snapshotInboxChats(queryClient);
-      const optimisticTimestamp = new Date().toISOString();
-      const tempId = `temp-${crypto.randomUUID()}`;
-      const tempMessage: WhatsappMessage = {
-        id: tempId,
-        chatId: variables.chatId,
-        instanceId: variables.instanceId,
-        direction: "outbound",
-        messageType: variables.messageType,
-        status: "queued",
-        bodyText: variables.bodyText ?? "",
-        mediaUrl: variables.mediaUrl ?? null,
-        payloadJson: variables.payload ?? {},
-        quotedMessageId: variables.quotedMessageId ?? null,
-        sentAt: optimisticTimestamp,
-        createdAt: optimisticTimestamp,
-      };
-
-      patchInboxMessagesCache(queryClient, variables.chatId, (current) => {
-        if (!current?.pages?.length) {
-          return {
-            pageParams: [null],
-            pages: [{ messages: [tempMessage], hasMore: false }],
-          };
-        }
-
-        const pages = [...current.pages];
-        const firstPage = pages[0];
-        pages[0] = {
-          ...firstPage,
-          messages: [...firstPage.messages, tempMessage],
-        };
-
-        return {
-          ...current,
-          pages,
-        };
-      });
+      const previewTimestamp = new Date().toISOString();
 
       patchInboxChatsLastMessage(
         queryClient,
         variables.chatId,
         buildSentMessagePreview({ bodyText: variables.bodyText, messageType: variables.messageType }),
-        optimisticTimestamp,
+        previewTimestamp,
       );
 
-      return { previous, previousChats, queryKey, tempId };
+      return { previousChats };
     },
     onError: (error, variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(context.queryKey, context.previous);
-      }
       if (context?.previousChats) {
         restoreInboxChatsSnapshots(queryClient, context.previousChats);
       }
       void options?.onError?.(error, variables, context);
     },
-    onSuccess: (data, variables, context) => {
-      let replaced = false;
-      if (context?.queryKey && context.tempId) {
-        patchInboxMessagesCache(queryClient, variables.chatId, (old) => {
-          if (!old?.pages?.length) {
-            return old;
-          }
-
-          const reconciled = reconcileOptimisticInboxMessage(old.pages, data, context.tempId);
-          if (!reconciled.matched) {
-            return old;
-          }
-          replaced = true;
+    onSuccess: (data, variables) => {
+      patchInboxMessagesCache(queryClient, variables.chatId, (old) => {
+        if (!old?.pages?.length) {
           return {
-            ...old,
-            pages: stripRedundantOutboundTempsFromPages(reconciled.pages),
+            pageParams: [null],
+            pages: [{ messages: [data], hasMore: false }],
           };
-        });
-      }
-      if (!replaced) {
-        void queryClient.invalidateQueries({ queryKey: ["inbox-messages", variables.chatId] });
-      }
+        }
+
+        return {
+          ...old,
+          pages: upsertOutboundInboxMessagePages(old.pages, data),
+        };
+      });
+
       void queryClient.invalidateQueries({ queryKey: ["inbox-messages-all", variables.chatId] });
 
       // Patch local da lista lateral em vez de invalidar `inbox-chats`. Evita um
@@ -1913,7 +1861,7 @@ export function useSendWhatsappMessage(
         data.sentAt ?? data.createdAt ?? new Date().toISOString(),
       );
 
-      void options?.onSuccess?.(data, variables, context);
+      void options?.onSuccess?.(data, variables, undefined);
     },
   });
 }

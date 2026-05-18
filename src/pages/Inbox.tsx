@@ -254,6 +254,7 @@ export default function Inbox() {
   const mediaUrlInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const recentSendFingerprintsRef = useRef<Map<string, number>>(new Map());
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [instanceId, setInstanceId] = useState<string>("all");
@@ -872,7 +873,7 @@ export default function Inbox() {
   const inboxAssigneeFilterOptions = useMemo(
     () =>
       isManagerInbox
-        ? atendimentoUsers.map((user) => ({ id: user.id, name: user.name }))
+        ? atendimentoUsers.map((user) => ({ id: user.id, name: user.nome }))
         : undefined,
     [isManagerInbox, atendimentoUsers],
   );
@@ -1782,8 +1783,7 @@ export default function Inbox() {
 
       setRetryingMessageId(failed.id);
       try {
-        // Remove a bolha falhada do cache local: a nova tentativa cria
-        // uma bolha otimista e, em sucesso, vira a mensagem real do servidor.
+        // Remove a bolha falhada do cache; o reenvio insere a linha via API/Realtime.
         const queryKey = ["inbox-messages", failed.chatId] as const;
         queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(
           queryKey,
@@ -1917,6 +1917,24 @@ export default function Inbox() {
       simulateTypingMs: simulateTyping ? 600 : undefined,
     };
 
+    const sendFingerprint = JSON.stringify({
+      chatId: sendVars.chatId,
+      messageType: sendVars.messageType,
+      bodyText: sendVars.bodyText.trim(),
+      mediaUrl: sendVars.mediaUrl ?? "",
+      payload,
+    });
+    const now = Date.now();
+    for (const [key, timestamp] of recentSendFingerprintsRef.current) {
+      if (now - timestamp > 5_000) {
+        recentSendFingerprintsRef.current.delete(key);
+      }
+    }
+    if (recentSendFingerprintsRef.current.has(sendFingerprint)) {
+      return;
+    }
+    recentSendFingerprintsRef.current.set(sendFingerprint, now);
+
     setBodyText("");
     setMediaUrl("");
     setPayloadText("{}");
@@ -1924,10 +1942,10 @@ export default function Inbox() {
     setAttachmentMimeType(null);
     clearInboxChatDraft(activeChat.id);
 
-    // Envio em background: bolha otimista no onMutate; botao permanece habilitado
-    // para varias mensagens em sequencia.
+    // Envio em background; botao permanece habilitado para varias mensagens em sequencia.
     sendMessage.mutate(sendVars, {
       onError: (error) => {
+        recentSendFingerprintsRef.current.delete(sendFingerprint);
         const envioErroMsg = error instanceof Error ? error.message : "Tente novamente.";
         toast({
           title: "Falha ao enviar",

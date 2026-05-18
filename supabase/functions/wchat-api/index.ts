@@ -11,7 +11,7 @@ import {
   resolveApiPath,
 } from "../_shared/api-http.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
-import { ensureChat, insertMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
+import { ensureChat, insertOrDedupeOutboundMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
@@ -176,12 +176,12 @@ async function handleSendMessage(auth: ApiKeyAuth, request: Request) {
     payload: {},
   });
 
-  const uazapiMessageId =
-    normalizeUazapiMessageId(
-      String(response.key?.id ?? response.data?.key?.id ?? response.id ?? crypto.randomUUID()),
-    ) || crypto.randomUUID();
+  const rawProviderId = response.key?.id ?? response.data?.key?.id ?? response.id;
+  const uazapiMessageId = normalizeUazapiMessageId(
+    typeof rawProviderId === "string" ? rawProviderId : null,
+  ) || null;
 
-  const message = await insertMessage(admin, instance, String(ensuredChat.id), {
+  const message = await insertOrDedupeOutboundMessage(admin, instance, String(ensuredChat.id), {
     uazapiMessageId,
     direction: "outbound",
     messageType: "text",

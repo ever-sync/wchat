@@ -5,10 +5,65 @@ import type { ChatNote, WhatsappMessage } from "@/types/domain";
 export type ThreadEntry = WhatsappMessage | ChatNote;
 export type MessageDayGroup = { label: string; items: ThreadEntry[] };
 
+/** Posicao no cluster de bolhas consecutivas do mesmo remetente (estilo WhatsApp). */
+export type BubbleGroupPosition = "single" | "first" | "middle" | "last";
+
 export type ThreadFlattenItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "msg"; key: string; message: WhatsappMessage }
+  | { kind: "msg"; key: string; message: WhatsappMessage; groupPosition: BubbleGroupPosition }
   | { kind: "note"; key: string; note: ChatNote };
+
+const BUBBLE_GROUP_GAP_MS = 2 * 60_000;
+
+function messageTimestampMs(message: WhatsappMessage): number {
+  const t = Date.parse(message.createdAt ?? message.sentAt ?? message.receivedAt ?? "");
+  return Number.isFinite(t) ? t : 0;
+}
+
+function canGroupConsecutiveMessages(left: WhatsappMessage, right: WhatsappMessage): boolean {
+  if (left.direction !== right.direction) {
+    return false;
+  }
+  const leftMs = messageTimestampMs(left);
+  const rightMs = messageTimestampMs(right);
+  if (leftMs <= 0 || rightMs <= 0) {
+    return true;
+  }
+  return Math.abs(rightMs - leftMs) <= BUBBLE_GROUP_GAP_MS;
+}
+
+export function resolveBubbleGroupPositions(messages: WhatsappMessage[]): Map<string, BubbleGroupPosition> {
+  const positions = new Map<string, BubbleGroupPosition>();
+  let index = 0;
+
+  while (index < messages.length) {
+    let end = index;
+    while (
+      end + 1 < messages.length &&
+      canGroupConsecutiveMessages(messages[end], messages[end + 1])
+    ) {
+      end += 1;
+    }
+
+    const count = end - index + 1;
+    for (let cursor = index; cursor <= end; cursor += 1) {
+      const id = messages[cursor].id;
+      if (count === 1) {
+        positions.set(id, "single");
+      } else if (cursor === index) {
+        positions.set(id, "first");
+      } else if (cursor === end) {
+        positions.set(id, "last");
+      } else {
+        positions.set(id, "middle");
+      }
+    }
+
+    index = end + 1;
+  }
+
+  return positions;
+}
 
 function formatMessageDay(value?: string | null) {
   if (!value) {
@@ -62,14 +117,48 @@ export function flattenMessageGroups(groups: MessageDayGroup[]): ThreadFlattenIt
 
   for (const g of groups) {
     out.push({ kind: "day", key: `day-${g.label}`, label: g.label });
+
+    let messageRun: WhatsappMessage[] = [];
+
+    const flushMessageRun = () => {
+      if (messageRun.length === 0) {
+        return;
+      }
+      const positions = resolveBubbleGroupPositions(messageRun);
+      for (const message of messageRun) {
+        out.push({
+          kind: "msg",
+          key: message.id,
+          message,
+          groupPosition: positions.get(message.id) ?? "single",
+        });
+      }
+      messageRun = [];
+    };
+
     for (const item of g.items) {
       if ("_noteKind" in item) {
+        flushMessageRun();
         out.push({ kind: "note", key: item.id, note: item });
-      } else {
-        out.push({ kind: "msg", key: item.id, message: item });
+        continue;
       }
+      messageRun.push(item);
     }
+
+    flushMessageRun();
   }
 
   return out;
+}
+
+export function bubbleGroupSpacingClass(position: BubbleGroupPosition): string {
+  switch (position) {
+    case "first":
+    case "middle":
+      return "pb-[3px]";
+    case "last":
+    case "single":
+    default:
+      return "pb-2.5";
+  }
 }

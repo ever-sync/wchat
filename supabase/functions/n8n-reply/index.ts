@@ -1,6 +1,11 @@
 import { aiBlockReasonMessage, evaluateAiReplyEligibility } from "../_shared/ai-business-rules.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
-import { ensureLeadFromChat, getInstanceById, insertMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
+import {
+  ensureLeadFromChat,
+  getInstanceById,
+  insertOrDedupeOutboundMessage,
+  normalizeUazapiMessageId,
+} from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
@@ -134,14 +139,13 @@ Deno.serve(async (request) => {
         payload: {},
       });
 
-      const uazapiMessageId =
-        normalizeUazapiMessageId(
-          String(response.key?.id ?? response.data?.key?.id ?? response.id ?? crypto.randomUUID()),
-        ) || crypto.randomUUID();
+      const rawProviderId = response.key?.id ?? response.data?.key?.id ?? response.id;
+      const uazapiMessageId = normalizeUazapiMessageId(
+        typeof rawProviderId === "string" ? rawProviderId : null,
+      ) || null;
 
-      await insertMessage(admin, instance, chat.id, {
+      await insertOrDedupeOutboundMessage(admin, instance, chat.id, {
         uazapiMessageId,
-        direction: "outbound",
         messageType: "text",
         status: "sent",
         bodyText: text,

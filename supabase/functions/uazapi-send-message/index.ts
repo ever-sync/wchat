@@ -1,5 +1,10 @@
 import { decryptSecret } from "../_shared/crypto.ts";
-import { ensureChat, getInstanceById, insertMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
+import {
+  ensureChat,
+  getInstanceById,
+  insertOrDedupeOutboundMessage,
+  normalizeUazapiMessageId,
+} from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import {
   PermissionDeniedError,
@@ -219,13 +224,12 @@ Deno.serve(async (request) => {
       { maxAttempts: 3, baseDelayMs: 400 },
     );
 
-    const uazapiMessageId =
-      normalizeUazapiMessageId(
-        String(response.key?.id ?? response.data?.key?.id ?? response.id ?? crypto.randomUUID()),
-      ) || crypto.randomUUID();
-    const message = await insertMessage(admin, instance, chat.id, {
+    const rawProviderId = response.key?.id ?? response.data?.key?.id ?? response.id;
+    const uazapiMessageId = normalizeUazapiMessageId(
+      typeof rawProviderId === "string" ? rawProviderId : null,
+    ) || null;
+    const message = await insertOrDedupeOutboundMessage(admin, instance, chat.id, {
       uazapiMessageId,
-      direction: "outbound",
       messageType: String(body.messageType),
       status: "sent",
       bodyText: bodyText ?? null,
