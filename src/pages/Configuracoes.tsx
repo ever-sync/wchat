@@ -48,6 +48,7 @@ import {
   useDeleteCollaboratorInvite,
   useRevokeCollaboratorInvite,
   useTenantCollaborators,
+  useUpdateCollaboratorRole,
   useUpdateMyProfile,
 } from "@/lib/api/settings";
 import {
@@ -332,6 +333,7 @@ export default function Configuracoes() {
   const inviteCollaborator = useInviteCollaborator();
   const revokeInvite = useRevokeCollaboratorInvite();
   const deleteInvite = useDeleteCollaboratorInvite();
+  const updateCollaboratorRole = useUpdateCollaboratorRole();
   const { data: instances = [], isLoading, error } = useWhatsappInstances({ enabled: tab === "integracoes" && canUseAuthenticatedActions });
   const { data: tenantIntegrations } = useTenantIntegrations();
   const { data: tenantSettings } = useTenantSettings();
@@ -1167,14 +1169,79 @@ export default function Configuracoes() {
                 ) : null}
 
                 {collaboratorsSection === "usuarios" ? (
-                  <>
+                  <Tabs defaultValue="equipe" className="space-y-6">
+                    <TabsList className="h-auto flex-wrap justify-start rounded-2xl border border-border/60 bg-card/80 p-1">
+                      <TabsTrigger value="equipe"><Users className="mr-2 h-4 w-4" />Equipe ativa</TabsTrigger>
+                      <TabsTrigger value="criar"><Plus className="mr-2 h-4 w-4" />Criar acesso</TabsTrigger>
+                      <TabsTrigger value="convites"><Mail className="mr-2 h-4 w-4" />Convites</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="equipe" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             {[{ label: "Colaboradores ativos", value: collaboratorMetrics.active, icon: Users }, { label: "Administradores", value: collaboratorMetrics.admins, icon: ShieldCheck }, { label: "Convites pendentes", value: collaboratorMetrics.pending, icon: Mail }].map((metric) => (
               <Card key={metric.label} className="border-border/60 bg-card/80"><CardContent className="flex items-center justify-between p-5"><div><p className="text-xs text-muted-foreground">{metric.label}</p><p className="text-2xl font-bold text-foreground">{metric.value}</p></div><div className="rounded-xl bg-accent/10 p-3 text-accent"><metric.icon className="h-5 w-5" /></div></CardContent></Card>
             ))}
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+          <Card className="border-border/60 bg-card/80">
+            <CardHeader><CardTitle className="text-lg">Equipe ativa</CardTitle><CardDescription>Usuarios ja vinculados ao tenant.</CardDescription></CardHeader>
+            <CardContent className="space-y-3">
+              {collaborators.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum colaborador ativo encontrado.</div> : collaborators.map((member) => {
+                const isSelf = member.id === myProfile?.id;
+                const canChangeRole = canEditCollaborators && !isSelf;
+                const isUpdatingRole =
+                  updateCollaboratorRole.isPending &&
+                  updateCollaboratorRole.variables?.profileId === member.id;
+                return (
+                  <div key={member.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0"><p className="truncate font-medium text-foreground">{member.nome || member.email}</p><p className="truncate text-sm text-muted-foreground">{member.email}</p></div>
+                    <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+                      {canChangeRole ? (
+                        <Select
+                          value={member.role}
+                          disabled={isUpdatingRole}
+                          onValueChange={async (value) => {
+                            const nextRole = value as UserRole;
+                            if (nextRole === member.role) return;
+                            try {
+                              await updateCollaboratorRole.mutateAsync({ profileId: member.id, role: nextRole });
+                              toast({ title: "Funcao atualizada", description: `${member.nome || member.email} agora e ${roleLabels[nextRole]}.` });
+                            } catch (error) {
+                              toast({
+                                title: "Nao foi possivel atualizar a funcao",
+                                description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-9 w-[170px] text-xs">
+                            {isUpdatingRole ? (
+                              <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Atualizando...</span>
+                            ) : (
+                              <SelectValue />
+                            )}
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="operacao">Operacao</SelectItem>
+                            <SelectItem value="financeiro">Financeiro</SelectItem>
+                            <SelectItem value="atendimento">Atendimento</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge className="bg-secondary text-secondary-foreground">{roleLabels[member.role]}</Badge>
+                      )}
+                      <Badge className="bg-success/20 text-success">{member.status === "active" ? "Ativo" : "Inativo"}</Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+                    </TabsContent>
+
+                    <TabsContent value="criar" className="space-y-6">
             <Card className="border-border/60 bg-card/80">
               <CardHeader>
                 <CardTitle className="text-lg">Criar acesso de colaborador</CardTitle>
@@ -1267,22 +1334,11 @@ export default function Configuracoes() {
                 {!canEditCollaborators ? <p className="text-xs text-warning">Seu papel nao tem permissão para convidar colaboradores.</p> : null}
               </CardContent>
             </Card>
+                    </TabsContent>
 
-            <div className="space-y-4">
-              <Card className="border-border/60 bg-card/80">
-                <CardHeader><CardTitle className="text-lg">Equipe ativa</CardTitle><CardDescription>Usuarios ja vinculados ao tenant.</CardDescription></CardHeader>
-                <CardContent className="space-y-3">
-                  {collaborators.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum colaborador ativo encontrado.</div> : collaborators.map((member) => (
-                    <div key={member.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
-                      <div><p className="font-medium text-foreground">{member.nome || member.email}</p><p className="text-sm text-muted-foreground">{member.email}</p></div>
-                      <div className="flex flex-wrap gap-2"><Badge className="bg-secondary text-secondary-foreground">{roleLabels[member.role]}</Badge><Badge className="bg-success/20 text-success">{member.status === "active" ? "Ativo" : "Inativo"}</Badge></div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/60 bg-card/80">
-                <CardHeader><CardTitle className="text-lg">Convites e pendencias</CardTitle><CardDescription>Controle do que ainda nao foi aceito.</CardDescription></CardHeader>
+                    <TabsContent value="convites" className="space-y-6">
+            <Card className="border-border/60 bg-card/80">
+              <CardHeader><CardTitle className="text-lg">Convites e pendencias</CardTitle><CardDescription>Controle do que ainda nao foi aceito.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {invites.length === 0 ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Ainda nao existem convites registrados.</div> : invites.map((invite) => (
                     <div key={invite.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
@@ -1461,9 +1517,8 @@ export default function Configuracoes() {
                   ))}
                 </CardContent>
               </Card>
-            </div>
-          </div>
-                  </>
+                    </TabsContent>
+                  </Tabs>
                 ) : null}
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { Briefcase, LogOut, MessageSquare, Package, Settings2, Users2 } from "lucide-react";
+import { Briefcase, LogOut, Megaphone, MessageSquare, Package, Settings2, Users2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils";
 
 type NavIcon = typeof MessageSquare;
 
-const linkItems: { title: string; url: string; icon: NavIcon; permission: "inbox" | "crm" | "clientes" | "produtos" | "configuracoes" }[] = [
+const linkItems: { title: string; url: string; icon: NavIcon; permission: "inbox" | "crm" | "clientes" | "produtos" | "marketing" | "configuracoes" }[] = [
   { title: "Chat", url: "/inbox", icon: MessageSquare, permission: "inbox" },
   { title: "CRM", url: "/crm", icon: Briefcase, permission: "crm" },
   { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
   { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
+  { title: "Marketing", url: "/marketing", icon: Megaphone, permission: "marketing" },
   { title: "Ajustes", url: "/configuracoes", icon: Settings2, permission: "configuracoes" },
 ];
 

@@ -29,6 +29,8 @@ const Crm = lazy(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
 const Relatorios = lazy(() => import("./pages/Relatorios"));
 const Produtos = lazy(() => import("./pages/Produtos"));
+const Marketing = lazy(() => import("./pages/Marketing"));
+const MarketingFlowEditor = lazy(() => import("./pages/MarketingFlowEditor"));
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando…
@@ -137,6 +139,22 @@ const App = () => (
                       element={
                         <PermissionRoute permission="relatorios">
                           <Relatorios />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/marketing"
+                      element={
+                        <PermissionRoute permission="marketing">
+                          <Marketing />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/marketing/fluxo/:flowId"
+                      element={
+                        <PermissionRoute permission="marketing">
+                          <MarketingFlowEditor />
                         </PermissionRoute>
                       }
                     />

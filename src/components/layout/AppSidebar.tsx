@@ -2,6 +2,7 @@ import {
   BarChart3,
   Briefcase,
   LogOut,
+  Megaphone,
   MessageCircle,
   Package,
   Settings2,
@@ -19,7 +20,7 @@ type MenuItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
-  permission: "inbox" | "crm" | "clientes" | "produtos" | "relatorios" | "configuracoes";
+  permission: "inbox" | "crm" | "clientes" | "produtos" | "relatorios" | "marketing" | "configuracoes";
 };
 
 const primaryItems: MenuItem[] = [
@@ -28,6 +29,7 @@ const primaryItems: MenuItem[] = [
   { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
   { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3, permission: "relatorios" },
+  { title: "Marketing", url: "/marketing", icon: Megaphone, permission: "marketing" },
 ];
 
 function SidebarTooltip({

@@ -30,7 +30,7 @@ type CollaboratorsSectionNavProps = {
 export function CollaboratorsSectionNav({ value, onChange }: CollaboratorsSectionNavProps) {
   return (
     <nav
-      className="flex shrink-0 flex-row flex-wrap gap-1 rounded-2xl border border-border/60 bg-card/80 p-1 lg:w-52 lg:flex-col lg:flex-nowrap"
+      className="flex w-full shrink-0 flex-col gap-1 rounded-2xl border border-border/60 bg-card/80 p-1 lg:w-56"
       aria-label="Secoes de colaboradores"
     >
       {SECTIONS.map((section) => {
@@ -42,7 +42,7 @@ export function CollaboratorsSectionNav({ value, onChange }: CollaboratorsSectio
             type="button"
             onClick={() => onChange(section.id)}
             className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors lg:flex-none lg:w-full",
+              "flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
               active
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",

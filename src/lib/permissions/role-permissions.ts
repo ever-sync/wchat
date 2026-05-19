@@ -9,6 +9,7 @@ export const PERMISSION_FUNCTIONS = [
   { key: "clientes", label: "Clientes" },
   { key: "produtos", label: "Produtos" },
   { key: "relatorios", label: "Relatorios" },
+  { key: "marketing", label: "Marketing" },
   { key: "configuracoes", label: "Configuracoes" },
   { key: "colaboradores", label: "Colaboradores e convites" },
 ] as const;
@@ -53,6 +54,7 @@ export const DEFAULT_ROLE_PERMISSIONS: TenantRolePermissionsConfig = {
     clientes: fullAccess(),
     produtos: fullAccess(),
     relatorios: fullAccess(),
+    marketing: fullAccess(),
     configuracoes: fullAccess(),
     colaboradores: fullAccess(),
   },
@@ -62,6 +64,7 @@ export const DEFAULT_ROLE_PERMISSIONS: TenantRolePermissionsConfig = {
     clientes: fullAccess(),
     produtos: fullAccess(),
     relatorios: fullAccess(),
+    marketing: none(),
     configuracoes: viewEdit(),
     colaboradores: viewOnly(),
   },
@@ -71,6 +74,7 @@ export const DEFAULT_ROLE_PERMISSIONS: TenantRolePermissionsConfig = {
     clientes: viewEdit(),
     produtos: viewOnly(),
     relatorios: fullAccess(),
+    marketing: none(),
     configuracoes: viewOnly(),
     colaboradores: none(),
   },
@@ -80,6 +84,7 @@ export const DEFAULT_ROLE_PERMISSIONS: TenantRolePermissionsConfig = {
     clientes: viewOnly(),
     produtos: none(),
     relatorios: none(),
+    marketing: none(),
     configuracoes: none(),
     colaboradores: none(),
   },
@@ -128,7 +133,8 @@ export function mergeRolePermissionsConfig(stored: unknown): TenantRolePermissio
 
     const matrix = {} as RolePermissionMatrix;
     for (const fn of PERMISSION_FUNCTIONS) {
-      const flags = parseFlags(roleRaw[fn.key]);
+      const raw = roleRaw[fn.key];
+      const flags = isRecord(raw) ? parseFlags(raw) : defaults[fn.key];
       matrix[fn.key] = {
         view: flags.view,
         edit: flags.edit && flags.view,

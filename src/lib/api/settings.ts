@@ -56,6 +56,11 @@ export type UpdateProfileInput = {
   empresa: string;
 };
 
+export type UpdateCollaboratorRoleInput = {
+  profileId: string;
+  role: UserRole;
+};
+
 function mapProfile(row: ProfileRow): ProfileSettings {
   return {
     id: row.id,
@@ -149,6 +154,28 @@ export async function listTenantCollaborators() {
   }
 
   return (data ?? []).map((row) => mapProfile(row as ProfileRow));
+}
+
+export async function updateCollaboratorRole(input: UpdateCollaboratorRoleInput) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure o Supabase antes de alterar funcoes.");
+  }
+
+  const tenantId = await getCurrentTenantId();
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ role: input.role })
+    .eq("tenant_id", tenantId)
+    .eq("id", input.profileId)
+    .select("id, tenant_id, nome, email, empresa, plano, role, status, created_at, updated_at")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel atualizar a funcao do colaborador.");
+  }
+
+  return mapProfile(data as ProfileRow);
 }
 
 export async function listCollaboratorInvites() {
@@ -272,6 +299,22 @@ export function useCollaboratorInvites(
     queryKey: ["collaborator-invites"],
     queryFn: listCollaboratorInvites,
     ...options,
+  });
+}
+
+export function useUpdateCollaboratorRole(
+  options?: UseMutationOptions<ProfileSettings, Error, UpdateCollaboratorRoleInput>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: updateCollaboratorRole,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["tenant-collaborators"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings-profile"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
   });
 }
 
