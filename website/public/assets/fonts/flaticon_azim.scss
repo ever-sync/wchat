@@ -1,0 +1,57 @@
+$flaticon_azim-font: "flaticon_azim";
+
+@font-face {
+    font-family: $flaticon_azim-font;
+    src: url("./flaticon_azim.ttf?857df3f59684d395598b551c7563dd2c") format("truetype"),
+url("./flaticon_azim.woff?857df3f59684d395598b551c7563dd2c") format("woff"),
+url("./flaticon_azim.woff2?857df3f59684d395598b551c7563dd2c") format("woff2"),
+url("./flaticon_azim.eot?857df3f59684d395598b551c7563dd2c#iefix") format("embedded-opentype"),
+url("./flaticon_azim.svg?857df3f59684d395598b551c7563dd2c#flaticon_azim") format("svg");
+}
+
+i[class^="flaticon-"]:before, i[class*=" flaticon-"]:before {
+    font-family: flaticon_azim !important;
+    font-style: normal;
+    font-weight: normal !important;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+$flaticon_azim-map: (
+    "log-in": "\f101",
+    "add": "\f102",
+    "edit": "\f103",
+    "check": "\f104",
+    "hexagon": "\f105",
+    "left-arrow": "\f106",
+    "right-arrow": "\f107",
+    "down-arrow": "\f108",
+);
+
+.flaticon-log-in:before {
+    content: map-get($flaticon_azim-map, "log-in");
+}
+.flaticon-add:before {
+    content: map-get($flaticon_azim-map, "add");
+}
+.flaticon-edit:before {
+    content: map-get($flaticon_azim-map, "edit");
+}
+.flaticon-check:before {
+    content: map-get($flaticon_azim-map, "check");
+}
+.flaticon-hexagon:before {
+    content: map-get($flaticon_azim-map, "hexagon");
+}
+.flaticon-left-arrow:before {
+    content: map-get($flaticon_azim-map, "left-arrow");
+}
+.flaticon-right-arrow:before {
+    content: map-get($flaticon_azim-map, "right-arrow");
+}
+.flaticon-down-arrow:before {
+    content: map-get($flaticon_azim-map, "down-arrow");
+}

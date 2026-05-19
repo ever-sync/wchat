@@ -1,0 +1,44 @@
+@font-face {
+    font-family: "flaticon_azim";
+    src: url("./flaticon_azim.ttf?857df3f59684d395598b551c7563dd2c") format("truetype"),
+url("./flaticon_azim.woff?857df3f59684d395598b551c7563dd2c") format("woff"),
+url("./flaticon_azim.woff2?857df3f59684d395598b551c7563dd2c") format("woff2"),
+url("./flaticon_azim.eot?857df3f59684d395598b551c7563dd2c#iefix") format("embedded-opentype"),
+url("./flaticon_azim.svg?857df3f59684d395598b551c7563dd2c#flaticon_azim") format("svg");
+}
+
+i[class^="flaticon-"]:before, i[class*=" flaticon-"]:before {
+    font-family: flaticon_azim !important;
+    font-style: normal;
+    font-weight: normal !important;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.flaticon-log-in:before {
+    content: "\f101";
+}
+.flaticon-add:before {
+    content: "\f102";
+}
+.flaticon-edit:before {
+    content: "\f103";
+}
+.flaticon-check:before {
+    content: "\f104";
+}
+.flaticon-hexagon:before {
+    content: "\f105";
+}
+.flaticon-left-arrow:before {
+    content: "\f106";
+}
+.flaticon-right-arrow:before {
+    content: "\f107";
+}
+.flaticon-down-arrow:before {
+    content: "\f108";
+}

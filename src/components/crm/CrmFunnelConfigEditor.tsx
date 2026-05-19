@@ -39,6 +39,7 @@ import {
   moveStage,
   removeFunnel,
   removeStage,
+  setExclusiveLostStage,
   setExclusiveSaleStage,
   slugifyFunnelKey,
   uniqueKey,
@@ -468,7 +469,7 @@ export function CrmFunnelConfigEditor({
                         >
                           <Checkbox
                             checked={Boolean(stage.isSaleStage)}
-                            disabled={disabled}
+                            disabled={disabled || Boolean(stage.isLostStage)}
                             onCheckedChange={(value) =>
                               onChange(
                                 setExclusiveSaleStage(
@@ -485,6 +486,36 @@ export function CrmFunnelConfigEditor({
                             <span className="font-medium">Etapa de venda automática</span>
                             <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
                               Ao registrar uma venda, o negócio passa para esta coluna (máximo uma por funil).
+                            </span>
+                          </span>
+                        </label>
+                        <label
+                          className="flex cursor-pointer items-start gap-2 text-sm"
+                          title={
+                            stage.isLostStage
+                              ? "Negócios marcados como perdidos vão para esta etapa."
+                              : "Só pode existir uma etapa de perda por funil; ao marcar, as outras desmarcam."
+                          }
+                        >
+                          <Checkbox
+                            checked={Boolean(stage.isLostStage)}
+                            disabled={disabled || Boolean(stage.isSaleStage)}
+                            onCheckedChange={(value) =>
+                              onChange(
+                                setExclusiveLostStage(
+                                  funnels,
+                                  activeFunnel.id,
+                                  stage.id,
+                                  value === true,
+                                ),
+                              )
+                            }
+                            className="mt-0.5"
+                          />
+                          <span>
+                            <span className="font-medium">Etapa de perda</span>
+                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                              Ao marcar um negócio como perdido, ele passa para esta coluna (máximo uma por funil).
                             </span>
                           </span>
                         </label>

@@ -1,0 +1,696 @@
+
+.rtl {
+  direction: rtl; 
+}
+
+.ltr {
+  direction: ltr; 
+}
+
+.rtl .switcher{
+  right: 60px;
+  left: inherit;
+}
+
+.rtl .switcher .switch_menu{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .owl-carousel{
+  direction: ltr;
+}
+
+.rtl .scroll-to-top .scroll-bar{
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .main-menu .navigation > li{
+  float: right;
+}
+
+.rtl .main-menu .navigation > li:first-child{
+  margin-left: 15px !important;
+  margin-right: 0px;
+}
+
+.rtl .main-menu .navigation > li:last-child{
+  margin-right: 15px !important;
+  margin-left: 0px;
+}
+
+.rtl .main-menu .navigation > li > ul > li > a, 
+.rtl .main-menu .navigation > li > .megamenu li > a{
+  text-align: right;
+}
+
+.rtl .main-menu .navigation li.dropdown .megamenu li h4{
+  text-align: right;
+}
+
+.rtl .main-menu .navigation > li > ul > li > ul > li > a{
+  text-align: right;
+}
+
+.rtl .main-menu .navigation > li > ul > li.dropdown > a:after{
+  right: inherit;
+  left: 20px;
+  content: "\f104";
+}
+
+.rtl .mobile-menu{
+  text-align: right;
+}
+
+.rtl .mobile-menu .nav-logo{
+  text-align: right;
+}
+
+.rtl .mobile-menu .navigation li > a:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .mobile-menu .navigation li.dropdown .dropdown-btn{
+  right: inherit;
+  left: 6px;
+}
+
+.rtl .mobile-menu .navigation li.dropdown .dropdown-btn.open{
+  transform: rotate(-90deg);
+}
+
+.rtl .scroll-top{
+  right: inherit;
+  left: 50px;
+}
+
+.rtl .main-header .outer-box .logo-box{
+  margin-right: 0px;
+  margin-left: 140px;
+}
+
+.rtl .main-header .menu-right-content .user-box{
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .language-picker{
+  margin-right: 0px;
+  margin-left: 40px;
+}
+
+.rtl .language-picker__list li{
+  text-align: right;
+}
+
+.rtl .service-block-one .inner-box .link-box{
+  display: inline-block;
+}
+
+.rtl .beneficiaries-section .tabs-content .content-box .feature-list li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .beneficiaries-section .tab-btns .tab-btn{
+  padding-left: 0px;
+  padding-right: 30px;
+}
+
+.rtl .beneficiaries-section .tab-btns .tab-btn:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .beneficiaries-section .tabs-content .content-box .icon-box{
+  left: inherit;
+  right: -130px;
+}
+
+.rtl .working-section .content-box .list-item li{
+  padding-left: 0px;
+  padding-right: 36px;
+}
+
+.rtl .working-section .content-box .list-item li:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .chooseus-section .single-item{
+  direction: ltr;
+}
+
+.rtl .masterpiece-section .inner-box .content-box{
+  text-align: right;
+}
+
+.rtl .pricing-table-one .feature-list li:before{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .pricing-section .tab-btn-one .tab-btn img{
+  right: inherit;
+  left: 20px;
+}
+
+.rtl .pricing-table-one .table-footer h3{
+  padding-left: 0px;
+  padding-right: 16px;
+}
+
+.rtl .pricing-section .tab-btn-one .tab-btn:first-child:before,
+.rtl .pricing-section .tab-btn-one .tab-btn:nth-child(2):before,
+.rtl .pricing-section .tab-btn-one .tab-btn:last-child:before{
+  left: inherit;
+  right: 271px;
+  transform: rotateY(180deg);
+}
+
+.rtl .main-footer .about-widget .clients-list li{
+  float: right;
+  margin-right: 0px;
+  margin-left: -12px;
+}
+
+.rtl .main-footer .subscribe-widget .social-links li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .main-footer .about-widget .widget-content h6{
+  padding-left: 0px;
+  padding-right: 35px;
+}
+
+.rtl .main-footer .about-widget .widget-content h6 i{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .main-footer .links-widget .links-list li a:hover{
+  padding-left: 0px;
+  padding-right: 18px;
+}
+
+.rtl .main-footer .links-widget .links-list li a:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .footer-nav li{
+  margin-right: 0px;
+  margin-left: 25px;
+}
+
+.rtl .footer-nav li:before{
+  right: inherit;
+  left: -13px;
+}
+
+.rtl .banner-style-two .pattern-layer .pattern-1{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .main-header .menu-right-content .user-box a i{
+  float: left;
+}
+
+.rtl .header-style-two .menu-right-content .user-box{
+  top: 4px;
+}
+
+.rtl .banner-style-two .content-box .list-item li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .banner-style-two .content-box p{
+  padding-left: 0px;
+  padding-right: 24px;
+}
+
+.rtl .banner-style-two .content-box p:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .main-menu .navigation > li > ul > li > a:before{
+  left: inherit;
+  right: -30px;
+}
+
+.rtl .clients-style-two .rating-box h6 a{
+  margin-left: 0px;
+  margin-right: 20px;
+}
+
+.rtl .working-style-two .inner-box .image-box{
+  margin-right: 0px;
+  margin-left: 100px;
+}
+
+.rtl .list-style-one li{
+  padding-left: 0px;
+  padding-right: 35px;
+}
+
+.rtl .list-style-one li:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .working-style-two .inner-box .content-box:before{
+  left: inherit;
+  right: -15px;
+}
+
+.rtl .working-style-two .inner-box .content-box .count-text{
+  left: inherit;
+  right: -45px;
+}
+
+.rtl .working-style-two .inner-box .content-box{
+  padding-left: 0px;
+  padding-right: 100px;
+}
+
+.rtl .masterpiece-style-two .single-item a{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .testimonial-section .owl-dots{
+  right: inherit;
+  left: 95px;
+}
+
+.rtl .testimonial-section .owl-nav{
+  right: inherit;
+  left: 140px;
+}
+
+.rtl .testimonial-block-one .inner-box{
+  text-align: right;
+}
+
+.rtl .testimonial-block-one .inner-box .clients-logo{
+  display: inline-block;
+}
+
+.rtl .testimonial-block-one .inner-box .author-box{
+  padding-left: 0px;
+  padding-right: 72px;
+}
+
+.rtl .testimonial-block-one .inner-box h6{
+  padding-left: 0px;
+  padding-right: 26px;
+}
+
+.rtl .testimonial-block-one .inner-box h6 img{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .testimonial-block-one .inner-box .author-box .thumb-box{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .testimonial-block-one .inner-box .author-box .quote{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .pricing-style-two .tab-buttons .tab-btn{
+  margin-right: 0px;
+  margin-left: 26px;
+}
+
+.rtl .contact-section .form-inner .form-group .text{
+  padding-left: 0px;
+  padding-right: 23px;
+}
+
+.rtl .contact-section .form-inner .form-group .text .icon{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .check-box label{
+  padding-left: 0px;
+  padding-right: 36px;
+}
+
+.rtl .check-box label:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .footer-style-two .social-widget .social-list li a i{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .header-top-two .right-column .account-box{
+  margin-right: 0px;
+  margin-left: 30px;
+}
+
+.rtl .article-section{
+  direction: ltr;
+}
+
+.rtl .benefit-block-one .inner-box .list-item li{
+  padding-left: 0px;
+  padding-right: 22px;
+}
+
+.rtl .benefit-block-one .inner-box .list-item li:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .footer-home-three .download-widget .download-list li a img{
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .footer-home-three .logo-widget .social-links li{
+  margin-right: 0px;
+  margin-left: 20px;
+  float: right;
+}
+
+.rtl .page-title .bread-crumb li{
+  margin-right: 0px;
+  margin-left: 6px;
+  padding-right: 0px;
+  padding-left: 22px;
+}
+
+.rtl .page-title .bread-crumb li:before{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .values-section .tab-btn a{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .values-section .content-box{
+  margin-left: 0px;
+  margin-right: 110px;
+}
+
+.rtl .values-section .tab-btn:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .funfact-block-one .inner-box .count-outer{
+  margin-right: 0px;
+  margin-left: 30px;
+}
+
+.rtl .team-block-one .inner-box{
+  text-align: right;
+}
+
+.rtl .team-block-one .inner-box .lower-content .share-box{
+  right: inherit;
+  left: 25px;
+}
+
+.rtl .user-form-section .form-inner .form-group .text-box{
+  text-align: right;
+  padding-left: 0px;
+  padding-right: 22px;
+}
+
+.rtl .user-form-section .form-inner .form-group .text-box .icon{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .user-form-section .form-inner .form-group input[type='text'], 
+.rtl .user-form-section .form-inner .form-group input[type='email'], 
+.rtl .user-form-section .form-inner .form-group input[type='password'], 
+.rtl .user-form-section .form-inner .form-group input[type='tel']{
+  text-align: right;
+}
+
+.rtl .error-section .form-inner .form-group input[type='search']{
+  padding-right: 30px;
+}
+
+.rtl .case-details .sec-title .icon-box{
+  right: inherit;
+  left: 0px;
+}
+
+.rtl .case-details .content-box .inner-text h2{
+  margin-right: 0px;
+  margin-left: 30px;
+}
+
+.rtl .case-details .content-box .list-item li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 20px;
+}
+
+.rtl .news-block-one .inner-box .lower-content .post-info li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 26px;
+}
+
+.rtl .news-block-one .inner-box .lower-content .post-info li:before{
+  right: inherit;
+  left: -12px;
+}
+
+.rtl .blog-sidebar .category-widget .category-list li a:before{
+  left: inherit;
+  right: -35px;
+}
+
+.rtl .blog-sidebar .post-widget .post{
+  padding-left: 0px;
+  padding-right: 90px;
+}
+
+.rtl .blog-sidebar .post-widget .post .post-thumb{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .blog-sidebar .tags-widget .tags-list li{
+  float: right;
+  margin-right: 0px;
+  margin-left: 10px;
+}
+
+.rtl .blog-details-content .content-one .quote-box{
+  right: inherit;
+  left: 40px;
+}
+
+.rtl .blog-details-content .content-two .list-item li{
+  padding-left: 0px;
+  padding-right: 35px;
+}
+
+.rtl .blog-details-content .content-two .list-item li:before{
+  left: inherit;
+  right: 0px;
+  transform: rotate(180deg);
+}
+
+.rtl .blog-details-content .content-three .list-item li{
+  padding-left: 0px;
+  padding-right: 36px;
+}
+
+.rtl .blog-details-content .content-three .list-item li:before{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .blog-details-content .post-tags .tags-list li h5{
+  padding-left: 0px;
+  padding-right: 26px;
+}
+
+.rtl .blog-details-content .post-tags .tags-list li h5 i{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .blog-details-content .author-box{
+  padding-left: 30px;
+  padding-right: 195px;
+}
+
+.rtl .blog-details-content .author-box .author-thumb{
+  left: inherit;
+  right: 39px;
+}
+
+.rtl .blog-details-content .author-box .social-box{
+  right: inherit;
+  left: 38px;
+}
+
+.rtl .blog-details-content .comment-box .comment{
+  padding-left: 45px;
+  padding-right: 110px;
+}
+
+.rtl .blog-details-content .comment-box .comment .comment-thumb{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .blog-details-content .comment-box .comment h6 a{
+  padding-left: 0px;
+  padding-right: 24px;
+}
+
+.rtl .blog-details-content .comment-box .comment h6 a img{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .blog-details-content .comment-form-area .form-inner .form-group .text{
+  padding-left: 0px;
+  padding-right: 23px;
+}
+
+.rtl .blog-details-content .comment-form-area .form-inner .form-group .text .icon{
+  left: inherit;
+  right: 0px;
+}
+
+.rtl .info-block-one .inner-box{
+  padding-left: 30px;
+  padding-right: 124px;
+}
+
+.rtl .info-block-one .inner-box .icon-box{
+  left: inherit;
+  right: 34px;
+}
+
+.rtl .main-header .menu-right-content .user-box{
+  top: 4px;
+}
+
+
+/** rtl responsive-css **/
+
+@media only screen and (max-width: 1549px){
+ .rtl .main-header .outer-box .logo-box{
+  margin-left: 30px;
+ }
+
+ .masterpiece-section .inner-box .content-box h2 br{
+  display: none;
+ }
+}
+
+@media only screen and (max-width: 991px){
+  .rtl .working-style-two .inner-box .content-box{
+    padding-right: 0px;
+  }
+
+  .working-style-two .inner-box .image-box{
+    margin-right: 0px !important;
+  }
+
+  .rtl .working-style-two .inner-box .image-box{
+    margin-left: 0px !important;
+  }
+
+  .rtl .working-style-two .inner-box .content-box .count-text{
+    right: 0px;
+  }
+
+  .rtl .values-section .content-box{
+    margin-right: 0px;
+  }
+
+  .rtl .language-picker{
+    margin-left: 0px;
+  }
+}
+
+
+@media only screen and (max-width: 767px){
+ .pricing-table-one .table-header{
+  padding-right: 0px !important;
+ }
+
+ .rtl .pricing-table-one .table-header{
+  padding-left: 0px !important;
+ }
+
+ .pricing-table-one .table-header .icon-box{
+  position: relative !important;
+  top: 0px !important;
+  margin-bottom: 20px;
+ }
+}
+
+
+@media only screen and (max-width: 499px){
+  .rtl .blog-details-content .author-box,
+  .rtl .info-block-one .inner-box{
+    padding-right: 30px;
+  }
+
+  .rtl .blog-details-content .author-box .author-thumb{
+    right: 0px;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

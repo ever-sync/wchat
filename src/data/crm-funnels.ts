@@ -14,6 +14,11 @@ export type CrmStageDef = {
    * Fallback legado quando ausente: id `venda`.
    */
   isSaleStage?: boolean;
+  /**
+   * Etapa de perda (apenas uma por funil). Quando o card chega aqui, é tratado como perdido.
+   * Fallback legado quando ausente: id `perdido`.
+   */
+  isLostStage?: boolean;
 };
 
 export type CrmFunnel = {
@@ -136,11 +141,15 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
       const rawSale = sr.isSaleStage;
       const isSaleStage =
         rawSale === true || rawSale === "true" || rawSale === 1 || rawSale === "1";
+      const rawLost = sr.isLostStage;
+      const isLostStage =
+        rawLost === true || rawLost === "true" || rawLost === 1 || rawLost === "1";
       stages.push({
         id: sid,
         title,
         ...(requiredFields ? { requiredFields } : {}),
         ...(isSaleStage ? { isSaleStage: true } : {}),
+        ...(isLostStage ? { isLostStage: true } : {}),
       });
     }
     if (stages.length === 0) {
@@ -148,6 +157,10 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
     }
     const saleMarks = stages.filter((s) => s.isSaleStage).length;
     if (saleMarks > 1) {
+      return null;
+    }
+    const lostMarks = stages.filter((s) => s.isLostStage).length;
+    if (lostMarks > 1) {
       return null;
     }
     out.push({ id, listName, stages });
@@ -190,6 +203,16 @@ export function resolveConfiguredSaleStageId(funnels: CrmFunnel[], funnelId: str
     return marked.id;
   }
   return "venda";
+}
+
+/** Id da etapa de destino para perda (`perdido` se nada estiver marcado). */
+export function resolveConfiguredLostStageId(funnels: CrmFunnel[], funnelId: string): string {
+  const funnel = funnels.find((f) => f.id === funnelId);
+  const marked = funnel?.stages.find((s) => s.isLostStage);
+  if (marked) {
+    return marked.id;
+  }
+  return "perdido";
 }
 
 /** Etapa tratada como coluna comercial histórica (valor obrigatório se não há config própria). */

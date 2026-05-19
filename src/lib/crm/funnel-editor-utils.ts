@@ -105,6 +105,28 @@ export function setExclusiveSaleStage(
   });
 }
 
+/** No máximo uma etapa como destino para perda. */
+export function setExclusiveLostStage(
+  funnels: CrmFunnel[],
+  funnelId: string,
+  stageId: string,
+  checked: boolean,
+): CrmFunnel[] {
+  return funnels.map((funnel) => {
+    if (funnel.id !== funnelId) return funnel;
+    return {
+      ...funnel,
+      stages: funnel.stages.map((stage) => {
+        const target = stage.id === stageId;
+        if (!checked) {
+          return target ? { ...stage, isLostStage: undefined } : stage;
+        }
+        return { ...stage, isLostStage: target };
+      }),
+    };
+  });
+}
+
 export function createDefaultStage(funnel: CrmFunnel, title = "Nova etapa"): CrmStageDef {
   const base = slugifyFunnelKey(title);
   const id = uniqueKey(new Set(funnel.stages.map((s) => s.id)), base);
@@ -139,6 +161,7 @@ export function validateFunnelsDraft(funnels: CrmFunnel[]): string | null {
     }
     const stageIds = new Set<string>();
     let saleStageCount = 0;
+    let lostStageCount = 0;
     for (const stage of funnel.stages) {
       if (!stage.id.trim() || !stage.title.trim()) {
         return `Preencha nome e ID de todas as etapas em "${funnel.listName}".`;
@@ -150,9 +173,18 @@ export function validateFunnelsDraft(funnels: CrmFunnel[]): string | null {
       if (stage.isSaleStage) {
         saleStageCount++;
       }
+      if (stage.isLostStage) {
+        lostStageCount++;
+      }
+      if (stage.isSaleStage && stage.isLostStage) {
+        return `A etapa "${stage.title}" em "${funnel.listName}" não pode ser de venda e perda ao mesmo tempo.`;
+      }
     }
     if (saleStageCount > 1) {
       return `O funil "${funnel.listName}" só pode ter uma etapa marcada como "Venda".`;
+    }
+    if (lostStageCount > 1) {
+      return `O funil "${funnel.listName}" só pode ter uma etapa marcada como "Perda".`;
     }
   }
   return null;
