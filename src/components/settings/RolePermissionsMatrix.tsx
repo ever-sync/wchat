@@ -35,19 +35,13 @@ import {
   PERMISSION_ACTION_LABELS,
   PERMISSION_ACTIONS,
   PERMISSION_FUNCTIONS,
+  ROLE_LABELS,
   type PermissionAction,
   type PermissionFunctionKey,
   type RolePermissionMatrix,
 } from "@/lib/permissions/role-permissions";
 import { useToast } from "@/hooks/use-toast";
 import type { UserRole } from "@/types/domain";
-
-const roleLabels: Record<UserRole, string> = {
-  admin: "Administrador",
-  operacao: "Operacao",
-  financeiro: "Financeiro",
-  atendimento: "Atendimento",
-};
 
 // Funcoes que admin NUNCA pode perder view+edit, para evitar lockout do tenant.
 const ADMIN_LOCKED_FUNCTIONS: PermissionFunctionKey[] = ["colaboradores", "configuracoes"];
@@ -158,7 +152,7 @@ export function RolePermissionsMatrix({ canEdit, disabled }: RolePermissionsMatr
       await savePermissions.mutateAsync({ role: selectedRole, matrix: draft });
       toast({
         title: "Permissoes salvas",
-        description: `Matriz atualizada para ${roleLabels[selectedRole]}.`,
+        description: `Matriz atualizada para ${ROLE_LABELS[selectedRole]}.`,
       });
     } catch (e) {
       toast({
@@ -222,9 +216,9 @@ export function RolePermissionsMatrix({ canEdit, disabled }: RolePermissionsMatr
                 <SelectValue placeholder="Selecione o papel" />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(roleLabels) as UserRole[]).map((role) => (
+                {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
                   <SelectItem key={role} value={role}>
-                    {roleLabels[role]}
+                    {ROLE_LABELS[role]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -359,7 +353,7 @@ export function RolePermissionsMatrix({ canEdit, disabled }: RolePermissionsMatr
           <AlertDialogHeader>
             <AlertDialogTitle>Descartar alteracoes?</AlertDialogTitle>
             <AlertDialogDescription>
-              Voce tem alteracoes nao salvas em <strong>{roleLabels[selectedRole]}</strong>. Trocar para outro
+              Voce tem alteracoes nao salvas em <strong>{ROLE_LABELS[selectedRole]}</strong>. Trocar para outro
               papel agora ira descartar as mudancas.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -379,7 +373,7 @@ export function RolePermissionsMatrix({ canEdit, disabled }: RolePermissionsMatr
           <AlertDialogHeader>
             <AlertDialogTitle>Restaurar padroes?</AlertDialogTitle>
             <AlertDialogDescription>
-              A matriz de <strong>{roleLabels[selectedRole]}</strong> sera reposta para os padroes do
+              A matriz de <strong>{ROLE_LABELS[selectedRole]}</strong> sera reposta para os padroes do
               sistema. Voce ainda precisa clicar em Salvar para gravar.
             </AlertDialogDescription>
           </AlertDialogHeader>

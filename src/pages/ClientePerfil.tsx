@@ -32,6 +32,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
+import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
+import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
@@ -339,6 +341,7 @@ export function ClientePerfilContent({
     customerNegotiations,
   );
   const { data: tenantCollaborators = [] } = useTenantCollaborators({ enabled: crmEnabled });
+  const { data: effectiveCrmFunnels = [] } = useEffectiveCrmFunnels();
   const crmTaskAssignees = useMemo(
     () => tenantCollaborators.map((p) => ({ id: p.id, nome: p.nome })),
     [tenantCollaborators],
@@ -527,6 +530,15 @@ export function ClientePerfilContent({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {crmEnabled && effectiveCrmFunnels.length > 0 ? (
+        <div className="border-b border-border bg-muted/30 px-4 py-3 md:px-6">
+          <CustomerCrmPipelineForm
+            customer={cliente}
+            funnels={effectiveCrmFunnels}
+            readOnly={clientePerfilCrmLocked || !canEditCrm}
+          />
+        </div>
+      ) : null}
       <ClienteRdPerfilView
         cliente={cliente}
         negotiationReadOnly={clientePerfilCrmLocked}

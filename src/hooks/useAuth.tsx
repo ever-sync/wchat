@@ -12,6 +12,24 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
 import type { AppUserProfile, AuthCredentials, SignUpPayload, UserRole } from "@/types/domain";
 
+async function fetchProfileFromDb(userId: string): Promise<Partial<AppUserProfile> | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("nome, email, empresa, plano, role, status")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const out: Partial<AppUserProfile> = {};
+  if (data.nome) out.nome = data.nome;
+  if (data.email) out.email = data.email;
+  if (data.empresa) out.empresa = data.empresa;
+  if (data.plano) out.plano = data.plano as AppUserProfile["plano"];
+  if (data.role) out.role = data.role as UserRole;
+  if (data.status) out.status = data.status as AppUserProfile["status"];
+  return out;
+}
+
 type AuthContextValue = {
   profile: AppUserProfile | null;
   session: Session | null;
@@ -35,7 +53,7 @@ function mapUserToProfile(user: User): AppUserProfile {
     email: user.email ?? "",
     empresa: metadata.empresa ?? metadata.company ?? "DistribuiBot",
     plano: metadata.plano ?? "starter",
-    role: metadata.role ?? "admin",
+    role: metadata.role ?? "atendimento",
     status: metadata.status ?? "active",
     avatar: metadata.avatar_url,
   };
@@ -79,6 +97,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (supabase) {
       let isMounted = true;
+      let profileChannel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+
+      const applyDbProfile = (dbProfile: Partial<AppUserProfile>) => {
+        if (!isMounted) return;
+        setProfile((prev) => (prev ? { ...prev, ...dbProfile } : prev));
+      };
+
+      const hydrateProfile = async (user: User | null) => {
+        if (profileChannel) {
+          await supabase.removeChannel(profileChannel).catch(() => undefined);
+          profileChannel = null;
+        }
+        if (!user) {
+          setProfile(null);
+          return;
+        }
+        const base = mapUserToProfile(user);
+        setProfile(base);
+        const dbProfile = await fetchProfileFromDb(user.id);
+        if (!isMounted) return;
+        if (dbProfile) applyDbProfile(dbProfile);
+
+        profileChannel = supabase
+          .channel(`profile:${user.id}`)
+          .on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
+            (payload) => {
+              const next = payload.new as Record<string, unknown>;
+              const update: Partial<AppUserProfile> = {};
+              if (typeof next.nome === "string" && next.nome) update.nome = next.nome;
+              if (typeof next.email === "string" && next.email) update.email = next.email;
+              if (typeof next.empresa === "string" && next.empresa) update.empresa = next.empresa;
+              if (typeof next.plano === "string" && next.plano) update.plano = next.plano as AppUserProfile["plano"];
+              if (typeof next.role === "string" && next.role) update.role = next.role as UserRole;
+              if (typeof next.status === "string" && next.status) update.status = next.status as AppUserProfile["status"];
+              applyDbProfile(update);
+            },
+          )
+          .subscribe();
+      };
 
       void supabase.auth.getSession().then(async ({ data }) => {
         if (!isMounted) {
@@ -92,16 +151,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setSession(validSession);
-        setProfile(validSession?.user ? mapUserToProfile(validSession.user) : null);
+        await hydrateProfile(validSession?.user ?? null);
         setIsLoading(false);
       });
 
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        void resolveValidSession(nextSession).then((validSession) => {
+        void resolveValidSession(nextSession).then(async (validSession) => {
+          if (!isMounted) return;
           setSession(validSession);
-          setProfile(validSession?.user ? mapUserToProfile(validSession.user) : null);
+          await hydrateProfile(validSession?.user ?? null);
           setIsLoading(false);
         });
       });
@@ -109,6 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => {
         isMounted = false;
         subscription.unsubscribe();
+        if (profileChannel && supabase) {
+          void supabase.removeChannel(profileChannel).catch(() => undefined);
+          profileChannel = null;
+        }
       };
     }
 

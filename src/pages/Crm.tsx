@@ -82,7 +82,6 @@ import {
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
 import { useTenantSettings } from "@/lib/api/integrations";
 import { useTenantCollaborators } from "@/lib/api/settings";
-import { getCurrentTenantId } from "@/lib/api/tenant";
 import { toCustomerUpsertInput, useCustomers, useUpdateCustomer } from "@/lib/api/customers";
 import { useCrmNegotiationStageOverrides, useUpsertCrmNegotiationStageOverride } from "@/lib/api/crm-kanban";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
@@ -114,7 +113,7 @@ import {
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
-import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type { CrmFunnel, CrmStageDef } from "@/data/crm-funnels";
 import { DEFAULT_CRM_FUNNELS, resolveConfiguredSaleStageId } from "@/data/crm-funnels";
@@ -558,51 +557,8 @@ export default function Crm() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
-      return;
-    }
-    const sb = requireSupabase();
-    const pending = getCurrentTenantId()
-      .then((tenantId) =>
-        sb
-          .channel(`crm-board-${tenantId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "crm_negotiations",
-              filter: `tenant_id=eq.${tenantId}`,
-            },
-            () => {
-              void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-            },
-          )
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "tenant_crm_funnel_config",
-              filter: `tenant_id=eq.${tenantId}`,
-            },
-            () => {
-              void queryClient.invalidateQueries({ queryKey: ["tenant-crm-funnel-config"] });
-            },
-          )
-          .subscribe(),
-      )
-      .catch(() => undefined);
-
-    return () => {
-      void pending.then((ch) => {
-        if (ch) {
-          void sb.removeChannel(ch);
-        }
-      });
-    };
-  }, [queryClient]);
+  // Realtime para crm_negotiations / tenant_crm_funnel_config é tratado
+  // globalmente em useCrmRealtimeSync, montado via CrmNotificationListener.
 
   const onOwnerOpenChange = useCallback(
     (open: boolean) => {

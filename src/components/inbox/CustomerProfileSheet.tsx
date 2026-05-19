@@ -22,11 +22,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
-import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
+import { useCrmNegotiationsForCustomer, useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
 import {
   toCustomerUpsertInput,
@@ -279,128 +280,6 @@ function ProfileTagsPicker({
   );
 }
 
-function ProfilePipelineSelects({
-  customer,
-  funnels,
-  readOnly = false,
-}: {
-  customer: Customer;
-  funnels: CrmFunnel[];
-  readOnly?: boolean;
-}) {
-  const { toast } = useToast();
-  const updateCustomer = useUpdateCustomer();
-  const storedFunnel = customer.sourceColumns?.[CRM_FUNNEL_ID_KEY]?.trim() ?? "";
-  const storedStage = customer.sourceColumns?.[CRM_PIPELINE_STAGE_KEY]?.trim() ?? "";
-  const funnelOk = Boolean(storedFunnel && funnels.some((f) => f.id === storedFunnel));
-  const currentFunnel = funnelOk ? funnels.find((f) => f.id === storedFunnel)! : null;
-  const stageOk = Boolean(
-    currentFunnel && storedStage && currentFunnel.stages.some((s) => s.id === storedStage),
-  );
-
-  const persist = async (funnelId: string, stageId: string) => {
-    if (readOnly) {
-      toast({
-        title: "Assuma o negócio",
-        description: negotiationAssigneeBlockedMessage(),
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      await updateCustomer.mutateAsync({
-        id: customer.id,
-        input: {
-          ...toCustomerUpsertInput(customer),
-          sourceColumns: {
-            ...customer.sourceColumns,
-            [CRM_FUNNEL_ID_KEY]: funnelId,
-            [CRM_PIPELINE_STAGE_KEY]: stageId,
-          },
-        },
-      });
-    } catch (e) {
-      toast({
-        title: "Erro ao salvar funil",
-        description: e instanceof Error ? e.message : "Tente novamente.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const funnelSelectValue = funnelOk ? storedFunnel : FUNNEL_NONE;
-  const stages = currentFunnel?.stages ?? [];
-  const stageSelectValue = stageOk ? storedStage : FUNNEL_NONE;
-
-  return (
-    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">CRM · Funil e etapa</p>
-      <p className="mt-1 text-xs text-[#6f7b76]">Refletem no Kanban e negociações vinculadas a este cadastro.</p>
-      <div className="mt-3 space-y-3">
-        <div className="space-y-1">
-          <Label htmlFor="inbox-profile-funnel" className="text-xs text-[#5f6d66]">
-            Pipeline
-          </Label>
-          <Select
-            value={funnelSelectValue}
-            disabled={readOnly}
-            onValueChange={(fid) => {
-              if (fid === FUNNEL_NONE) {
-                return;
-              }
-              const f = funnels.find((x) => x.id === fid);
-              const first = f?.stages[0]?.id ?? "";
-              void persist(fid, first);
-            }}
-          >
-            <SelectTrigger id="inbox-profile-funnel" className="rounded-xl border-[#dfe6d8] bg-white">
-              <SelectValue placeholder="Selecionar funil" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FUNNEL_NONE} disabled className="text-muted-foreground">
-                Selecionar funil…
-              </SelectItem>
-              {funnels.map((f) => (
-                <SelectItem key={f.id} value={f.id}>
-                  {f.listName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="inbox-profile-stage" className="text-xs text-[#5f6d66]">
-            Etapa
-          </Label>
-          <Select
-            value={stageSelectValue}
-            disabled={readOnly || !funnelOk || stages.length === 0}
-            onValueChange={(sid) => {
-              if (sid === FUNNEL_NONE || !funnelOk) {
-                return;
-              }
-              void persist(storedFunnel, sid);
-            }}
-          >
-            <SelectTrigger id="inbox-profile-stage" className="rounded-xl border-[#dfe6d8] bg-white">
-              <SelectValue placeholder="Selecionar etapa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FUNNEL_NONE} disabled className="text-muted-foreground">
-                Selecionar etapa…
-              </SelectItem>
-              {stages.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function chatAttendantLabel(chat: InboxChat | null): string {
   const name = chat?.assigneeName?.trim();
@@ -1305,7 +1184,7 @@ export function CustomerProfileSheet({
 
                 {showCrmTab && customer ? (
                   <TabsContent value="crm" className="mt-0 space-y-5 focus-visible:outline-none">
-                    <ProfilePipelineSelects
+                    <CustomerCrmPipelineForm
                       customer={customer}
                       funnels={effectiveCrmFunnels}
                       readOnly={crmActionsLocked}

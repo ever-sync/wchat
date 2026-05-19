@@ -109,6 +109,7 @@ import {
   type IntegrationsSettingsSection,
 } from "@/components/settings/IntegrationsSectionNav";
 import type { QuickReply, QuickReplyScope, UserRole } from "@/types/domain";
+import { ROLE_LABELS } from "@/lib/permissions/role-permissions";
 
 const statusStyles = {
   connected: "bg-success/20 text-success",
@@ -117,12 +118,6 @@ const statusStyles = {
   error: "bg-destructive/20 text-destructive",
 };
 
-const roleLabels: Record<UserRole, string> = {
-  admin: "Administrador",
-  operacao: "Operacao",
-  financeiro: "Financeiro",
-  atendimento: "Atendimento",
-};
 
 const SETTINGS_TAB_VALUES = [
   "perfil",
@@ -578,7 +573,7 @@ export default function Configuracoes() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge className="bg-secondary text-secondary-foreground">
-            {myProfile ? roleLabels[myProfile.role] : "Conta"}
+            {myProfile ? ROLE_LABELS[myProfile.role] : "Conta"}
           </Badge>
           <Badge className="bg-accent/15 text-accent">
             {tenantId ? "Tenant conectado" : "Tenant pendente"}
@@ -695,7 +690,7 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               <div className="rounded-2xl border border-border bg-secondary/40 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cargo</p>
-                <p className="mt-2 text-sm font-medium text-foreground">{myProfile ? roleLabels[myProfile.role] : "Carregando..."}</p>
+                <p className="mt-2 text-sm font-medium text-foreground">{myProfile ? ROLE_LABELS[myProfile.role] : "Carregando..."}</p>
               </div>
               <div className="rounded-2xl border border-border bg-secondary/40 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Tenant</p>
@@ -1205,7 +1200,7 @@ export default function Configuracoes() {
                             if (nextRole === member.role) return;
                             try {
                               await updateCollaboratorRole.mutateAsync({ profileId: member.id, role: nextRole });
-                              toast({ title: "Funcao atualizada", description: `${member.nome || member.email} agora e ${roleLabels[nextRole]}.` });
+                              toast({ title: "Funcao atualizada", description: `${member.nome || member.email} agora e ${ROLE_LABELS[nextRole]}.` });
                             } catch (error) {
                               toast({
                                 title: "Nao foi possivel atualizar a funcao",
@@ -1230,7 +1225,7 @@ export default function Configuracoes() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Badge className="bg-secondary text-secondary-foreground">{roleLabels[member.role]}</Badge>
+                        <Badge className="bg-secondary text-secondary-foreground">{ROLE_LABELS[member.role]}</Badge>
                       )}
                       <Badge className="bg-success/20 text-success">{member.status === "active" ? "Ativo" : "Inativo"}</Badge>
                     </div>
@@ -1344,7 +1339,7 @@ export default function Configuracoes() {
                     <div key={invite.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4 md:flex-row md:items-center md:justify-between">
                       <div><p className="font-medium text-foreground">{invite.nome}</p><p className="text-sm text-muted-foreground">{invite.email}</p></div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-secondary text-secondary-foreground">{roleLabels[invite.role]}</Badge>
+                        <Badge className="bg-secondary text-secondary-foreground">{ROLE_LABELS[invite.role]}</Badge>
                         <Badge className={invite.status === "accepted" ? "bg-success/20 text-success" : invite.status === "revoked" ? "bg-destructive/20 text-destructive" : "bg-warning/20 text-warning"}>{invite.status === "accepted" ? "Aceito" : invite.status === "revoked" ? "Revogado" : "Pendente"}</Badge>
                         {invite.status === "pending" ? (
                           <>

@@ -88,6 +88,12 @@ export type SellerSalesRow = {
   goal_pct: number | null;
 };
 
+export type LostReasonRow = {
+  reason: string;
+  count: number;
+  total_value: number;
+};
+
 function mapAttendance(row: Record<string, unknown>): AttendanceReportRow {
   return {
     assignee_id: String(row.assignee_id ?? ""),
@@ -249,6 +255,21 @@ export async function fetchSellerSalesReport(year: number, month: number) {
   })) as SellerSalesRow[];
 }
 
+export async function fetchLostReasons(funnelId: string, from: Date, to: Date) {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc("report_lost_reasons", {
+    p_funnel_id: funnelId,
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    reason: String(row.reason ?? "(sem motivo)"),
+    count: Number(row.count ?? 0),
+    total_value: Number(row.total_value ?? 0),
+  })) as LostReasonRow[];
+}
+
 export async function exportAttendanceCsv(from: Date, to: Date): Promise<string> {
   const supabase = requireSupabase();
   const { data, error } = await supabase.rpc("export_attendance_report", {
@@ -273,58 +294,68 @@ export async function exportAttendanceCsv(from: Date, to: Date): Promise<string>
   return lines.join("\n");
 }
 
-export function useAttendanceReport(from: Date, to: Date, assigneeId?: string) {
+type UseReportOptions = { enabled?: boolean };
+
+export function useAttendanceReport(from: Date, to: Date, assigneeId?: string, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "attendance", from.toISOString(), to.toISOString(), assigneeId],
     queryFn: () => fetchAttendanceReport(from, to, assigneeId),
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }
 
-export function useFunnelReport(funnelId: string, from: Date, to: Date) {
+export function useFunnelReport(funnelId: string, from: Date, to: Date, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "funnel", funnelId, from.toISOString(), to.toISOString()],
     queryFn: () => fetchFunnelReport(funnelId, from, to),
-    enabled: isSupabaseConfigured && Boolean(funnelId),
+    enabled: isSupabaseConfigured && Boolean(funnelId) && (opts?.enabled ?? true),
   });
 }
 
-export function useStaleNegotiationsSummary(funnelId?: string) {
+export function useStaleNegotiationsSummary(funnelId?: string, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "stale-summary", funnelId ?? "all"],
     queryFn: () => fetchStaleNegotiationsSummary(funnelId),
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }
 
-export function useStaleNegotiations(funnelId?: string) {
+export function useStaleNegotiations(funnelId?: string, limit = 100, opts?: UseReportOptions) {
   return useQuery({
-    queryKey: ["reports", "stale", funnelId ?? "all"],
-    queryFn: () => fetchStaleNegotiations(funnelId),
-    enabled: isSupabaseConfigured,
+    queryKey: ["reports", "stale", funnelId ?? "all", limit],
+    queryFn: () => fetchStaleNegotiations(funnelId, limit),
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }
 
-export function useCrmCommercialSla(funnelId: string | undefined, from: Date, to: Date) {
+export function useCrmCommercialSla(funnelId: string | undefined, from: Date, to: Date, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "crm-sla", funnelId ?? "all", from.toISOString(), to.toISOString()],
     queryFn: () => fetchCrmCommercialSla(funnelId, from, to),
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }
 
-export function useCrmSellerPerformance(funnelId: string | undefined, from: Date, to: Date) {
+export function useCrmSellerPerformance(funnelId: string | undefined, from: Date, to: Date, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "crm-sellers", funnelId ?? "all", from.toISOString(), to.toISOString()],
     queryFn: () => fetchCrmSellerPerformance(funnelId, from, to),
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }
 
-export function useSellerSalesReport(year: number, month: number) {
+export function useLostReasons(funnelId: string, from: Date, to: Date, opts?: UseReportOptions) {
+  return useQuery({
+    queryKey: ["reports", "lost-reasons", funnelId, from.toISOString(), to.toISOString()],
+    queryFn: () => fetchLostReasons(funnelId, from, to),
+    enabled: isSupabaseConfigured && Boolean(funnelId) && (opts?.enabled ?? true),
+  });
+}
+
+export function useSellerSalesReport(year: number, month: number, opts?: UseReportOptions) {
   return useQuery({
     queryKey: ["reports", "seller-sales", year, month],
     queryFn: () => fetchSellerSalesReport(year, month),
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && (opts?.enabled ?? true),
   });
 }

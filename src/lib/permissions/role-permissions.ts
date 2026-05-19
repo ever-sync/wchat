@@ -24,6 +24,13 @@ export type TenantRolePermissionsConfig = Record<UserRole, RolePermissionMatrix>
 
 export const USER_ROLES: UserRole[] = ["admin", "operacao", "financeiro", "atendimento"];
 
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: "Administrador",
+  operacao: "Operacao",
+  financeiro: "Financeiro",
+  atendimento: "Atendimento",
+};
+
 export const PERMISSION_ACTION_LABELS: Record<PermissionAction, string> = {
   view: "Visualizar",
   edit: "Editar",
