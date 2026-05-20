@@ -112,6 +112,7 @@ function nextProductCode(products: Product[]) {
 function defaultProductInput(): ProductUpsertInput {
   return {
     codigo: "",
+    tipo: "produto",
     qtdEstoque: 0,
     nome: "",
     precoCompra: 0,
@@ -131,6 +132,7 @@ function defaultProductInput(): ProductUpsertInput {
 function productToInput(p: Product): ProductUpsertInput {
   return {
     codigo: p.codigo,
+    tipo: p.tipo,
     qtdEstoque: p.qtdEstoque,
     nome: p.nome,
     precoCompra: p.precoCompra,
@@ -307,14 +309,21 @@ export default function Produtos() {
       return;
     }
     if (!form.nome.trim()) {
-      toast({ title: "Informe o nome do produto", variant: "destructive" });
+      toast({ title: "Informe o nome", variant: "destructive" });
       return;
     }
     const precoVenda = parseCurrencyInput(valorDisplay);
+    if (form.tipo === "produto" && precoVenda <= 0) {
+      toast({ title: "Informe o valor do produto", variant: "destructive" });
+      return;
+    }
     const payload: ProductUpsertInput = {
       ...(editingId ? form : { ...defaultProductInput(), codigo: form.codigo.trim() || nextProductCode(products) }),
+      tipo: form.tipo,
       nome: form.nome.trim(),
       precoVenda,
+      // Serviço não controla estoque.
+      qtdEstoque: form.tipo === "servico" ? 0 : form.qtdEstoque,
     };
 
     try {
@@ -822,25 +831,74 @@ export default function Produtos() {
 
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
+              <Label>Tipo</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["produto", "servico"] as const).map((kind) => {
+                  const active = form.tipo === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, tipo: kind }))}
+                      className={cn(
+                        "rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-card text-muted-foreground hover:bg-wchat-50",
+                      )}
+                      aria-pressed={active}
+                    >
+                      {kind === "produto" ? "Produto" : "Serviço"}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {form.tipo === "produto"
+                  ? "Controla estoque e baixa na venda."
+                  : "Sem controle de estoque; preço pode ficar em aberto."}
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="nome">Nome</Label>
               <Input
                 id="nome"
                 className="rounded-[10px]"
                 value={form.nome}
                 onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                placeholder="Nome do produto"
+                placeholder={form.tipo === "produto" ? "Nome do produto" : "Nome do serviço"}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="valor">Valor</Label>
-              <Input
-                id="valor"
-                className="rounded-[10px]"
-                inputMode="numeric"
-                value={valorDisplay}
-                onChange={(e) => setValorDisplay(maskCurrencyInputChange(e.target.value))}
-                placeholder="R$ 0,00"
-              />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="valor">
+                  Valor{form.tipo === "servico" ? " (opcional)" : ""}
+                </Label>
+                <Input
+                  id="valor"
+                  className="rounded-[10px]"
+                  inputMode="numeric"
+                  value={valorDisplay}
+                  onChange={(e) => setValorDisplay(maskCurrencyInputChange(e.target.value))}
+                  placeholder="R$ 0,00"
+                />
+              </div>
+              {form.tipo === "produto" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="estoque">Estoque</Label>
+                  <Input
+                    id="estoque"
+                    className="rounded-[10px]"
+                    inputMode="numeric"
+                    value={String(form.qtdEstoque ?? 0)}
+                    onChange={(e) => {
+                      const n = Number(e.target.value.replace(/\D/g, ""));
+                      setForm((f) => ({ ...f, qtdEstoque: Number.isFinite(n) ? n : 0 }));
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+              ) : null}
             </div>
 
             {fieldDefs.length > 0 ? (

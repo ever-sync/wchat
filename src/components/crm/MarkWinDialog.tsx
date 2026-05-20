@@ -25,7 +25,7 @@ import {
   maskCurrencyInputChange,
   parseCurrencyInput,
 } from "@/lib/currency-input";
-import type { Product } from "@/types/domain";
+import { SALE_PAYMENT_METHOD_LABELS, type Product, type SalePaymentMethod } from "@/types/domain";
 
 function parseQuantityInput(value: string): number {
   const trimmed = value.trim();
@@ -91,7 +91,18 @@ export type MarkWinSaleLine = {
 export type MarkWinConfirm = {
   lines: MarkWinSaleLine[];
   totalValue: number;
+  paymentMethod: SalePaymentMethod;
 };
+
+const PAYMENT_METHOD_OPTIONS: SalePaymentMethod[] = [
+  "pix",
+  "dinheiro",
+  "cartao_credito",
+  "cartao_debito",
+  "boleto",
+  "fiado",
+  "outro",
+];
 
 export type MarkWinInitialLine = {
   productId: string;
@@ -142,6 +153,7 @@ export function MarkWinDialog({
   );
 
   const [lines, setLines] = useState<SaleLineState[]>(() => [createEmptyLine()]);
+  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>("pix");
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
@@ -226,6 +238,7 @@ export function MarkWinDialog({
 
   const resetForm = () => {
     setLines([createEmptyLine()]);
+    setPaymentMethod("pix");
   };
 
   const handleConfirm = () => {
@@ -255,6 +268,7 @@ export function MarkWinDialog({
         lineTotal: row.lineTotal,
       })),
       totalValue: computed.totalValue,
+      paymentMethod,
     };
 
     void Promise.resolve(onConfirm(result)).then(() => {
@@ -405,6 +419,25 @@ export function MarkWinDialog({
                 <Plus className="h-4 w-4" />
                 Adicionar produto
               </Button>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="markwin-payment-method">Forma de pagamento</Label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(value) => setPaymentMethod(value as SalePaymentMethod)}
+                >
+                  <SelectTrigger id="markwin-payment-method" className="rounded-[10px]">
+                    <SelectValue placeholder="Selecionar forma de pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_OPTIONS.map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {SALE_PAYMENT_METHOD_LABELS[method]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                 <span className="text-sm font-medium text-muted-foreground">Total da venda</span>

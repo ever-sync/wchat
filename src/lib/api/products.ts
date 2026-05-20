@@ -14,6 +14,7 @@ const PRODUCTS_STORAGE_KEY = "distribuibot-products";
 const PRODUCTS_SELECT = [
   "id",
   "codigo",
+  "tipo",
   "qtd_estoque",
   "nome",
   "preco_compra",
@@ -34,6 +35,7 @@ const PRODUCTS_SELECT = [
 type ProductRow = {
   id: string;
   codigo: string;
+  tipo: Product["tipo"] | null;
   qtd_estoque: number;
   nome: string;
   preco_compra: number;
@@ -55,6 +57,7 @@ function mapRowToProduct(row: ProductRow): Product {
   return {
     id: row.id,
     codigo: row.codigo,
+    tipo: row.tipo ?? "produto",
     qtdEstoque: row.qtd_estoque,
     nome: row.nome,
     precoCompra: row.preco_compra,
@@ -76,6 +79,7 @@ function mapRowToProduct(row: ProductRow): Product {
 function mapInputToRow(input: ProductUpsertInput): Omit<ProductRow, "id" | "created_at" | "updated_at"> {
   return {
     codigo: input.codigo,
+    tipo: input.tipo,
     qtd_estoque: input.qtdEstoque,
     nome: input.nome,
     preco_compra: input.precoCompra,

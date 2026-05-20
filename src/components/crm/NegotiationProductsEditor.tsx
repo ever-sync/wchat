@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +12,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useProducts } from "@/lib/api/products";
 import {
+  syncNegotiationTotalFromProducts,
   useAddNegotiationProduct,
   useNegotiationProducts,
   useNegotiationProductsRealtime,
   useRemoveNegotiationProduct,
   useUpdateNegotiationProduct,
 } from "@/lib/api/crm-negotiation-products";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   formatCurrencyInput,
   maskCurrencyInputChange,
@@ -146,11 +148,15 @@ const ADD_NONE = "__none__";
 export function NegotiationProductsEditor({
   negotiationId,
   readOnly = false,
+  negotiationTotalValue,
 }: {
   negotiationId: string;
   readOnly?: boolean;
+  /** Total atual da negociação; usado p/ corrigir registros antigos cujo total ficou dessincronizado. */
+  negotiationTotalValue?: number;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: items = [], isLoading } = useNegotiationProducts(negotiationId);
   useNegotiationProductsRealtime(negotiationId);
   const { data: products = [] } = useProducts({ status: "ativo" }, { enabled: !readOnly });
@@ -165,6 +171,28 @@ export function NegotiationProductsEditor({
     () => items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0),
     [items],
   );
+
+  // Conserta negociações antigas cujo total_value não reflete a soma dos produtos.
+  // Só grava quando há divergência real (evita regravar quando já está correto).
+  const reconciledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (readOnly || isLoading || negotiationTotalValue === undefined) return;
+    if (reconciledRef.current === negotiationId) return;
+    if (items.length === 0) return;
+    if (Math.abs(total - negotiationTotalValue) <= 0.009) {
+      reconciledRef.current = negotiationId;
+      return;
+    }
+    reconciledRef.current = negotiationId;
+    void syncNegotiationTotalFromProducts(negotiationId)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+        void queryClient.invalidateQueries({ queryKey: ["chat-negotiation"] });
+      })
+      .catch(() => {
+        reconciledRef.current = null;
+      });
+  }, [readOnly, isLoading, items.length, total, negotiationTotalValue, negotiationId, queryClient]);
 
   const onError = (error: unknown) => {
     toast({

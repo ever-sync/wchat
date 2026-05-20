@@ -344,9 +344,12 @@ export interface DeliveryRouteUpsertInput {
   observacoes?: string;
 }
 
+export type ProductKind = "produto" | "servico";
+
 export interface Product {
   id: string;
   codigo: string;
+  tipo: ProductKind;
   qtdEstoque: number;
   nome: string;
   precoCompra: number;
@@ -376,6 +379,7 @@ export interface ProductFilters {
 
 export interface ProductUpsertInput {
   codigo: string;
+  tipo: ProductKind;
   qtdEstoque: number;
   nome: string;
   precoCompra: number;

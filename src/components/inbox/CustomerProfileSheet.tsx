@@ -1143,6 +1143,7 @@ export function CustomerProfileSheet({
                           <NegotiationProductsEditor
                             negotiationId={documentsNegotiationId}
                             readOnly={crmActionsLocked}
+                            negotiationTotalValue={linkedNegotiation?.totalValue}
                           />
                         ) : (
                           <p className="text-sm text-[#6f7b76]">

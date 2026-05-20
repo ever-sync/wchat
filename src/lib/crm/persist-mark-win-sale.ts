@@ -2,7 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MarkWinSaleLine } from "@/components/crm/MarkWinDialog";
 import { listProducts } from "@/lib/api/products";
 import { registerSaleFlow } from "@/lib/api/sales";
-import type { SaleFlowLineInput } from "@/types/domain";
+import type { SaleFlowLineInput, SalePaymentMethod } from "@/types/domain";
 
 export function invalidateSalesQueries(
   queryClient: QueryClient,
@@ -36,6 +36,7 @@ export async function persistMarkWinSale(input: {
   customerId: string | null;
   soldBy: string;
   lines: MarkWinSaleLine[];
+  paymentMethod: SalePaymentMethod;
 }) {
   const soldBy = input.soldBy.trim();
   if (!soldBy) {
@@ -54,6 +55,6 @@ export async function persistMarkWinSale(input: {
     flowType: "venda",
     soldBy,
     saleLines: markWinLinesToSaleFlowLines(input.lines, catalogPriceByProductId),
-    salePaymentMethod: "nao_informado",
+    salePaymentMethod: input.paymentMethod,
   });
 }

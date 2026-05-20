@@ -2776,7 +2776,7 @@ export default function Inbox() {
             linkedNegotiationLoading &&
             markQuickSaleDialogOpen)
         }
-        onConfirm={async ({ lines, totalValue }) => {
+        onConfirm={async ({ lines, totalValue, paymentMethod }) => {
           const lineError = validateMarkWinLines(lines);
           if (lineError) {
             toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
@@ -2865,6 +2865,7 @@ export default function Inbox() {
                 customerId: activeChat.customerId ?? linkedNegotiation.customerId ?? null,
                 soldBy,
                 lines,
+                paymentMethod,
               });
               invalidateSalesQueries(
                 queryClient,

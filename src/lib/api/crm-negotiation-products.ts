@@ -6,6 +6,7 @@ import {
   type UseMutationOptions,
 } from "@tanstack/react-query";
 import { getCurrentTenantId } from "@/lib/api/tenant";
+import { updateCrmNegotiation } from "@/lib/api/crm-negotiations";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type { CrmNegotiationProduct } from "@/types/domain";
 
@@ -115,6 +116,16 @@ export async function removeNegotiationProduct(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Soma os produtos e grava no `total_value` da negociação. Há um trigger no banco
+ * para isso, mas mantemos o cálculo no app como garantia (e para refrescar o cache).
+ */
+export async function syncNegotiationTotalFromProducts(negotiationId: string): Promise<void> {
+  const products = await listNegotiationProducts(negotiationId);
+  const total = products.reduce((sum, p) => sum + p.quantity * p.unitPrice, 0);
+  await updateCrmNegotiation(negotiationId, { totalValue: total });
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 export function useNegotiationProducts(negotiationId: string | null | undefined) {
@@ -126,11 +137,16 @@ export function useNegotiationProducts(negotiationId: string | null | undefined)
   });
 }
 
-/** Invalida produtos + negociações (total_value muda via trigger). */
-function invalidateAfterChange(
+/** Recalcula o total da negociação no app e invalida produtos + negociações. */
+async function syncAndInvalidate(
   queryClient: ReturnType<typeof useQueryClient>,
   negotiationId: string,
 ) {
+  try {
+    await syncNegotiationTotalFromProducts(negotiationId);
+  } catch {
+    // Mantém a UI consistente mesmo se o patch do total falhar (ex.: sem permissão).
+  }
   void queryClient.invalidateQueries({ queryKey: negotiationProductsQueryKey(negotiationId) });
   void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
   void queryClient.invalidateQueries({ queryKey: ["chat-negotiation"] });
@@ -144,7 +160,7 @@ export function useAddNegotiationProduct(
     mutationFn: addNegotiationProduct,
     ...options,
     onSuccess: async (data, variables, context) => {
-      invalidateAfterChange(queryClient, variables.negotiationId);
+      await syncAndInvalidate(queryClient, variables.negotiationId);
       await options?.onSuccess?.(data, variables, context);
     },
   });
@@ -158,7 +174,7 @@ export function useUpdateNegotiationProduct(
     mutationFn: updateNegotiationProduct,
     ...options,
     onSuccess: async (data, variables, context) => {
-      invalidateAfterChange(queryClient, variables.negotiationId);
+      await syncAndInvalidate(queryClient, variables.negotiationId);
       await options?.onSuccess?.(data, variables, context);
     },
   });
@@ -172,7 +188,7 @@ export function useRemoveNegotiationProduct(
     mutationFn: ({ id }) => removeNegotiationProduct(id),
     ...options,
     onSuccess: async (data, variables, context) => {
-      invalidateAfterChange(queryClient, variables.negotiationId);
+      await syncAndInvalidate(queryClient, variables.negotiationId);
       await options?.onSuccess?.(data, variables, context);
     },
   });

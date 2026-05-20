@@ -964,7 +964,7 @@ export default function Crm() {
   );
 
   const completeWinDrag = useCallback(
-    async ({ lines, totalValue }: MarkWinConfirm) => {
+    async ({ lines, totalValue, paymentMethod }: MarkWinConfirm) => {
       const pending = pendingWinDrag;
       if (!pending) {
         return;
@@ -1007,6 +1007,7 @@ export default function Crm() {
               customerId: pending.cid,
               soldBy,
               lines,
+              paymentMethod,
             });
             invalidateSalesQueries(queryClient, pending.cid);
           }

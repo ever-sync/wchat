@@ -853,6 +853,7 @@ function CrmNegotiationDetailContent({
             <NegotiationProductsEditor
               negotiationId={negotiation.id}
               readOnly={!canManageCrm}
+              negotiationTotalValue={negotiation.totalValue}
             />
           ) : undefined
         }
@@ -1154,7 +1155,7 @@ function CrmNegotiationDetailContent({
         initialValue={negotiation.totalValue}
         initialLines={markWinInitialLines}
         pending={updateNegotiation.isPending || updateCustomer.isPending}
-        onConfirm={async ({ lines, totalValue }) => {
+        onConfirm={async ({ lines, totalValue, paymentMethod }) => {
           const lineError = validateMarkWinLines(lines);
           if (lineError) {
             toast({ title: "Venda incompleta", description: lineError, variant: "destructive" });
@@ -1198,6 +1199,7 @@ function CrmNegotiationDetailContent({
                   customerId: negotiation.customerId ?? null,
                   soldBy,
                   lines,
+                  paymentMethod,
                 });
                 invalidateSalesQueries(queryClient, negotiation.customerId);
               }

@@ -124,7 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const base = mapUserToProfile(user);
-        setProfile(base);
+        // Re-hidratação (token refresh / foco da janela): preserva o profile já conhecido
+        // — inclusive o `role` real (que vem da tabela profiles, não do metadata) — até o
+        // fetch do DB confirmar. Sem isso, o role piscava para o fallback "atendimento" e
+        // o PermissionRoute expulsava o admin para /inbox.
+        setProfile((prev) => (prev && prev.id === user.id ? { ...base, ...prev } : base));
         const dbProfile = await fetchProfileFromDb(user.id);
         if (!isMounted) return;
         if (dbProfile) applyDbProfile(dbProfile);
