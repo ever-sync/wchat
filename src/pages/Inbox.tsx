@@ -40,7 +40,12 @@ import { MessageThread } from "@/components/inbox/MessageThread";
 import { dialogCloseInset } from "@/lib/dialog-close-inset";
 import { extensionForRecordedMime, pickAudioRecorderMime } from "@/lib/inboxAudioRecording";
 import { maybeCompressImage } from "@/lib/inboxImageCompression";
-import { groupMessagesByDay } from "@/lib/inboxMessageGroups";
+import { groupThreadItemsByDay, type ThreadEntry } from "@/lib/inboxMessageGroups";
+import {
+  useChatNotes,
+  useChatNotesRealtime,
+  useCreateChatNote,
+} from "@/lib/api/chat-notes";
 import { useProducts } from "@/lib/api/products";
 import { useCustomerCreditSummary, useCustomerSales, useRegisterSaleFlow, useReturns } from "@/lib/api/sales";
 import {
@@ -80,6 +85,7 @@ import {
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
 import { useChatNegotiation, useSetChatResolution } from "@/lib/api/crm-lead";
+import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { hasSaleAttendant, validateMarkWinLines } from "@/lib/crm/sale-rules";
 import { invalidateSalesQueries, persistMarkWinSale } from "@/lib/crm/persist-mark-win-sale";
@@ -283,6 +289,7 @@ export default function Inbox() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationSec, setRecordingDurationSec] = useState(0);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
+  const [noteMode, setNoteMode] = useState(false);
   const [selectedAttachmentName, setSelectedAttachmentName] = useState<string | null>(null);
   const [attachmentMimeType, setAttachmentMimeType] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -422,6 +429,14 @@ export default function Inbox() {
     profile?.role === "admin" || profile?.role === "operacao" || profile?.role === "financeiro";
   const { data: linkedNegotiation, isLoading: linkedNegotiationLoading } = useChatNegotiation(
     activeChat?.id ?? null,
+  );
+  const { data: linkedNegotiationProducts = [] } = useNegotiationProducts(linkedNegotiation?.id);
+  const markWinInitialLines = useMemo(
+    () =>
+      linkedNegotiationProducts
+        .filter((p) => p.productId)
+        .map((p) => ({ productId: p.productId as string, quantity: p.quantity, unitValue: p.unitPrice })),
+    [linkedNegotiationProducts],
   );
   const showClaimNegotiation =
     Boolean(activeChat?.primaryNegotiationId) &&
@@ -637,6 +652,7 @@ export default function Inbox() {
 
   useEffect(() => {
     setShowEmojiPicker(false);
+    setNoteMode(false);
     // Trocou de chat: cancela upload em andamento (anexo nao se aplica mais).
     attachmentAbortRef.current?.abort();
     attachmentAbortRef.current = null;
@@ -681,7 +697,28 @@ export default function Inbox() {
     };
   }, [activeChat?.id]);
 
-  const messageGroups = useMemo(() => groupMessagesByDay(messages), [messages]);
+  const { data: chatNotes = [] } = useChatNotes(activeChat?.id);
+  useChatNotesRealtime(activeChat?.id);
+  const createChatNote = useCreateChatNote();
+
+  const messageGroups = useMemo(() => {
+    if (chatNotes.length === 0) {
+      return groupThreadItemsByDay(messages);
+    }
+    const items: ThreadEntry[] = [...messages, ...chatNotes];
+    items.sort((a, b) => {
+      const aTs =
+        "_noteKind" in a
+          ? Date.parse(a.createdAt)
+          : Date.parse(a.createdAt ?? a.sentAt ?? a.receivedAt ?? "");
+      const bTs =
+        "_noteKind" in b
+          ? Date.parse(b.createdAt)
+          : Date.parse(b.createdAt ?? b.sentAt ?? b.receivedAt ?? "");
+      return (Number.isFinite(aTs) ? aTs : 0) - (Number.isFinite(bTs) ? bTs : 0);
+    });
+    return groupThreadItemsByDay(items);
+  }, [messages, chatNotes]);
   const saleProductOptions = useMemo(
     () =>
       saleProducts.map((product) => ({
@@ -1894,6 +1931,25 @@ export default function Inbox() {
       return;
     }
 
+    if (noteMode) {
+      const body = bodyText.trim();
+      if (!body) return;
+      try {
+        await createChatNote.mutateAsync({ chatId: activeChat.id, bodyText: body });
+        setBodyText("");
+        clearInboxChatDraft(activeChat.id);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Tente novamente.";
+        toast({ title: "Falha ao salvar nota", description: msg, variant: "destructive" });
+        useAppStore.getState().addNotification({
+          tipo: "erro",
+          titulo: "Falha ao salvar nota",
+          descricao: msg,
+        });
+      }
+      return;
+    }
+
     const hasBody = Boolean(bodyText.trim());
     const hasMedia = Boolean(mediaUrl.trim());
 
@@ -2507,17 +2563,24 @@ export default function Inbox() {
               setBodyText(value);
             }}
             onSend={handleSendMessage}
-            sendPending={sendMessage.isPending}
+            sendPending={sendMessage.isPending || createChatNote.isPending}
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
               !canEditInbox ||
               inboxLeadLocked ||
-              (messageType === "text"
+              (noteMode
+                ? !bodyText.trim() || createChatNote.isPending
+                : messageType === "text"
                 ? !bodyText.trim()
                 : !bodyText.trim() && !mediaUrl.trim())
             }
             composerActionsDisabled={inboxLeadLocked || !canEditInbox}
+            noteMode={noteMode}
+            onNoteModeChange={(value) => {
+              setNoteMode(value);
+              setTimeout(() => bodyTextareaRef.current?.focus(), 50);
+            }}
             showEmojiPicker={showEmojiPicker}
             onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
             onAppendEmoji={appendEmoji}
@@ -2705,6 +2768,7 @@ export default function Inbox() {
           setMarkQuickSaleDialogOpen(open);
         }}
         initialValue={linkedNegotiation?.totalValue ?? 0}
+        initialLines={markWinInitialLines}
         pending={
           updateCrmNegotiationMutation.isPending ||
           setChatResolutionMutation.isPending ||

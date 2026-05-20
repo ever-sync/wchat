@@ -12,6 +12,7 @@ import {
 } from "../_shared/api-http.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
 import { ensureChat, insertOrDedupeOutboundMessage, normalizeUazapiMessageId } from "../_shared/domain.ts";
+import { buildIlikeOrFilter } from "../_shared/postgrest-filter.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
@@ -228,8 +229,8 @@ async function handleListCustomers(auth: ApiKeyAuth, request: Request) {
     .limit(limit);
 
   if (q) {
-    const safe = q.replace(/[%_,]/g, " ");
-    query = query.or(`nome.ilike.%${safe}%,telefone.ilike.%${safe}%,email.ilike.%${safe}%`);
+    const orFilter = buildIlikeOrFilter(q, ["nome", "telefone", "email"]);
+    if (orFilter) query = query.or(orFilter);
   }
 
   const { data, error } = await query;

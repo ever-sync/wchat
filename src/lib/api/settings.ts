@@ -9,7 +9,7 @@ import { invokeAuthedFunction } from "@/lib/api/functions";
 import { getAppUrl, isLocalhostAppUrl } from "@/lib/app-url";
 import { getCurrentTenantId, getCurrentUserId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
-import type { CollaboratorInvite, ProfileSettings, UserRole } from "@/types/domain";
+import type { CollaboratorInvite, ProfileSettings, UserAvailability, UserRole } from "@/types/domain";
 
 type ProfileRow = {
   id: string;
@@ -134,6 +134,15 @@ export async function updateMyProfile(input: UpdateProfileInput) {
   }
 
   return mapProfile(data as ProfileRow);
+}
+
+export async function setMyAvailability(status: UserAvailability): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure o Supabase antes de alterar status.");
+  }
+  const supabase = requireSupabase();
+  const { error } = await supabase.rpc("set_my_availability", { p_status: status });
+  if (error) throw new Error(error.message);
 }
 
 export async function listTenantCollaborators() {
@@ -275,6 +284,22 @@ export function useUpdateMyProfile(
     mutationFn: updateMyProfile,
     ...options,
     onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["settings-profile"] });
+      await queryClient.invalidateQueries({ queryKey: ["tenant-collaborators"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useSetMyAvailability(
+  options?: UseMutationOptions<void, Error, UserAvailability>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setMyAvailability,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      // useAuth tem realtime na linha do profile; ainda assim invalidamos caches dependentes.
       await queryClient.invalidateQueries({ queryKey: ["settings-profile"] });
       await queryClient.invalidateQueries({ queryKey: ["tenant-collaborators"] });
       await options?.onSuccess?.(data, variables, context);

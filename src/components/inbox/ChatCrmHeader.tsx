@@ -41,6 +41,18 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   const linkNegotiation = useLinkChatNegotiation();
   const [dealChoiceOpen, setDealChoiceOpen] = useState(false);
 
+  const notifyLeadError = (error: unknown) => {
+    toast({
+      title: "Erro ao criar lead no CRM",
+      description: error instanceof Error ? error.message : "Tente novamente.",
+      variant: "destructive",
+    });
+  };
+
+  const notifyLeadSuccess = (message: string) => {
+    toast({ title: "Lead no CRM", description: message });
+  };
+
   const funnel = funnels.find((f) => f.id === negotiation?.funnelId) ?? funnels[0];
   const stageTitle = negotiation
     ? funnelStageTitleIn(funnels, negotiation.funnelId, negotiation.stageId)
@@ -74,7 +86,10 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
       setDealChoiceOpen(true);
       return;
     }
-    void ensureLead.mutateAsync({ chatId: chat.id });
+    ensureLead
+      .mutateAsync({ chatId: chat.id })
+      .then(() => notifyLeadSuccess("Lead criado e vinculado ao CRM."))
+      .catch(notifyLeadError);
   };
 
   return (
@@ -148,9 +163,13 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
               });
               return;
             }
-            void linkNegotiation
+            linkNegotiation
               .mutateAsync({ chatId: chat.id, negotiationId })
-              .then(() => setDealChoiceOpen(false));
+              .then(() => {
+                setDealChoiceOpen(false);
+                notifyLeadSuccess("Negociação existente vinculada à conversa.");
+              })
+              .catch(notifyLeadError);
           }}
           onCreateNew={() => {
             if (!canEditCrm) {
@@ -169,9 +188,13 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
               });
               return;
             }
-            void ensureLead
+            ensureLead
               .mutateAsync({ chatId: chat.id, forceNew: true })
-              .then(() => setDealChoiceOpen(false));
+              .then(() => {
+                setDealChoiceOpen(false);
+                notifyLeadSuccess("Nova negociação criada no CRM.");
+              })
+              .catch(notifyLeadError);
           }}
         />
       ) : null}

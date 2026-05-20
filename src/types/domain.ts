@@ -7,9 +7,11 @@ export interface AppUserProfile {
   role?: UserRole;
   status?: "active" | "inactive";
   avatar?: string;
+  availability?: UserAvailability;
 }
 
 export type UserRole = "admin" | "operacao" | "financeiro" | "atendimento";
+export type UserAvailability = "available" | "busy" | "offline";
 
 export interface ProfileSettings {
   id: string;
@@ -387,6 +389,21 @@ export interface ProductUpsertInput {
   pesoLiquido: number;
   comissao: number;
   status: ProductStatus;
+}
+
+/** Produto vinculado ao lead/negociação (pré-venda). */
+export interface CrmNegotiationProduct {
+  id: string;
+  tenantId: string;
+  negotiationId: string;
+  productId: string | null;
+  productName: string;
+  quantity: number;
+  listPrice: number;
+  unitPrice: number;
+  usedCustomPrice: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ReturnResolution = "troca" | "credito";

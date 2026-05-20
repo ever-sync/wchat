@@ -1,20 +1,63 @@
 import {
   BarChart3,
   Briefcase,
+  Check,
   LogOut,
   Megaphone,
   MessageCircle,
   Package,
   Settings2,
+  UserCog,
   Users2,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
+import { useToast } from "@/hooks/use-toast";
+import { useSetMyAvailability } from "@/lib/api/settings";
 import { cn } from "@/lib/utils";
+import type { UserAvailability } from "@/types/domain";
+
+const AVAILABILITY_OPTIONS: Array<{
+  value: UserAvailability;
+  label: string;
+  dotClass: string;
+  description: string;
+}> = [
+  {
+    value: "available",
+    label: "Disponível",
+    dotClass: "bg-emerald-500",
+    description: "Recebe novas conversas pela fila",
+  },
+  {
+    value: "busy",
+    label: "Ocupado",
+    dotClass: "bg-amber-500",
+    description: "Não recebe auto-atribuição",
+  },
+  {
+    value: "offline",
+    label: "Offline",
+    dotClass: "bg-zinc-400",
+    description: "Fora da fila automática",
+  },
+];
+
+function availabilityMeta(value: UserAvailability | undefined) {
+  return AVAILABILITY_OPTIONS.find((opt) => opt.value === value) ?? AVAILABILITY_OPTIONS[0];
+}
 
 type MenuItem = {
   title: string;
@@ -89,6 +132,19 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
   const { can, isLoading: permissionsLoading } = useRolePermissions();
+  const { toast } = useToast();
+  const setAvailability = useSetMyAvailability({
+    onError: (error) => {
+      toast({
+        title: "Não foi possível mudar o status",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const currentAvailability = availabilityMeta(profile?.availability);
+  const showAvailabilityToggle = profile?.role === "atendimento";
 
   const isSettingsActive = pathname === "/configuracoes" || pathname.startsWith("/configuracoes/");
   const initials =
@@ -115,26 +171,77 @@ export function AppSidebar() {
       <div className="min-h-0 flex-1" aria-hidden />
 
       <div className="flex flex-col items-center gap-2 px-2 pb-1">
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => navigate("/configuracoes?aba=perfil")}
-              className="flex h-12 w-12 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-primary"
-              aria-label="Minha conta"
+        <DropdownMenu>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="relative flex h-12 w-12 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-primary"
+                  aria-label="Minha conta"
+                >
+                  <Avatar className="h-9 w-9 border border-border">
+                    {profile?.avatar ? <AvatarImage src={profile.avatar} alt="" /> : null}
+                    <AvatarFallback className="bg-primary text-[11px] font-semibold text-primary-foreground">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  {showAvailabilityToggle ? (
+                    <span
+                      className={cn(
+                        "absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-card",
+                        currentAvailability.dotClass,
+                      )}
+                      aria-label={`Status: ${currentAvailability.label}`}
+                    />
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent
+              side="right"
+              className="border-border bg-primary text-primary-foreground"
             >
-              <Avatar className="h-9 w-9 border border-border">
-                {profile?.avatar ? <AvatarImage src={profile.avatar} alt="" /> : null}
-                <AvatarFallback className="bg-primary text-[11px] font-semibold text-primary-foreground">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="border-border bg-primary text-primary-foreground">
-            {profile?.nome ?? "Conta"}
-          </TooltipContent>
-        </Tooltip>
+              {profile?.nome ?? "Conta"}
+              {showAvailabilityToggle ? ` · ${currentAvailability.label}` : ""}
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side="right" align="end" className="w-60">
+            {showAvailabilityToggle ? (
+              <>
+                <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                  Meu status
+                </DropdownMenuLabel>
+                {AVAILABILITY_OPTIONS.map((opt) => {
+                  const active = currentAvailability.value === opt.value;
+                  return (
+                    <DropdownMenuItem
+                      key={opt.value}
+                      disabled={setAvailability.isPending}
+                      onSelect={() => {
+                        if (active) return;
+                        void setAvailability.mutateAsync(opt.value);
+                      }}
+                      className="flex items-start gap-2"
+                    >
+                      <span className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", opt.dotClass)} />
+                      <span className="flex-1">
+                        <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                        <span className="block text-[11px] text-muted-foreground">{opt.description}</span>
+                      </span>
+                      {active ? <Check className="mt-1 h-4 w-4 text-primary" /> : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuItem onSelect={() => navigate("/configuracoes?aba=perfil")}>
+              <UserCog className="mr-2 h-4 w-4" />
+              Minha conta
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {can("configuracoes", "view") ? (
           <SidebarTooltip label="Configuracoes">

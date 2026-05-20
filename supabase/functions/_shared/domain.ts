@@ -1745,7 +1745,7 @@ export async function ensureLeadFromChat(admin: AdminClient, chatId: string) {
   }
 }
 
-async function hmacSign(secret: string, body: string): Promise<string> {
+async function hmacSign(secret: string, payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -1753,7 +1753,7 @@ async function hmacSign(secret: string, body: string): Promise<string> {
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -1868,7 +1868,9 @@ export async function notifyN8nInbound(
       "Content-Type": "application/json",
     };
     if (integration.n8n_secret) {
-      headers["X-WChat-Signature"] = await hmacSign(integration.n8n_secret, body);
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      headers["X-WChat-Timestamp"] = timestamp;
+      headers["X-WChat-Signature"] = `sha256=${await hmacSign(integration.n8n_secret, `${timestamp}.${body}`)}`;
     }
 
     const res = await fetch(integration.n8n_webhook_url, {

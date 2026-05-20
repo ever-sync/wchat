@@ -16,7 +16,7 @@ export function buildN8nReplyOpenApi(serverUrl: string): OpenAPIV3.Document {
         "",
         "### Autenticação (uma das opções)",
         "- `Authorization: Bearer <N8N_SERVICE_KEY>` (variável de ambiente no Supabase), ou",
-        "- Header `X-WChat-Signature: sha256=<hmac>` do body com o segredo HMAC do tenant.",
+        "- `X-WChat-Timestamp: <unix-seconds>` + `X-WChat-Signature: sha256=<hmac>`, onde o HMAC-SHA256 cobre `${timestamp}.${body}` (hex). Timestamp precisa estar dentro de ±5 minutos do horário do servidor para evitar replay.",
         "",
         "### Regras de negócio",
         "Respostas de texto só são enviadas se a IA estiver permitida (modo do chat, sem atendente humano, sem opt-out, etc.). Caso contrário: **409** com `block_reason`.",
@@ -37,7 +37,13 @@ export function buildN8nReplyOpenApi(serverUrl: string): OpenAPIV3.Document {
           type: "apiKey",
           in: "header",
           name: "X-WChat-Signature",
-          description: "HMAC-SHA256 do body (hex), prefixo sha256= opcional. Segredo em Configurações → IA no n8n.",
+          description: "HMAC-SHA256 (hex) sobre `${timestamp}.${body}`, com prefixo `sha256=`. Requer também `X-WChat-Timestamp`. Segredo em Configurações → IA no n8n.",
+        },
+        hmacTimestamp: {
+          type: "apiKey",
+          in: "header",
+          name: "X-WChat-Timestamp",
+          description: "Unix epoch em segundos do momento da requisição. Janela aceita ±5 min para prevenir replay.",
         },
       },
       schemas: {
@@ -113,7 +119,7 @@ export function buildN8nReplyOpenApi(serverUrl: string): OpenAPIV3.Document {
           summary: "Responder / automação no chat",
           description:
             "Único endpoint da function. Integração n8n deve estar **ativada** no tenant.",
-          security: [{ serviceKey: [] }, { hmacSignature: [] }],
+          security: [{ serviceKey: [] }, { hmacSignature: [], hmacTimestamp: [] }],
           requestBody: {
             required: true,
             content: {
@@ -202,7 +208,7 @@ export function buildN8nInboundWebhookOpenApi(webhookUrl: string): OpenAPIV3.Doc
         "Documentação de referência do payload que o **wChat envia para a URL do seu n8n**.",
         "Não é hospedado pelo wChat — configure a URL em **Configurações → IA no n8n**.",
         "",
-        "Assinatura opcional: header `X-WChat-Signature` (HMAC-SHA256 do body).",
+        "Assinatura: headers `X-WChat-Timestamp` (unix seconds) + `X-WChat-Signature: sha256=<hmac>` (HMAC-SHA256 sobre `${timestamp}.${body}`). Janela de validade ±5 min — descarte requisições antigas para evitar replay.",
       ].join("\n"),
     },
     servers: [{ url: webhookUrl || "https://seu-n8n.exemplo.com/webhook", description: "Seu webhook n8n" }],

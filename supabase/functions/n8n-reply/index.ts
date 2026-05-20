@@ -10,7 +10,31 @@ import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
-async function verifySignature(secret: string, body: string, signature: string | null): Promise<boolean> {
+const MAX_TIMESTAMP_SKEW_SECONDS = 300;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function parseTimestampSeconds(raw: string | null): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!/^\d{10,13}$/.test(trimmed)) return null;
+  const num = Number(trimmed);
+  return trimmed.length === 13 ? Math.floor(num / 1000) : num;
+}
+
+async function verifySignedRequest(
+  secret: string,
+  timestamp: string,
+  body: string,
+  signature: string | null,
+): Promise<boolean> {
   if (!signature) return false;
   const key = await crypto.subtle.importKey(
     "raw",
@@ -19,9 +43,9 @@ async function verifySignature(secret: string, body: string, signature: string |
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${body}`));
   const expected = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return expected === signature.replace(/^sha256=/, "").toLowerCase();
+  return timingSafeEqual(expected, signature.replace(/^sha256=/, "").toLowerCase());
 }
 
 Deno.serve(async (request) => {
@@ -57,10 +81,27 @@ Deno.serve(async (request) => {
   const serviceKey = Deno.env.get("N8N_SERVICE_KEY");
   const authHeader = request.headers.get("Authorization");
   const signature = request.headers.get("X-WChat-Signature");
+  const timestampHeader = request.headers.get("X-WChat-Timestamp");
 
-  const authorizedByKey = serviceKey && authHeader === `Bearer ${serviceKey}`;
-  const authorizedByHmac = integration?.n8n_secret &&
-    await verifySignature(integration.n8n_secret, rawBody, signature);
+  const authorizedByKey = Boolean(serviceKey) && authHeader === `Bearer ${serviceKey}`;
+
+  let authorizedByHmac = false;
+  if (!authorizedByKey && integration?.n8n_secret && signature) {
+    const tsSeconds = parseTimestampSeconds(timestampHeader);
+    if (tsSeconds === null) {
+      return jsonResponse({ error: "Missing or invalid X-WChat-Timestamp." }, 401);
+    }
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSeconds - tsSeconds) > MAX_TIMESTAMP_SKEW_SECONDS) {
+      return jsonResponse({ error: "Timestamp outside acceptable window." }, 401);
+    }
+    authorizedByHmac = await verifySignedRequest(
+      integration.n8n_secret,
+      timestampHeader!.trim(),
+      rawBody,
+      signature,
+    );
+  }
 
   if (!authorizedByKey && !authorizedByHmac) {
     return jsonResponse({ error: "Unauthorized." }, 401);

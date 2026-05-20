@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
+import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
 import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
@@ -58,7 +59,6 @@ import { CHAT_RESOLUTION_LABELS } from "@/lib/inbox-chat-rules";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
-import { buildInboxConversationSummary } from "@/lib/inboxConversationSummary";
 import {
   type ChatResolution,
   type CrmNegotiationRecord,
@@ -503,7 +503,6 @@ function CustomerQuickFacts({
   customer,
   chat,
   messageCount,
-  conversationSummary,
   linkedNegotiationAssigneeLabel,
   canEditIdentity,
   showIdentityEditButton,
@@ -512,7 +511,6 @@ function CustomerQuickFacts({
   customer: Customer;
   chat: InboxChat | null;
   messageCount: number;
-  conversationSummary: ReturnType<typeof buildInboxConversationSummary>;
   linkedNegotiationAssigneeLabel?: string | null;
   canEditIdentity: boolean;
   showIdentityEditButton: boolean;
@@ -522,49 +520,6 @@ function CustomerQuickFacts({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-[#e1e8dc] bg-[#fdfefc] p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
-          Resumo rápido da conversa
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-[#334047]">{conversationSummary.headline}</p>
-        <p className="mt-1 text-xs leading-relaxed text-[#6f7b76]">{conversationSummary.supportingText}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {conversationSummary.facts.map((fact) => (
-            <div
-              key={fact.label}
-              className="rounded-xl border border-[#e8eee8] bg-white px-3 py-2"
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
-                {fact.label}
-              </p>
-              <p className="mt-1 break-words text-sm font-medium text-[#334047]">{fact.value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 grid gap-2">
-          {conversationSummary.lastCustomerMessage ? (
-            <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-900/70">
-                Última mensagem do cliente
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-violet-950">
-                {conversationSummary.lastCustomerMessage}
-              </p>
-            </div>
-          ) : null}
-          {conversationSummary.lastTeamMessage ? (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-900/70">
-                Última mensagem da equipe
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-emerald-950">
-                {conversationSummary.lastTeamMessage}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
       <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Identificação</p>
         <div className="mt-3 grid gap-2">
@@ -686,51 +641,11 @@ function ProfileNegotiationsPanel({
 
 function ChatOnlyConversationSummary({
   chat,
-  summary,
 }: {
   chat: InboxChat;
-  summary: ReturnType<typeof buildInboxConversationSummary>;
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-[#e1e8dc] bg-[#fdfefc] p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
-          Resumo rápido da conversa
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-[#334047]">{summary.headline}</p>
-        <p className="mt-1 text-xs leading-relaxed text-[#6f7b76]">{summary.supportingText}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {summary.facts.map((fact) => (
-            <div key={fact.label} className="rounded-xl border border-[#e8eee8] bg-white px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
-                {fact.label}
-              </p>
-              <p className="mt-1 break-words text-sm font-medium text-[#334047]">{fact.value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 grid gap-2">
-          {summary.lastCustomerMessage ? (
-            <div className="rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-900/70">
-                Última mensagem do cliente
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-violet-950">
-                {summary.lastCustomerMessage}
-              </p>
-            </div>
-          ) : null}
-          {summary.lastTeamMessage ? (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-900/70">
-                Última mensagem da equipe
-              </p>
-              <p className="mt-1 text-sm leading-relaxed text-emerald-950">{summary.lastTeamMessage}</p>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
       <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Conversa</p>
         <div className="mt-3 space-y-2">
@@ -877,19 +792,9 @@ export function CustomerProfileSheet({
   const showCrmTab = Boolean(customer && isSupabaseConfigured);
   const showCamposTab = Boolean(customer && isSupabaseConfigured);
   const showArquivosTab = Boolean(isSupabaseConfigured && canViewCrm);
+  const showProdutosTab = Boolean(isSupabaseConfigured && canViewCrm && (customer || chat));
   const canEditCustomerIdentityInInbox = canEditClientes || canEditInbox;
   const showCustomerIdentityEditButton = Boolean(customer) && canEditCustomerIdentityInInbox;
-  const summaryChat = chat ?? {
-    id: "chat-summary-placeholder",
-    instanceId: "",
-    instanceName: "",
-    displayName: "",
-    remoteJid: "",
-    unreadCount: 0,
-    status: "open",
-    resolution: "open",
-    aiMode: "off",
-  };
   const customerIdentityEditBlockedMessage = useMemo(() => {
     if (!canEditCustomerIdentityInInbox) {
       return "Seu papel não tem permissão para editar contatos no Inbox.";
@@ -900,10 +805,6 @@ export function CustomerProfileSheet({
     return null;
   }, [canEditCustomerIdentityInInbox, chat, canActOnChat]);
   const canEditCustomerIdentity = showCustomerIdentityEditButton && !customerIdentityEditBlockedMessage;
-  const conversationSummary = useMemo(() => buildInboxConversationSummary(summaryChat, messages), [
-    messages,
-    summaryChat,
-  ]);
 
   useEffect(() => {
     setProfileTab("resumo");
@@ -916,8 +817,10 @@ export function CustomerProfileSheet({
       setProfileTab("resumo");
     } else if (profileTab === "arquivos" && !showArquivosTab) {
       setProfileTab("resumo");
+    } else if (profileTab === "produtos" && !showProdutosTab) {
+      setProfileTab("resumo");
     }
-  }, [profileTab, showArquivosTab, showCamposTab, showCrmTab]);
+  }, [profileTab, showArquivosTab, showCamposTab, showCrmTab, showProdutosTab]);
 
   return (
     <>
@@ -1158,6 +1061,11 @@ export function CustomerProfileSheet({
                   <TabsTrigger value="etiquetas" className={PROFILE_TAB_TRIGGER_CLASS}>
                     Etiquetas
                   </TabsTrigger>
+                  {showProdutosTab ? (
+                    <TabsTrigger value="produtos" className={PROFILE_TAB_TRIGGER_CLASS}>
+                      Produtos
+                    </TabsTrigger>
+                  ) : null}
                   {showArquivosTab ? (
                     <TabsTrigger value="arquivos" className={PROFILE_TAB_TRIGGER_CLASS}>
                       Arquivos
@@ -1171,14 +1079,13 @@ export function CustomerProfileSheet({
                       customer={customer}
                       chat={chat}
                       messageCount={totalMessages}
-                      conversationSummary={conversationSummary}
                       linkedNegotiationAssigneeLabel={linkedNegotiationAssigneeLabel}
                       canEditIdentity={canEditCustomerIdentity}
                       showIdentityEditButton={showCustomerIdentityEditButton}
                       identityEditBlockedMessage={customerIdentityEditBlockedMessage}
                     />
                   ) : (
-                    <ChatOnlyConversationSummary chat={chat} summary={conversationSummary} />
+                    <ChatOnlyConversationSummary chat={chat} />
                   )}
                 </TabsContent>
 
@@ -1224,6 +1131,28 @@ export function CustomerProfileSheet({
                     <p className="text-sm text-[#6f7b76]">Etiquetas disponíveis com Supabase configurado.</p>
                   )}
                 </TabsContent>
+
+                {showProdutosTab ? (
+                  <TabsContent value="produtos" className="mt-0 focus-visible:outline-none">
+                    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
+                        Produtos
+                      </p>
+                      <div className="mt-3">
+                        {documentsNegotiationId ? (
+                          <NegotiationProductsEditor
+                            negotiationId={documentsNegotiationId}
+                            readOnly={crmActionsLocked}
+                          />
+                        ) : (
+                          <p className="text-sm text-[#6f7b76]">
+                            Crie ou vincule uma negociação a esta conversa para adicionar produtos ao lead.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+                ) : null}
 
                 {showArquivosTab ? (
                   <TabsContent value="arquivos" className="mt-0 focus-visible:outline-none">

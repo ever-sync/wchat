@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
-import { ClienteRdPerfilProductsTab } from "@/components/cliente/ClienteRdPerfilProductsTab";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
+import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
+import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
 import { Button } from "@/components/ui/button";
@@ -373,6 +374,17 @@ function CrmNegotiationDetailContent({
   const [lostDialogBlockCustomer, setLostDialogBlockCustomer] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
   const taskAssigneeDefaultSeededRef = useRef(false);
+
+  const { data: negotiationProductsForSale = [] } = useNegotiationProducts(
+    isPersistedCrmNegotiationId(negotiation.id) ? negotiation.id : null,
+  );
+  const markWinInitialLines = useMemo(
+    () =>
+      negotiationProductsForSale
+        .filter((p) => p.productId)
+        .map((p) => ({ productId: p.productId as string, quantity: p.quantity, unitValue: p.unitPrice })),
+    [negotiationProductsForSale],
+  );
 
   useEffect(() => {
     setPipelineActiveIndex(pipelineIndexForNegotiation(negotiation));
@@ -837,12 +849,10 @@ function CrmNegotiationDetailContent({
           ) : undefined
         }
         negotiationProductsSlot={
-          isPersistedRow && isSupabaseConfigured ? (
-            <ClienteRdPerfilProductsTab
-              customerId={negotiation.customerId}
-              sourceChatId={sourceChatId}
-              negotiationTotalValue={negotiation.totalValue}
-              negotiationStatus={negotiation.status}
+          isPersistedRow && isSupabaseConfigured && isPersistedCrmNegotiationId(negotiation.id) ? (
+            <NegotiationProductsEditor
+              negotiationId={negotiation.id}
+              readOnly={!canManageCrm}
             />
           ) : undefined
         }
@@ -1142,6 +1152,7 @@ function CrmNegotiationDetailContent({
         open={winDialogOpen}
         onOpenChange={setWinDialogOpen}
         initialValue={negotiation.totalValue}
+        initialLines={markWinInitialLines}
         pending={updateNegotiation.isPending || updateCustomer.isPending}
         onConfirm={async ({ lines, totalValue }) => {
           const lineError = validateMarkWinLines(lines);

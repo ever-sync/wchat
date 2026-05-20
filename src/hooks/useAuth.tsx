@@ -14,19 +14,29 @@ import type { AppUserProfile, AuthCredentials, SignUpPayload, UserRole } from "@
 
 async function fetchProfileFromDb(userId: string): Promise<Partial<AppUserProfile> | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("nome, email, empresa, plano, role, status")
-    .eq("id", userId)
-    .maybeSingle();
+  const sb = supabase;
+
+  const runSelect = (columns: string) =>
+    sb.from("profiles").select(columns).eq("id", userId).maybeSingle();
+
+  // `availability` pode não existir se a migration ainda não foi aplicada.
+  // Sem o fallback, uma coluna ausente derruba toda a query e o `role` não carrega.
+  let { data, error } = await runSelect("nome, email, empresa, plano, role, status, availability");
+  if (error) {
+    ({ data, error } = await runSelect("nome, email, empresa, plano, role, status"));
+  }
   if (error || !data) return null;
+
+  const row = data as unknown as Record<string, unknown>;
   const out: Partial<AppUserProfile> = {};
-  if (data.nome) out.nome = data.nome;
-  if (data.email) out.email = data.email;
-  if (data.empresa) out.empresa = data.empresa;
-  if (data.plano) out.plano = data.plano as AppUserProfile["plano"];
-  if (data.role) out.role = data.role as UserRole;
-  if (data.status) out.status = data.status as AppUserProfile["status"];
+  if (typeof row.nome === "string" && row.nome) out.nome = row.nome;
+  if (typeof row.email === "string" && row.email) out.email = row.email;
+  if (typeof row.empresa === "string" && row.empresa) out.empresa = row.empresa;
+  if (typeof row.plano === "string" && row.plano) out.plano = row.plano as AppUserProfile["plano"];
+  if (typeof row.role === "string" && row.role) out.role = row.role as UserRole;
+  if (typeof row.status === "string" && row.status) out.status = row.status as AppUserProfile["status"];
+  if (typeof row.availability === "string" && row.availability)
+    out.availability = row.availability as AppUserProfile["availability"];
   return out;
 }
 
@@ -133,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (typeof next.plano === "string" && next.plano) update.plano = next.plano as AppUserProfile["plano"];
               if (typeof next.role === "string" && next.role) update.role = next.role as UserRole;
               if (typeof next.status === "string" && next.status) update.status = next.status as AppUserProfile["status"];
+              if (typeof next.availability === "string" && next.availability)
+                update.availability = next.availability as AppUserProfile["availability"];
               applyDbProfile(update);
             },
           )

@@ -10,15 +10,13 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { CrmFunnel } from "@/data/crm-funnels";
+import { toCustomerUpsertInput, useUpdateCustomer } from "@/lib/api/customers";
 import {
-  toCustomerUpsertInput,
-  useUpdateCustomer,
-  type Customer,
-} from "@/lib/api/customers";
-import {
+  useCreateCrmNegotiation,
   useCrmNegotiationsForCustomer,
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
+import type { Customer } from "@/types/domain";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 
@@ -38,7 +36,9 @@ export function CustomerCrmPipelineForm({
   const { toast } = useToast();
   const updateCustomer = useUpdateCustomer();
   const updateNegotiation = useUpdateCrmNegotiation();
-  const { data: linkedNegotiations = [] } = useCrmNegotiationsForCustomer(customer.id);
+  const createNegotiation = useCreateCrmNegotiation();
+  const { data: linkedNegotiations = [], isLoading: negotiationsLoading } =
+    useCrmNegotiationsForCustomer(customer.id);
 
   const storedFunnel = customer.sourceColumns?.[CRM_FUNNEL_ID_KEY]?.trim() ?? "";
   const storedStage = customer.sourceColumns?.[CRM_PIPELINE_STAGE_KEY]?.trim() ?? "";
@@ -60,9 +60,19 @@ export function CustomerCrmPipelineForm({
     draftCurrentFunnel && draftStage && draftCurrentFunnel.stages.some((s) => s.id === draftStage),
   );
 
-  const isSaving = updateCustomer.isPending || updateNegotiation.isPending;
+  const isSaving =
+    updateCustomer.isPending || updateNegotiation.isPending || createNegotiation.isPending;
+  // Sem negociação ativa, salvar deve poder criar uma mesmo que funil/etapa não tenham mudado
+  // (ex.: cadastro com sourceColumns gravado por uma versão anterior, sem negociação no CRM).
+  const noOpenNegotiation =
+    !negotiationsLoading && linkedNegotiations.every((n) => n.status !== "em_andamento");
   const hasChanges = draftFunnel !== storedFunnel || draftStage !== storedStage;
-  const canSave = !readOnly && !isSaving && hasChanges && draftFunnelOk && draftStageOk;
+  const canSave =
+    !readOnly &&
+    !isSaving &&
+    (hasChanges || noOpenNegotiation) &&
+    draftFunnelOk &&
+    draftStageOk;
 
   const persist = async (funnelId: string, stageId: string) => {
     if (readOnly) {
@@ -86,10 +96,25 @@ export function CustomerCrmPipelineForm({
         },
       });
 
-      const targets = linkedNegotiations.filter(
-        (n) =>
-          n.status === "em_andamento" &&
-          (n.funnelId !== funnelId || n.stageId !== stageId),
+      const openNegotiations = linkedNegotiations.filter((n) => n.status === "em_andamento");
+
+      if (openNegotiations.length === 0) {
+        // Sem negociação ativa: cria uma para refletir no Kanban e habilitar Arquivos.
+        await createNegotiation.mutateAsync({
+          title: customer.nome?.trim() || "Nova negociação",
+          funnelId,
+          stageId,
+          customerId: customer.id,
+        });
+        toast({
+          title: "Negociação criada",
+          description: "Lead adicionado ao CRM no funil e etapa selecionados.",
+        });
+        return;
+      }
+
+      const targets = openNegotiations.filter(
+        (n) => n.funnelId !== funnelId || n.stageId !== stageId,
       );
       if (targets.length > 0) {
         await Promise.all(

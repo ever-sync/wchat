@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,11 +93,19 @@ export type MarkWinConfirm = {
   totalValue: number;
 };
 
+export type MarkWinInitialLine = {
+  productId: string;
+  quantity: number;
+  unitValue: number;
+};
+
 type MarkWinDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialValue?: number;
   initialProductId?: string;
+  /** Pré-preenche o popup com os produtos já vinculados ao lead (só confirmar/ajustar). */
+  initialLines?: MarkWinInitialLine[];
   onConfirm: (result: MarkWinConfirm) => void | Promise<void>;
   pending?: boolean;
 };
@@ -124,6 +132,7 @@ export function MarkWinDialog({
   onOpenChange,
   initialValue = 0,
   initialProductId = "",
+  initialLines,
   onConfirm,
   pending,
 }: MarkWinDialogProps) {
@@ -149,10 +158,35 @@ export function MarkWinDialog({
     const totalValue = rows.reduce((sum, row) => sum + row.lineTotal, 0);
     const isValid = rows.length > 0 && rows.every((row) => row.valid);
     return { rows, totalValue, isValid };
-  }, [lines, products, productById]);
+  }, [lines, productById]);
+
+  const initialLinesRef = useRef(initialLines);
+  initialLinesRef.current = initialLines;
+  const initialLinesKey = useMemo(
+    () => (initialLines ?? []).map((l) => `${l.productId}:${l.quantity}:${l.unitValue}`).join("|"),
+    [initialLines],
+  );
 
   useEffect(() => {
     if (!open) {
+      return;
+    }
+
+    const presetLines = initialLinesRef.current;
+    if (presetLines && presetLines.length > 0) {
+      setLines(
+        presetLines.map((preset) => {
+          const product = productById.get(preset.productId);
+          const requiresManualValue = preset.unitValue <= 0;
+          return {
+            key: createLineKey(),
+            productId: preset.productId,
+            valueText: preset.unitValue > 0 ? formatCurrencyInput(preset.unitValue) : "",
+            requiresManualValue: requiresManualValue && !product?.precoVenda,
+            quantityStr: String(preset.quantity > 0 ? preset.quantity : 1),
+          };
+        }),
+      );
       return;
     }
 
@@ -173,7 +207,8 @@ export function MarkWinDialog({
     }
 
     setLines([createEmptyLine()]);
-  }, [open, initialProductId, initialValue, products]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialProductId, initialValue, products, initialLinesKey]);
 
   const updateLine = (index: number, patch: Partial<SaleLineState>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
