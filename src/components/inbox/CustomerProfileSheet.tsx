@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
+import { CallLogsPanel } from "@/components/crm/CallLogsPanel";
 import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
@@ -1087,6 +1088,15 @@ export function CustomerProfileSheet({
                   ) : (
                     <ChatOnlyConversationSummary chat={chat} />
                   )}
+                  {isSupabaseConfigured ? (
+                    <CallLogsPanel
+                      scope={{
+                        customerId: customer?.id ?? null,
+                        negotiationId: linkedNegotiation?.id ?? null,
+                        chatId: chat.id,
+                      }}
+                    />
+                  ) : null}
                 </TabsContent>
 
                 {showCrmTab && customer ? (

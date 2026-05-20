@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
+import { CallButton } from "@/components/crm/CallButton";
+import { CallLogsPanel } from "@/components/crm/CallLogsPanel";
 import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -855,6 +857,34 @@ function CrmNegotiationDetailContent({
               readOnly={!canManageCrm}
               negotiationTotalValue={negotiation.totalValue}
             />
+          ) : undefined
+        }
+        negotiationCallsSlot={
+          isPersistedRow && isSupabaseConfigured ? (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <CallButton
+                  phone={
+                    linkedCustomer?.phoneE164 ||
+                    linkedCustomer?.phoneDigits ||
+                    linkedCustomer?.telefone ||
+                    null
+                  }
+                  customerId={negotiation.customerId}
+                  chatId={sourceChatId ?? null}
+                  negotiationId={isPersistedCrmNegotiationId(negotiation.id) ? negotiation.id : null}
+                  disabled={!canManageCrm}
+                  variant="default"
+                />
+              </div>
+              <CallLogsPanel
+                scope={{
+                  customerId: negotiation.customerId,
+                  negotiationId: isPersistedCrmNegotiationId(negotiation.id) ? negotiation.id : null,
+                  chatId: sourceChatId ?? null,
+                }}
+              />
+            </div>
           ) : undefined
         }
         onPipelineStageChange={(idx) => {

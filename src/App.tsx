@@ -1,5 +1,6 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { ThemeProvider } from "next-themes";
+import { lazyWithReload } from "@/lib/chunk-load-recovery";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -19,18 +20,18 @@ import RedefinirSenha from "./pages/RedefinirSenha";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 
-const Inbox = lazy(() => import("./pages/Inbox"));
-const Clientes = lazy(() => import("./pages/Clientes"));
-const Configuracoes = lazy(() => import("./pages/Configuracoes"));
-const ConfiguracoesFila = lazy(() => import("./pages/ConfiguracoesFila"));
-const ApiDocs = lazy(() => import("./pages/ApiDocs"));
-const ClientePerfil = lazy(() => import("./pages/ClientePerfil"));
-const Crm = lazy(() => import("./pages/Crm"));
-const CrmNegotiationDetail = lazy(() => import("./pages/CrmNegotiationDetail"));
-const Relatorios = lazy(() => import("./pages/Relatorios"));
-const Produtos = lazy(() => import("./pages/Produtos"));
-const Marketing = lazy(() => import("./pages/Marketing"));
-const MarketingFlowEditor = lazy(() => import("./pages/MarketingFlowEditor"));
+const Inbox = lazyWithReload(() => import("./pages/Inbox"));
+const Clientes = lazyWithReload(() => import("./pages/Clientes"));
+const Configuracoes = lazyWithReload(() => import("./pages/Configuracoes"));
+const ConfiguracoesFila = lazyWithReload(() => import("./pages/ConfiguracoesFila"));
+const ApiDocs = lazyWithReload(() => import("./pages/ApiDocs"));
+const ClientePerfil = lazyWithReload(() => import("./pages/ClientePerfil"));
+const Crm = lazyWithReload(() => import("./pages/Crm"));
+const CrmNegotiationDetail = lazyWithReload(() => import("./pages/CrmNegotiationDetail"));
+const Relatorios = lazyWithReload(() => import("./pages/Relatorios"));
+const Produtos = lazyWithReload(() => import("./pages/Produtos"));
+const Marketing = lazyWithReload(() => import("./pages/Marketing"));
+const MarketingFlowEditor = lazyWithReload(() => import("./pages/MarketingFlowEditor"));
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando…

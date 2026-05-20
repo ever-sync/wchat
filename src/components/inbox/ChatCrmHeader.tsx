@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Briefcase, ExternalLink, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CallButton } from "@/components/crm/CallButton";
 import { DealChoiceDialog } from "@/components/inbox/DealChoiceDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -98,6 +99,13 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
         <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
           {aiMode === "off" ? "IA desativada" : `IA: ${aiMode}`}
         </Badge>
+        <CallButton
+          phone={chat.remotePhoneE164 || chat.remotePhoneDigits || null}
+          customerId={chat.customerId}
+          chatId={chat.id}
+          negotiationId={negotiation?.id ?? chat.primaryNegotiationId ?? null}
+          className="h-7 text-xs"
+        />
         {negotiation ? (
           <>
             <Badge variant="secondary" className="text-xs font-medium">

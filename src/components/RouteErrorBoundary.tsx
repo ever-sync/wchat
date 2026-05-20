@@ -1,6 +1,11 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  clearChunkReloadFlag,
+  isChunkLoadError,
+  reloadForChunkError,
+} from "@/lib/chunk-load-recovery";
 
 type Props = {
   children: ReactNode;
@@ -23,10 +28,39 @@ export class RouteErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[RouteErrorBoundary]", error, info.componentStack);
+    // Tab antiga + deploy novo: tenta recarregar automaticamente (uma vez/sessão).
+    if (isChunkLoadError(error)) {
+      reloadForChunkError();
+    }
   }
 
   render() {
     if (this.state.error) {
+      if (isChunkLoadError(this.state.error)) {
+        return (
+          <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 px-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
+            </div>
+            <div className="max-w-md space-y-2">
+              <h2 className="text-xl font-semibold text-foreground">Nova versão disponível</h2>
+              <p className="text-sm text-muted-foreground break-words">
+                O app foi atualizado. Recarregue a página para continuar.
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={() => {
+                clearChunkReloadFlag();
+                window.location.reload();
+              }}
+            >
+              Recarregar página
+            </Button>
+          </div>
+        );
+      }
+
       return (
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 px-4 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15">

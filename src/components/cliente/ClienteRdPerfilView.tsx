@@ -633,6 +633,8 @@ export type ClienteRdPerfilViewProps = {
   negotiationDocumentsSlot?: ReactNode;
   /** Conteúdo da aba “Produtos” (vendas vinculadas à negociação). */
   negotiationProductsSlot?: ReactNode;
+  /** Conteúdo da aba “Ligações” (histórico de chamadas do lead). */
+  negotiationCallsSlot?: ReactNode;
   /** Dados da negociação persistida (ficha CRM); habilita edição com lápis. */
   negotiationPanelSnapshot?: NegotiationPanelSnapshot;
   onSaveNegotiationPanel?: (payload: NegotiationPanelSavePayload) => Promise<void>;
@@ -685,6 +687,7 @@ export function ClienteRdPerfilView({
   releaseNegotiationPending,
   negotiationDocumentsSlot,
   negotiationProductsSlot,
+  negotiationCallsSlot,
   negotiationPanelSnapshot,
   onSaveNegotiationPanel,
   negotiationPanelSavePending,
@@ -1288,6 +1291,7 @@ export function ClienteRdPerfilView({
                   ["tarefas", "Tarefas"],
                   ["questionarios", "Questionários"],
                   ["produtos", "Produtos"],
+                  ["ligacoes", "Ligações"],
                   ["arquivos", "Arquivos"],
                   ["propostas", "Propostas"],
                 ] as const
@@ -1400,6 +1404,16 @@ export function ClienteRdPerfilView({
               style={{ boxShadow: RD_CARD_SHADOW }}
             >
               {negotiationProductsSlot ?? "Nenhum conteúdo nesta aba ainda."}
+            </TabsContent>
+            <TabsContent
+              value="ligacoes"
+              className={cn(
+                "mt-0 border border-t-0 border-[#e8eaed] bg-white",
+                negotiationCallsSlot ? "p-4 md:p-5 text-left" : "p-8 text-center text-sm text-[#78909c]",
+              )}
+              style={{ boxShadow: RD_CARD_SHADOW }}
+            >
+              {negotiationCallsSlot ?? "Nenhum conteúdo nesta aba ainda."}
             </TabsContent>
             <TabsContent
               value="tarefas"
