@@ -19,6 +19,20 @@ export type PendingFunnelMigration =
       kind: "funnel_rename";
       fromFunnelId: string;
       toFunnelId: string;
+    }
+  | {
+      // Transfere uma etapa específica de um funil para uma etapa de OUTRO funil.
+      kind: "funnel_stage";
+      fromFunnelId: string;
+      fromStageId: string;
+      toFunnelId: string;
+      toStageId: string;
+    }
+  | {
+      // Exclui o funil sem transferir: negociações viram órfãs (banner do CRM) e
+      // o vínculo de funil/etapa é removido do cadastro dos clientes.
+      kind: "funnel_clear";
+      fromFunnelId: string;
     };
 
 export function buildFunnelStageIndex(funnels: CrmFunnel[]): Map<string, Set<string>> {
@@ -209,7 +223,40 @@ export function mergePendingMigrations(
     ) {
       return false;
     }
+    if (
+      m.kind === "funnel_stage" &&
+      next.kind === "funnel_stage" &&
+      m.fromFunnelId === next.fromFunnelId &&
+      m.fromStageId === next.fromStageId
+    ) {
+      return false;
+    }
+    if (
+      m.kind === "funnel_clear" &&
+      next.kind === "funnel_clear" &&
+      m.fromFunnelId === next.fromFunnelId
+    ) {
+      return false;
+    }
     return true;
   });
   return [...filtered, next];
+}
+
+/** Origem (funil) afetada por uma migração — usado para resolver conflitos ao excluir um funil. */
+function migrationSourceFunnelId(m: PendingFunnelMigration): string {
+  return m.kind === "stage" ? m.funnelId : m.fromFunnelId;
+}
+
+/**
+ * Remove todas as migrações que partem de `fromFunnelId` e acrescenta `next`.
+ * Garante que escolher "uma etapa" / "etapa por etapa" / "órfã" não acumule migrações conflitantes.
+ */
+export function replaceFunnelMigrations(
+  existing: PendingFunnelMigration[],
+  fromFunnelId: string,
+  next: PendingFunnelMigration[],
+): PendingFunnelMigration[] {
+  const kept = existing.filter((m) => migrationSourceFunnelId(m) !== fromFunnelId);
+  return [...kept, ...next];
 }

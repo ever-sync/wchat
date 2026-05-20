@@ -127,9 +127,20 @@ export function setExclusiveLostStage(
   });
 }
 
+/** Chave aleatória única (UUID) usada como id imutável da etapa — referenciada no n8n. */
+export function generateStageKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `stage-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 export function createDefaultStage(funnel: CrmFunnel, title = "Nova etapa"): CrmStageDef {
-  const base = slugifyFunnelKey(title);
-  const id = uniqueKey(new Set(funnel.stages.map((s) => s.id)), base);
+  const existing = new Set(funnel.stages.map((s) => s.id));
+  let id = generateStageKey();
+  while (existing.has(id)) {
+    id = generateStageKey();
+  }
   return { id, title: title.toUpperCase() };
 }
 

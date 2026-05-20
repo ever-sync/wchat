@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { CrmFunnelMigrateDialog } from "@/components/crm/CrmFunnelMigrateDialog";
+import { CrmFunnelDeleteDialog, type FunnelDeleteResult } from "@/components/crm/CrmFunnelDeleteDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,7 +48,7 @@ import {
   updateStage,
 } from "@/lib/crm/funnel-editor-utils";
 import type { PendingFunnelMigration } from "@/lib/crm/funnel-migration";
-import { mergePendingMigrations } from "@/lib/crm/funnel-migration";
+import { mergePendingMigrations, replaceFunnelMigrations } from "@/lib/crm/funnel-migration";
 import { CRM_STAGE_REQUIRED_FIELD_OPTIONS } from "@/lib/crm/stage-requirements";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +104,56 @@ type MigratePrompt =
       count: number;
     };
 
+function CopyKeyButton({ value, disabled }: { value: string; disabled?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="h-9 w-9 shrink-0"
+      disabled={disabled || !value}
+      title="Copiar chave (para usar no n8n)"
+      aria-label="Copiar chave da etapa"
+      onClick={() => {
+        if (!value) return;
+        void navigator.clipboard?.writeText(value).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+    </Button>
+  );
+}
+
+function buildFunnelDeleteMigrations(
+  fromFunnelId: string,
+  result: FunnelDeleteResult,
+): PendingFunnelMigration[] {
+  if (!result.transfer) {
+    return [{ kind: "funnel_clear", fromFunnelId }];
+  }
+  if (result.mode === "single") {
+    return [
+      {
+        kind: "funnel",
+        fromFunnelId,
+        toFunnelId: result.toFunnelId,
+        toStageId: result.toStageId,
+      },
+    ];
+  }
+  return result.mappings.map((m) => ({
+    kind: "funnel_stage",
+    fromFunnelId,
+    fromStageId: m.fromStageId,
+    toFunnelId: result.toFunnelId,
+    toStageId: m.toStageId,
+  }));
+}
+
 export function CrmFunnelConfigEditor({
   funnels,
   onChange,
@@ -139,6 +190,14 @@ export function CrmFunnelConfigEditor({
   const activeFunnel = useMemo(
     () => funnels.find((f) => f.id === funnelId) ?? funnels[0],
     [funnelId, funnels],
+  );
+
+  const deleteSourceFunnel = useMemo(
+    () =>
+      migratePrompt?.kind === "funnel"
+        ? funnels.find((f) => f.id === migratePrompt.funnelId) ?? null
+        : null,
+    [funnels, migratePrompt],
   );
 
   const requestDeleteFunnel = useCallback(async () => {
@@ -258,16 +317,6 @@ export function CrmFunnelConfigEditor({
         title,
       }),
     );
-  };
-
-  const handleStageIdChange = (stageId: string, rawId: string) => {
-    if (!activeFunnel) return;
-    const nextId = slugifyFunnelKey(rawId);
-    const taken = new Set(
-      activeFunnel.stages.filter((s) => s.id !== stageId).map((s) => s.id),
-    );
-    const id = uniqueKey(taken, nextId);
-    onChange(updateStage(funnels, activeFunnel.id, stageId, { id }));
   };
 
   return (
@@ -411,15 +460,21 @@ export function CrmFunnelConfigEditor({
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">ID da etapa</Label>
-                          <Input
-                            value={stage.id}
-                            disabled={disabled}
-                            className="font-mono text-sm"
-                            onChange={(e) =>
-                              handleStageIdChange(stage.id, e.target.value)
-                            }
-                          />
+                          <Label className="text-xs">ID da etapa (chave)</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={stage.id}
+                              readOnly
+                              disabled
+                              tabIndex={-1}
+                              className="cursor-not-allowed bg-muted/50 font-mono text-sm"
+                              aria-label="ID da etapa (gerado automaticamente)"
+                            />
+                            <CopyKeyButton value={stage.id} />
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Chave fixa desta etapa — use no n8n. Gerada automaticamente, não editável.
+                          </p>
                         </div>
                       </div>
 
@@ -546,7 +601,19 @@ export function CrmFunnelConfigEditor({
             </p>
           ) : null}
 
-          <div className="flex justify-end border-t border-border/60 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-4">
+            <Button
+              type="button"
+              size="sm"
+              disabled={disabled}
+              onClick={() => {
+                const stage = createDefaultStage(activeFunnel);
+                onChange(addStage(funnels, activeFunnel.id, stage));
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Adicionar etapa
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -635,25 +702,23 @@ export function CrmFunnelConfigEditor({
         </AlertDialogContent>
       </AlertDialog>
 
-      {migratePrompt?.kind === "funnel" ? (
-        <CrmFunnelMigrateDialog
+      {migratePrompt?.kind === "funnel" && deleteSourceFunnel ? (
+        <CrmFunnelDeleteDialog
           open
           onOpenChange={(open) => !open && setMigratePrompt(null)}
           funnels={funnels}
-          excludeFunnelId={migratePrompt.funnelId}
+          sourceFunnel={deleteSourceFunnel}
           negotiationCount={migratePrompt.count}
-          title="Migrar negociações antes de excluir o funil"
-          description={`O funil "${migratePrompt.funnelName}" ainda tem negociações no CRM. Escolha para onde movê-las:`}
-          confirmLabel="Migrar e excluir funil"
           disabled={disabled}
-          onConfirm={({ funnelId: toFunnelId, stageId: toStageId }) => {
-            queueMigration({
-              kind: "funnel",
-              fromFunnelId: migratePrompt.funnelId,
-              toFunnelId,
-              toStageId,
-            });
-            const next = removeFunnel(funnels, migratePrompt.funnelId);
+          onConfirm={(result) => {
+            const fromFunnelId = migratePrompt.funnelId;
+            const nextMigrations = buildFunnelDeleteMigrations(fromFunnelId, result);
+            if (onPendingMigrationsChange) {
+              onPendingMigrationsChange(
+                replaceFunnelMigrations(pendingMigrations, fromFunnelId, nextMigrations),
+              );
+            }
+            const next = removeFunnel(funnels, fromFunnelId);
             onChange(next);
             setFunnelId(next[0]?.id ?? "");
             setMigratePrompt(null);

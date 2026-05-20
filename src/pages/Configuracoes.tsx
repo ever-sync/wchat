@@ -447,7 +447,10 @@ export default function Configuracoes() {
       }
       if (removal.kind === "funnel") {
         const covered = pendingFunnelMigrations.some(
-          (m) => m.kind === "funnel" && m.fromFunnelId === removal.funnelId,
+          (m) =>
+            (m.kind === "funnel" && m.fromFunnelId === removal.funnelId) ||
+            (m.kind === "funnel_stage" && m.fromFunnelId === removal.funnelId) ||
+            (m.kind === "funnel_clear" && m.fromFunnelId === removal.funnelId),
         );
         if (covered) {
           continue;
