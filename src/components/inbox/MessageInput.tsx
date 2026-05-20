@@ -1,4 +1,4 @@
-import type { ChangeEvent, RefObject } from "react";
+import { useLayoutEffect, type ChangeEvent, type RefObject } from "react";
 import {
   Calculator,
   FileText,
@@ -126,6 +126,16 @@ export function MessageInput({
           : previewKind === "document"
             ? "Documento"
             : null;
+
+  useLayoutEffect(() => {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [bodyText, bodyTextareaRef]);
 
   return (
     <div className="relative z-10 shrink-0 border-t border-border bg-card px-3 py-2 md:px-5 md:py-3">
@@ -277,7 +287,7 @@ export function MessageInput({
       ) : null}
 
       <div className={cn(
-        "flex min-h-[52px] items-center gap-1.5 rounded-full px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2",
+        "flex min-h-[52px] items-end gap-1.5 rounded-[28px] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2",
         noteMode ? "bg-amber-50 ring-1 ring-amber-200" : "bg-card ring-1 ring-border",
       )}>
         <input
@@ -370,7 +380,7 @@ export function MessageInput({
           }}
           placeholder={noteMode ? "Escrever nota interna..." : "Digite uma mensagem"}
           className={cn(
-            "min-h-[40px] max-h-36 min-w-0 flex-1 resize-none bg-transparent px-2 py-2",
+            "min-h-[40px] max-h-[42vh] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 md:max-h-80",
             "text-[15px] font-medium leading-6 text-foreground",
             "placeholder:text-muted-foreground",
             "border-0 shadow-none outline-none ring-0 ring-offset-0",

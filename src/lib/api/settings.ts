@@ -20,6 +20,7 @@ type ProfileRow = {
   plano: string | null;
   role: UserRole;
   status: "active" | "inactive";
+  call_phone: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -54,6 +55,7 @@ export type InviteCollaboratorResult = {
 export type UpdateProfileInput = {
   nome: string;
   empresa: string;
+  callPhone?: string | null;
 };
 
 export type UpdateCollaboratorRoleInput = {
@@ -71,6 +73,7 @@ function mapProfile(row: ProfileRow): ProfileSettings {
     plano: row.plano ?? "starter",
     role: row.role ?? "admin",
     status: row.status ?? "active",
+    callPhone: row.call_phone ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
   };
@@ -101,7 +104,7 @@ export async function getMyProfile() {
   const userId = await getCurrentUserId();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, tenant_id, nome, email, empresa, plano, role, status, created_at, updated_at")
+    .select("id, tenant_id, nome, email, empresa, plano, role, status, call_phone, created_at, updated_at")
     .eq("id", userId)
     .single();
 
@@ -119,14 +122,18 @@ export async function updateMyProfile(input: UpdateProfileInput) {
 
   const supabase = requireSupabase();
   const userId = await getCurrentUserId();
+  const updatePayload: Record<string, unknown> = {
+    nome: input.nome.trim(),
+    empresa: input.empresa.trim(),
+  };
+  if (input.callPhone !== undefined) {
+    updatePayload.call_phone = input.callPhone?.trim() || null;
+  }
   const { data, error } = await supabase
     .from("profiles")
-    .update({
-      nome: input.nome.trim(),
-      empresa: input.empresa.trim(),
-    })
+    .update(updatePayload)
     .eq("id", userId)
-    .select("id, tenant_id, nome, email, empresa, plano, role, status, created_at, updated_at")
+    .select("id, tenant_id, nome, email, empresa, plano, role, status, call_phone, created_at, updated_at")
     .single();
 
   if (error || !data) {
@@ -154,7 +161,7 @@ export async function listTenantCollaborators() {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, tenant_id, nome, email, empresa, plano, role, status, created_at, updated_at")
+    .select("id, tenant_id, nome, email, empresa, plano, role, status, call_phone, created_at, updated_at")
     .eq("tenant_id", tenantId)
     .order("created_at");
 
@@ -177,7 +184,7 @@ export async function updateCollaboratorRole(input: UpdateCollaboratorRoleInput)
     .update({ role: input.role })
     .eq("tenant_id", tenantId)
     .eq("id", input.profileId)
-    .select("id, tenant_id, nome, email, empresa, plano, role, status, created_at, updated_at")
+    .select("id, tenant_id, nome, email, empresa, plano, role, status, call_phone, created_at, updated_at")
     .single();
 
   if (error || !data) {

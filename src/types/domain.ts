@@ -22,6 +22,8 @@ export interface ProfileSettings {
   plano: string;
   role: UserRole;
   status: "active" | "inactive";
+  /** Telefone (E.164) do atendente para click-to-call. */
+  callPhone?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -393,6 +395,43 @@ export interface ProductUpsertInput {
   pesoLiquido: number;
   comissao: number;
   status: ProductStatus;
+}
+
+export type CallDirection = "outbound" | "inbound";
+export type CallStatus =
+  | "queued"
+  | "initiated"
+  | "ringing"
+  | "in_progress"
+  | "answered"
+  | "completed"
+  | "failed"
+  | "no_answer"
+  | "busy"
+  | "canceled";
+
+/** Registro de ligação (Twilio click-to-call). */
+export interface CallLog {
+  id: string;
+  tenantId: string;
+  provider: string;
+  providerCallSid: string | null;
+  direction: CallDirection;
+  fromNumber: string | null;
+  toNumber: string | null;
+  attendantId: string | null;
+  customerId: string | null;
+  chatId: string | null;
+  negotiationId: string | null;
+  status: CallStatus;
+  durationSeconds: number | null;
+  recordingUrl: string | null;
+  error: string | null;
+  startedAt: string | null;
+  answeredAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Produto vinculado ao lead/negociação (pré-venda). */

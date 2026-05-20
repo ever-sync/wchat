@@ -165,6 +165,7 @@ export default function Configuracoes() {
   const [isDefault, setIsDefault] = useState(true);
   const [profileName, setProfileName] = useState("");
   const [profileCompany, setProfileCompany] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("operacao");
@@ -392,6 +393,7 @@ export default function Configuracoes() {
     if (!myProfile) return;
     setProfileName(myProfile.nome);
     setProfileCompany(myProfile.empresa);
+    setProfilePhone(myProfile.callPhone ?? "");
   }, [myProfile]);
 
   useEffect(() => {
@@ -626,6 +628,20 @@ export default function Configuracoes() {
                   <Input value={myProfile?.plano ?? profile?.plano ?? "starter"} disabled />
                 </div>
               </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Telefone para ligações</Label>
+                  <Input
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    placeholder="+55 11 99999-9999"
+                    inputMode="tel"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Usado no click-to-call: ligamos para você primeiro, depois conectamos o lead. Formato E.164 (ex.: +5511999998888).
+                  </p>
+                </div>
+              </div>
               <div className="flex justify-end">
                 <Button
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
@@ -660,7 +676,11 @@ export default function Configuracoes() {
                     }
 
                     try {
-                      await updateProfile.mutateAsync({ nome: profileName, empresa: profileCompany });
+                      await updateProfile.mutateAsync({
+                        nome: profileName,
+                        empresa: profileCompany,
+                        callPhone: profilePhone,
+                      });
                       toast({ title: "Perfil atualizado", description: "Dados salvos com sucesso." });
                       useAppStore.getState().addNotification({
                         tipo: "sucesso",

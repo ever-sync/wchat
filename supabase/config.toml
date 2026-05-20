@@ -17,3 +17,15 @@ verify_jwt = false
 # Gestao de chaves: JWT do admin no app
 [functions.wchat-api-keys]
 verify_jwt = true
+
+# Click-to-call: inicia a ligação com JWT do atendente no app
+[functions.twilio-call]
+verify_jwt = true
+
+# TwiML chamado pelo Twilio (sem JWT) — protegido por assinatura X-Twilio-Signature
+[functions.twilio-voice-twiml]
+verify_jwt = false
+
+# StatusCallback do Twilio (sem JWT) — protegido por assinatura X-Twilio-Signature
+[functions.twilio-voice-webhook]
+verify_jwt = false
