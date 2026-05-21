@@ -97,7 +97,7 @@ export default function Login() {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <aside className="relative hidden h-full min-h-0 overflow-hidden bg-wchat-100 lg:block lg:w-[52%] xl:w-[54%]">
           <img
-            src="/login-hero.png"
+            src="/login-hero.jpg"
             alt="wChat — converse, entenda, resolva"
             className="h-full w-full object-cover object-center"
           />
@@ -105,7 +105,7 @@ export default function Login() {
 
         <aside className="relative h-[clamp(72px,16dvh,120px)] shrink-0 overflow-hidden bg-wchat-100 [@media(max-height:640px)]:hidden lg:hidden">
           <img
-            src="/login-hero.png"
+            src="/login-hero.jpg"
             alt="wChat — converse, entenda, resolva"
             className="h-full w-full object-cover object-[center_20%]"
           />

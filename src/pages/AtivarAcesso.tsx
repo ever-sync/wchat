@@ -242,7 +242,7 @@ export default function AtivarAcesso() {
         <div className="relative hidden lg:block lg:w-[51%]">
           <div className="relative h-full overflow-hidden rounded-[24px]">
             <img
-              src="/login-truck-forest.png"
+              src="/login-truck-forest.jpg"
               alt="Caminhao verde em estrada cercada por mata"
               className="absolute inset-0 h-full w-full object-cover object-center"
             />
