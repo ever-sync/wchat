@@ -23,6 +23,7 @@ const SELECT = [
   "due_at",
   "status",
   "notes",
+  "template_id",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -39,6 +40,7 @@ function mapCrmTaskRow(row: Record<string, unknown>): CrmTask {
     dueAt: row.due_at != null ? String(row.due_at) : null,
     status,
     notes: String(row.notes ?? ""),
+    templateId: row.template_id != null ? String(row.template_id) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -51,6 +53,7 @@ export type CrmTaskCreateInput = {
   assigneeId?: string | null;
   dueAt?: string | null;
   notes?: string;
+  templateId?: string | null;
 };
 
 export type CrmTaskPatch = Partial<{
@@ -189,6 +192,26 @@ export async function listCrmTasks(filters: {
   return (data ?? []).map((r) => mapCrmTaskRow(asDbRow(r)));
 }
 
+/** Tarefas criadas no período (para a aba Tarefas dos Relatórios). */
+export async function listCrmTasksForReport(range: { from: Date; to: Date }): Promise<CrmTask[]> {
+  if (!isSupabaseConfigured) {
+    return [];
+  }
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { data, error } = await supabase
+    .from("crm_tasks")
+    .select(SELECT)
+    .eq("tenant_id", tenantId)
+    .gte("created_at", range.from.toISOString())
+    .lte("created_at", range.to.toISOString())
+    .order("created_at", { ascending: false });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((r) => mapCrmTaskRow(asDbRow(r)));
+}
+
 export async function createCrmTask(input: CrmTaskCreateInput): Promise<CrmTask> {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase não configurado.");
@@ -216,6 +239,7 @@ export async function createCrmTask(input: CrmTaskCreateInput): Promise<CrmTask>
       title,
       due_at: input.dueAt?.trim() || null,
       notes: input.notes?.trim() ?? "",
+      template_id: input.templateId?.trim() || null,
       status: "aberta",
     })
     .select(SELECT)
@@ -337,6 +361,21 @@ export function useCrmTasksForNegotiation(
     queryFn: () => listCrmTasks({ negotiationId: negotiationId!, status: "all" }),
     enabled: Boolean(negotiationId) && isSupabaseConfigured && (enabledOption ?? true),
     staleTime: 20_000,
+  });
+}
+
+export function useCrmTasksReport(
+  from: Date,
+  to: Date,
+  options?: Omit<UseQueryOptions<CrmTask[]>, "queryKey" | "queryFn">,
+) {
+  const { enabled: enabledOption, ...rest } = options ?? {};
+  return useQuery({
+    ...rest,
+    queryKey: ["crm-tasks", "report", from.toISOString(), to.toISOString()],
+    queryFn: () => listCrmTasksForReport({ from, to }),
+    enabled: isSupabaseConfigured && (enabledOption ?? true),
+    staleTime: 30_000,
   });
 }
 

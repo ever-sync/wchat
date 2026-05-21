@@ -137,12 +137,15 @@ function PipelineChevrons({
   activeIndex,
   daysContact,
   onStageSelect,
+  stages,
 }: {
   activeIndex: number;
   daysContact: number;
   onStageSelect?: (stageIndex: number) => void;
+  /** Etapas reais do funil da negociação; sem isso usa o funil legado fixo. */
+  stages?: Array<{ key: string; label: string }>;
 }) {
-  const segments = buildPipelineLabels(daysContact);
+  const segments = stages ?? buildPipelineLabels(daysContact);
   const interactive = Boolean(onStageSelect);
   const notch = 12;
   const inactiveFill = "#eceff1";
@@ -585,6 +588,8 @@ export type ClienteRdPerfilViewProps = {
   cliente: Customer;
   daysContact: number;
   pipelineActiveIndex: number;
+  /** Etapas reais do funil (ficha CRM); sem isso usa o funil legado fixo de 6 etapas. */
+  pipelineStages?: Array<{ key: string; label: string }>;
   qualificationStars: number;
   onBack: () => void;
   onRefresh: () => void;
@@ -655,6 +660,7 @@ export function ClienteRdPerfilView({
   cliente,
   daysContact,
   pipelineActiveIndex,
+  pipelineStages,
   qualificationStars,
   onBack,
   onRefresh,
@@ -1043,6 +1049,7 @@ export function ClienteRdPerfilView({
       <PipelineChevrons
         activeIndex={pipelineActiveIndex}
         daysContact={daysContact}
+        stages={pipelineStages}
         onStageSelect={negotiationReadOnly || crmActionsDisabled ? undefined : onPipelineStageChange}
       />
 

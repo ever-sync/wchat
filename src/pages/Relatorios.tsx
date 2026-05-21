@@ -37,6 +37,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_CRM_FUNNELS, funnelStageTitleIn } from "@/data/crm-funnels";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
+import { useCrmTasksReport } from "@/lib/api/crm-tasks";
+import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
+import { useTenantCollaborators } from "@/lib/api/settings";
 import {
   exportAttendanceCsv,
   useAttendanceReport,
@@ -51,7 +54,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type TabKey = "atendimento" | "funil" | "parados" | "sla" | "crm-vendedores" | "vendas" | "perdas";
+type TabKey =
+  | "atendimento"
+  | "funil"
+  | "parados"
+  | "sla"
+  | "crm-vendedores"
+  | "vendas"
+  | "perdas"
+  | "tarefas";
 
 type QuickPeriod = "today" | "last7" | "last30" | "thisMonth" | "lastMonth" | "custom";
 
@@ -432,6 +443,67 @@ export default function Relatorios() {
   const lostReasonsQ = useLostReasons(funnelId, fromDate, toDate, { enabled: tab === "perdas" });
   const lostReasons = lostReasonsQ.data ?? [];
 
+  const tasksReportQ = useCrmTasksReport(fromDate, toDate, { enabled: tab === "tarefas" });
+  const { data: taskTemplates = [] } = useCrmTaskTemplates();
+  const { data: taskCollaborators = [] } = useTenantCollaborators({ enabled: tab === "tarefas" });
+  const tasksReport = useMemo(() => tasksReportQ.data ?? [], [tasksReportQ.data]);
+
+  const tasksTotals = useMemo(() => {
+    const now = Date.now();
+    return tasksReport.reduce(
+      (acc, t) => {
+        acc.total += 1;
+        if (t.status === "concluida") {
+          acc.done += 1;
+        } else {
+          acc.open += 1;
+          if (t.dueAt && new Date(t.dueAt).getTime() < now) {
+            acc.overdue += 1;
+          }
+        }
+        return acc;
+      },
+      { total: 0, done: 0, open: 0, overdue: 0 },
+    );
+  }, [tasksReport]);
+
+  const tasksByTemplate = useMemo(() => {
+    const titleOf = (id: string | null) =>
+      id ? taskTemplates.find((t) => t.id === id)?.title ?? "Modelo removido" : "Sem modelo";
+    const map = new Map<string, { id: string; title: string; total: number; done: number }>();
+    for (const t of tasksReport) {
+      const key = t.templateId ?? "__none__";
+      const cur = map.get(key) ?? { id: key, title: titleOf(t.templateId), total: 0, done: 0 };
+      cur.total += 1;
+      if (t.status === "concluida") cur.done += 1;
+      map.set(key, cur);
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total);
+  }, [tasksReport, taskTemplates]);
+
+  const tasksByAssignee = useMemo(() => {
+    const now = Date.now();
+    const nameOf = (id: string | null) =>
+      id ? taskCollaborators.find((c) => c.id === id)?.nome || "—" : "Sem responsável";
+    const map = new Map<
+      string,
+      { id: string; name: string; total: number; done: number; overdue: number }
+    >();
+    for (const t of tasksReport) {
+      const key = t.assigneeId ?? "__none__";
+      const cur =
+        map.get(key) ?? { id: key, name: nameOf(t.assigneeId), total: 0, done: 0, overdue: 0 };
+      cur.total += 1;
+      if (t.status === "concluida") {
+        cur.done += 1;
+      } else if (t.dueAt && new Date(t.dueAt).getTime() < now) {
+        cur.overdue += 1;
+      }
+      map.set(key, cur);
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total);
+  }, [tasksReport, taskCollaborators]);
+
   const attendance = attendanceQ.data ?? [];
   const funnelRows = funnelQ.data ?? [];
   const staleSummary = staleSummaryQ.data;
@@ -737,6 +809,7 @@ export default function Relatorios() {
           <TabsTrigger value="crm-vendedores">Performance CRM</TabsTrigger>
           <TabsTrigger value="vendas">Vendas Trendii</TabsTrigger>
           <TabsTrigger value="perdas">Motivos de perda</TabsTrigger>
+          <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="atendimento" className="mt-4 space-y-3">
@@ -1453,6 +1526,102 @@ export default function Relatorios() {
                     ))}
                   </div>
                 </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tarefas" className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricTile label="Tarefas criadas" value={tasksTotals.total} />
+            <MetricTile label="Concluídas" value={tasksTotals.done} />
+            <MetricTile label="Em aberto" value={tasksTotals.open} />
+            <MetricTile
+              label="Atrasadas"
+              value={tasksTotals.overdue}
+              variant={tasksTotals.overdue > 0 ? "danger" : "default"}
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Por tarefa pronta</CardTitle>
+              <CardDescription>
+                Quantas tarefas foram criadas a partir de cada modelo no período e quantas foram
+                concluídas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tasksReportQ.isLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando…</p>
+              ) : tasksReportQ.isError ? (
+                <ErrorState error={tasksReportQ.error} onRetry={() => void tasksReportQ.refetch()} />
+              ) : tasksByTemplate.length === 0 ? (
+                <EmptyState label="Nenhuma tarefa criada no período." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Modelo</th>
+                        <th className="py-2 pr-4 font-medium">Criadas</th>
+                        <th className="py-2 pr-4 font-medium">Concluídas</th>
+                        <th className="py-2 font-medium">% conclusão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasksByTemplate.map((row) => (
+                        <tr key={row.id} className="border-b border-border/60">
+                          <td className="py-2 pr-4 font-medium">{row.title}</td>
+                          <td className="py-2 pr-4">{row.total}</td>
+                          <td className="py-2 pr-4">{row.done}</td>
+                          <td className="py-2">
+                            {row.total > 0 ? `${Math.round((row.done / row.total) * 100)}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Por responsável</CardTitle>
+              <CardDescription>Tarefas criadas no período por responsável.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tasksReportQ.isLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando…</p>
+              ) : tasksByAssignee.length === 0 ? (
+                <EmptyState label="Nenhuma tarefa criada no período." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Responsável</th>
+                        <th className="py-2 pr-4 font-medium">Criadas</th>
+                        <th className="py-2 pr-4 font-medium">Concluídas</th>
+                        <th className="py-2 font-medium">Atrasadas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasksByAssignee.map((row) => (
+                        <tr key={row.id} className="border-b border-border/60">
+                          <td className="py-2 pr-4 font-medium">{row.name}</td>
+                          <td className="py-2 pr-4">{row.total}</td>
+                          <td className="py-2 pr-4">{row.done}</td>
+                          <td className={cn("py-2", row.overdue > 0 && "font-semibold text-destructive")}>
+                            {row.overdue}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>

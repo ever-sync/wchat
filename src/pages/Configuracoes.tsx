@@ -93,6 +93,7 @@ import {
 } from "@/lib/api/integrations";
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
 import { ChatTagsSettingsSection } from "@/components/settings/ChatTagsSettingsSection";
+import { ChatTaskTemplatesSettingsSection } from "@/components/settings/ChatTaskTemplatesSettingsSection";
 import {
   ChatConfigSectionNav,
   parseChatConfigSectionParam,
@@ -292,7 +293,7 @@ export default function Configuracoes() {
               p.delete("secao");
             }
           } else if (next === "configuracao-chat") {
-            if (secao !== "respostas" && secao !== "etiquetas") {
+            if (secao !== "respostas" && secao !== "etiquetas" && secao !== "tarefas") {
               p.delete("secao");
             }
           } else if (next === "log") {
@@ -1830,6 +1831,13 @@ export default function Configuracoes() {
 
               {chatConfigSection === "etiquetas" ? (
                 <ChatTagsSettingsSection
+                  canEdit={canEditConfiguracoes}
+                  canDelete={canDeleteConfiguracoes}
+                />
+              ) : null}
+
+              {chatConfigSection === "tarefas" ? (
+                <ChatTaskTemplatesSettingsSection
                   canEdit={canEditConfiguracoes}
                   canDelete={canDeleteConfiguracoes}
                 />

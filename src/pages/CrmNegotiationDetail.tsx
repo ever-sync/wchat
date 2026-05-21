@@ -46,6 +46,7 @@ import {
   useDeleteCrmTask,
   useUpdateCrmTask,
 } from "@/lib/api/crm-tasks";
+import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import {
   useCreateCustomer,
   useCustomer,
@@ -62,17 +63,14 @@ import {
   mergeOpenCrmTasksForNegotiationView,
 } from "@/lib/crm/negotiation-task-view";
 import {
-  buildPipelineLabels,
   CRM_FUNNEL_ID_KEY,
   CRM_PIPELINE_STAGE_KEY,
   getPipelineStateForCustomer,
-  pipelineStageKeyFromIndex,
 } from "@/lib/crm-pipeline";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useInboxChats } from "@/lib/api/whatsapp";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 import {
-  LEGACY_PIPELINE_SALE_INDEX,
   negotiationHasCompletedSale,
   saleAttendantBlockedMessage,
   validateMarkWinLines,
@@ -99,6 +97,15 @@ import type {
 import { MOCK_NEGOTIATIONS } from "@/data/crm-mock-negotiations";
 
 const CRM_TASK_FORM_ASSIGNEE_NONE = "__none__";
+const CRM_TASK_FORM_TEMPLATE_NONE = "__none__";
+
+/** Formata um Date para o valor de um input datetime-local (hora local). */
+function toDateTimeLocalValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
 
 const STAGE_TO_PIPELINE: Record<string, number> = {
   lead: 0,
@@ -244,8 +251,41 @@ function CrmNegotiationDetailContent({
   const createCrmTask = useCreateCrmTask();
   const updateCrmTask = useUpdateCrmTask();
   const deleteCrmTask = useDeleteCrmTask();
+  const { data: crmTaskTemplates = [] } = useCrmTaskTemplates();
 
   const { data: effectiveCrmFunnels } = useEffectiveCrmFunnels();
+
+  // Funil real da negociação (mesma fonte do Kanban) — o stepper deve refletir
+  // as etapas configuradas, não um funil fixo legado.
+  const negotiationFunnel = useMemo(
+    () =>
+      (effectiveCrmFunnels ?? []).find((f) => f.id === negotiation.funnelId) ??
+      (effectiveCrmFunnels ?? [])[0],
+    [effectiveCrmFunnels, negotiation.funnelId],
+  );
+
+  const pipelineStages = useMemo(
+    () => (negotiationFunnel?.stages ?? []).map((s) => ({ key: s.id, label: s.title })),
+    [negotiationFunnel],
+  );
+
+  const resolvedPipelineIndex = useMemo(() => {
+    const stages = negotiationFunnel?.stages ?? [];
+    if (!stages.length) {
+      return pipelineIndexForNegotiation(negotiation);
+    }
+    const idx = stages.findIndex((s) => s.id === negotiation.stageId);
+    if (idx >= 0) {
+      return idx;
+    }
+    if (negotiation.status === "perdido") {
+      const lostIdx = stages.findIndex((s) => s.isLostStage || s.id === "perdido");
+      if (lostIdx >= 0) {
+        return lostIdx;
+      }
+    }
+    return 0;
+  }, [negotiationFunnel, negotiation]);
 
   const taskIntegration = isPersistedRow && isSupabaseConfigured;
   const { data: crmTasksByNegotiation = [], isLoading: crmTasksNegLoading } = useCrmTasksForNegotiation(
@@ -362,7 +402,7 @@ function CrmNegotiationDetailContent({
     { enabled: Boolean(linkedCustomer) && isPersistedRow },
   );
 
-  const [pipelineActiveIndex, setPipelineActiveIndex] = useState(() => pipelineIndexForNegotiation(negotiation));
+  const [pipelineActiveIndex, setPipelineActiveIndex] = useState(resolvedPipelineIndex);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkPhone, setLinkPhone] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
@@ -372,6 +412,7 @@ function CrmNegotiationDetailContent({
   const [taskNotes, setTaskNotes] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState("");
   const [taskClientOnly, setTaskClientOnly] = useState(false);
+  const [taskTemplateId, setTaskTemplateId] = useState("");
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [lostDialogBlockCustomer, setLostDialogBlockCustomer] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
@@ -389,8 +430,8 @@ function CrmNegotiationDetailContent({
   );
 
   useEffect(() => {
-    setPipelineActiveIndex(pipelineIndexForNegotiation(negotiation));
-  }, [negotiation]);
+    setPipelineActiveIndex(resolvedPipelineIndex);
+  }, [resolvedPipelineIndex]);
 
   useEffect(() => {
     if (searchParams.get("criarTarefa") !== "1") {
@@ -419,6 +460,7 @@ function CrmNegotiationDetailContent({
     setTaskNotes("");
     setTaskAssigneeId("");
     setTaskClientOnly(false);
+    setTaskTemplateId("");
   }, [taskDialogOpen]);
 
   useEffect(() => {
@@ -445,14 +487,14 @@ function CrmNegotiationDetailContent({
       return linkedCustomer;
     }
     const base = placeholder;
-    if (pipelineActiveIndex === 5) {
+    if (negotiation.status === "perdido") {
       return { ...base, status: "bloqueado" as const };
     }
-    if (pipelineActiveIndex !== 5 && base.status === "bloqueado") {
+    if (base.status === "bloqueado") {
       return { ...base, status: "ativo" as const };
     }
     return base;
-  }, [linkedCustomer, pipelineActiveIndex, placeholder]);
+  }, [linkedCustomer, negotiation.status, placeholder]);
 
   const daysContact = linkedCustomer
     ? getPipelineStateForCustomer(linkedCustomer).daysContact
@@ -506,6 +548,7 @@ function CrmNegotiationDetailContent({
         cliente={displayCustomer}
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
+        pipelineStages={pipelineStages.length ? pipelineStages : undefined}
         qualificationStars={qualificationStars}
         negotiationPanelSnapshot={
           taskIntegration && isPersistedCrmNegotiationId(negotiation.id)
@@ -896,7 +939,14 @@ function CrmNegotiationDetailContent({
             });
             return;
           }
-          if (idx === LEGACY_PIPELINE_SALE_INDEX) {
+          const stage = negotiationFunnel?.stages[idx];
+          if (!stage) {
+            return;
+          }
+          const isSaleStage = stage.isSaleStage || stage.id === "venda";
+          const isLostStage = stage.isLostStage || stage.id === "perdido";
+
+          if (isSaleStage) {
             if (isNegotiationUnassigned(negotiation.assigneeId)) {
               toast({
                 title: "Sem responsável",
@@ -917,16 +967,12 @@ function CrmNegotiationDetailContent({
           }
 
           setPipelineActiveIndex(idx);
-          const label = buildPipelineLabels(daysContact)[idx]?.label;
+          const label = stage.title;
           if (isPersistedRow) {
-            const key = pipelineStageKeyFromIndex(idx);
-            if (!key) {
-              return;
-            }
             void (async () => {
               try {
-                const patch: CrmNegotiationPatch = { stageId: key };
-                if (idx === 5) {
+                const patch: CrmNegotiationPatch = { stageId: stage.id };
+                if (isLostStage) {
                   patch.status = "perdido";
                 } else if (negotiation.status === "perdido") {
                   patch.status = "em_andamento";
@@ -934,21 +980,18 @@ function CrmNegotiationDetailContent({
                 await updateNegotiation.mutateAsync({ id: negotiation.id, patch });
                 if (linkedCustomer) {
                   let nextStatus: CustomerStatus = linkedCustomer.status;
-                  if (idx === 5) {
+                  if (isLostStage) {
                     nextStatus = "bloqueado";
                   } else if (linkedCustomer.status === "bloqueado") {
                     nextStatus = "ativo";
                   }
                   await syncLinkedCustomer(linkedCustomer, {
                     status: nextStatus,
-                    stageKey: key,
+                    stageKey: stage.id,
                     funnelId: negotiation.funnelId,
                   });
                 }
-                toast({
-                  title: "Funil atualizado",
-                  description: label ? `Etapa: ${label}` : "Etapa alterada.",
-                });
+                toast({ title: "Funil atualizado", description: `Etapa: ${label}` });
               } catch (e) {
                 toast({
                   title: "Não foi possível salvar",
@@ -961,7 +1004,7 @@ function CrmNegotiationDetailContent({
           }
           toast({
             title: "Funil (demonstração)",
-            description: label ? `Etapa: ${label}. Abra um cliente em Clientes para persistir.` : "Etapa alterada.",
+            description: `Etapa: ${label}. Abra um cliente em Clientes para persistir.`,
           });
         }}
       />
@@ -979,6 +1022,44 @@ function CrmNegotiationDetailContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {crmTaskTemplates.length > 0 ? (
+              <div className="space-y-1">
+                <Label htmlFor="crm-task-template">Tarefa pronta (opcional)</Label>
+                <Select
+                  value={taskTemplateId.trim() ? taskTemplateId : CRM_TASK_FORM_TEMPLATE_NONE}
+                  onValueChange={(v) => {
+                    if (v === CRM_TASK_FORM_TEMPLATE_NONE) {
+                      setTaskTemplateId("");
+                      return;
+                    }
+                    const tpl = crmTaskTemplates.find((t) => t.id === v);
+                    if (!tpl) {
+                      return;
+                    }
+                    setTaskTemplateId(tpl.id);
+                    setTaskTitle(tpl.title);
+                    setTaskNotes(tpl.notes ?? "");
+                    if (tpl.defaultDueDays != null) {
+                      const due = new Date();
+                      due.setDate(due.getDate() + tpl.defaultDueDays);
+                      setTaskDueLocal(toDateTimeLocalValue(due));
+                    }
+                  }}
+                >
+                  <SelectTrigger id="crm-task-template" className="border-[#ced4da]">
+                    <SelectValue placeholder="Escolher um modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={CRM_TASK_FORM_TEMPLATE_NONE}>Sem modelo</SelectItem>
+                    {crmTaskTemplates.map((tpl) => (
+                      <SelectItem key={tpl.id} value={tpl.id}>
+                        {tpl.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <Label htmlFor="crm-task-title">Título</Label>
               <Input
@@ -1071,6 +1152,7 @@ function CrmNegotiationDetailContent({
                       assigneeId: taskAssigneeId.trim() || null,
                       dueAt: taskDueLocal ? new Date(taskDueLocal).toISOString() : null,
                       notes: taskNotes.trim(),
+                      templateId: taskTemplateId.trim() || null,
                     });
                     setTaskDialogOpen(false);
                     toast({ title: "Tarefa criada", description: "A lista foi atualizada." });

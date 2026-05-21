@@ -1,7 +1,7 @@
-import { MessageSquare, Tag } from "lucide-react";
+import { ListChecks, MessageSquare, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ChatConfigSettingsSection = "respostas" | "etiquetas";
+export type ChatConfigSettingsSection = "respostas" | "etiquetas" | "tarefas";
 
 const SECTIONS: {
   id: ChatConfigSettingsSection;
@@ -10,12 +10,13 @@ const SECTIONS: {
 }[] = [
   { id: "respostas", label: "Respostas rápidas", icon: MessageSquare },
   { id: "etiquetas", label: "Etiquetas", icon: Tag },
+  { id: "tarefas", label: "Tarefas", icon: ListChecks },
 ];
 
 export function parseChatConfigSectionParam(
   value: string | null,
 ): ChatConfigSettingsSection {
-  if (value === "etiquetas" || value === "respostas") {
+  if (value === "etiquetas" || value === "respostas" || value === "tarefas") {
     return value;
   }
   return "respostas";

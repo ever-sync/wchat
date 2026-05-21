@@ -205,6 +205,22 @@ export interface CrmTask {
   dueAt: string | null;
   status: CrmTaskStatus;
   notes: string;
+  /** Modelo de origem (`crm_task_templates.id`), quando criada a partir de um. */
+  templateId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Linha `public.crm_task_templates` — "tarefa pronta" reutilizável (modelo). */
+export interface CrmTaskTemplate {
+  id: string;
+  tenantId: string;
+  title: string;
+  notes: string;
+  /** Prazo padrão em dias a partir da criação (null = sem prazo sugerido). */
+  defaultDueDays: number | null;
+  sortOrder: number;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
