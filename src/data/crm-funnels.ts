@@ -19,6 +19,11 @@ export type CrmStageDef = {
    * Fallback legado quando ausente: id `perdido`.
    */
   isLostStage?: boolean;
+  /**
+   * Modelo de tarefa (`crm_task_templates.id`) criado automaticamente quando o negócio
+   * entra nesta etapa. Usado em conjunto com o campo obrigatório `next_task_at`.
+   */
+  taskTemplateId?: string | null;
 };
 
 export type CrmFunnel = {
@@ -144,12 +149,14 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
       const rawLost = sr.isLostStage;
       const isLostStage =
         rawLost === true || rawLost === "true" || rawLost === 1 || rawLost === "1";
+      const taskTemplateId = String(sr.taskTemplateId ?? "").trim() || undefined;
       stages.push({
         id: sid,
         title,
         ...(requiredFields ? { requiredFields } : {}),
         ...(isSaleStage ? { isSaleStage: true } : {}),
         ...(isLostStage ? { isLostStage: true } : {}),
+        ...(taskTemplateId ? { taskTemplateId } : {}),
       });
     }
     if (stages.length === 0) {

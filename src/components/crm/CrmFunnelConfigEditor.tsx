@@ -50,7 +50,10 @@ import {
 import type { PendingFunnelMigration } from "@/lib/crm/funnel-migration";
 import { mergePendingMigrations, replaceFunnelMigrations } from "@/lib/crm/funnel-migration";
 import { CRM_STAGE_REQUIRED_FIELD_OPTIONS } from "@/lib/crm/stage-requirements";
+import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import { cn } from "@/lib/utils";
+
+const STAGE_TASK_TEMPLATE_NONE = "__none__";
 
 type CrmFunnelConfigEditorProps = {
   funnels: CrmFunnel[];
@@ -83,6 +86,24 @@ function toggleStageField(
           ...stage,
           requiredFields: requiredFields.length > 0 ? requiredFields : undefined,
         };
+      }),
+    };
+  });
+}
+
+function setStageTaskTemplate(
+  funnels: CrmFunnel[],
+  funnelId: string,
+  stageId: string,
+  templateId: string | null,
+): CrmFunnel[] {
+  return funnels.map((funnel) => {
+    if (funnel.id !== funnelId) return funnel;
+    return {
+      ...funnel,
+      stages: funnel.stages.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        return { ...stage, taskTemplateId: templateId || undefined };
       }),
     };
   });
@@ -163,6 +184,7 @@ export function CrmFunnelConfigEditor({
   pendingMigrations = [],
   onPendingMigrationsChange,
 }: CrmFunnelConfigEditorProps) {
+  const { data: taskTemplates = [] } = useCrmTaskTemplates();
   const [funnelId, setFunnelId] = useState(funnels[0]?.id ?? "");
   const [newFunnelOpen, setNewFunnelOpen] = useState(false);
   const [newFunnelName, setNewFunnelName] = useState("");
@@ -511,6 +533,48 @@ export function CrmFunnelConfigEditor({
                             );
                           })}
                         </div>
+                        {(stage.requiredFields ?? []).includes("next_task_at") ? (
+                          <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
+                            <Label className="text-xs font-medium">Tarefa a criar nesta etapa</Label>
+                            <Select
+                              value={
+                                stage.taskTemplateId?.trim()
+                                  ? stage.taskTemplateId
+                                  : STAGE_TASK_TEMPLATE_NONE
+                              }
+                              disabled={disabled}
+                              onValueChange={(v) =>
+                                onChange(
+                                  setStageTaskTemplate(
+                                    funnels,
+                                    activeFunnel.id,
+                                    stage.id,
+                                    v === STAGE_TASK_TEMPLATE_NONE ? null : v,
+                                  ),
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Escolher tarefa pronta" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={STAGE_TASK_TEMPLATE_NONE}>
+                                  Nenhuma (apenas exigir)
+                                </SelectItem>
+                                {taskTemplates.map((tpl) => (
+                                  <SelectItem key={tpl.id} value={tpl.id}>
+                                    {tpl.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              {taskTemplates.length === 0
+                                ? "Cadastre tarefas prontas em Configuração do chat → Tarefas."
+                                : "Criada automaticamente para a negociação ao entrar nesta etapa."}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="space-y-2">

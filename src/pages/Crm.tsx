@@ -80,6 +80,8 @@ import {
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
+import { createStageTemplateTask } from "@/lib/api/crm-tasks";
+import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import { useTenantSettings } from "@/lib/api/integrations";
 import { useTenantCollaborators } from "@/lib/api/settings";
 import { toCustomerUpsertInput, useCustomers, useUpdateCustomer } from "@/lib/api/customers";
@@ -361,6 +363,7 @@ export default function Crm() {
   const upsertStageOverride = useUpsertCrmNegotiationStageOverride();
   const updateCustomer = useUpdateCustomer();
   const updateCrmNegotiation = useUpdateCrmNegotiation();
+  const { data: taskTemplates = [] } = useCrmTaskTemplates();
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
@@ -912,6 +915,24 @@ export default function Crm() {
             id: negId,
             patch: { stageId: stageDropId, funnelId },
           });
+          const destTemplateId = funnelDef.stages.find((s) => s.id === stageDropId)?.taskTemplateId;
+          const tpl = destTemplateId ? taskTemplates.find((t) => t.id === destTemplateId) : undefined;
+          if (tpl) {
+            const created = await createStageTemplateTask({
+              negotiationId: negId,
+              customerId: cid ?? null,
+              assigneeId: dragAssigneeId ?? null,
+              template: {
+                id: tpl.id,
+                title: tpl.title,
+                notes: tpl.notes,
+                defaultDueDays: tpl.defaultDueDays,
+              },
+            });
+            if (created) {
+              void queryClient.invalidateQueries({ queryKey: ["crm-tasks"] });
+            }
+          }
         }
         if (cid) {
           const customer = customers.find((c) => c.id === cid);
@@ -955,7 +976,9 @@ export default function Crm() {
       funnels,
       profile?.role,
       profileId,
+      queryClient,
       sourceNegotiations,
+      taskTemplates,
       toast,
       updateCrmNegotiation,
       updateCustomer,

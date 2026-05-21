@@ -257,6 +257,39 @@ export async function createCrmTask(input: CrmTaskCreateInput): Promise<CrmTask>
   return task;
 }
 
+/**
+ * Cria a tarefa pronta configurada na etapa de destino, se ainda não existir uma aberta
+ * do mesmo modelo para a negociação. Retorna true quando criou.
+ */
+export async function createStageTemplateTask(args: {
+  negotiationId: string;
+  customerId: string | null;
+  assigneeId: string | null;
+  template: { id: string; title: string; notes: string; defaultDueDays: number | null };
+}): Promise<boolean> {
+  if (!isSupabaseConfigured) {
+    return false;
+  }
+  const existing = await listCrmTasks({ negotiationId: args.negotiationId, status: "aberta" });
+  if (existing.some((t) => t.templateId === args.template.id)) {
+    return false;
+  }
+  const dueAt =
+    args.template.defaultDueDays != null
+      ? new Date(Date.now() + args.template.defaultDueDays * 86_400_000).toISOString()
+      : null;
+  await createCrmTask({
+    title: args.template.title,
+    negotiationId: args.negotiationId,
+    customerId: args.customerId,
+    assigneeId: args.assigneeId,
+    dueAt,
+    notes: args.template.notes,
+    templateId: args.template.id,
+  });
+  return true;
+}
+
 export async function updateCrmTask(id: string, patch: CrmTaskPatch): Promise<CrmTask> {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase não configurado.");
