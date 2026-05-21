@@ -29,6 +29,7 @@ const ClientePerfil = lazyWithReload(() => import("./pages/ClientePerfil"));
 const Crm = lazyWithReload(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazyWithReload(() => import("./pages/CrmNegotiationDetail"));
 const Relatorios = lazyWithReload(() => import("./pages/Relatorios"));
+const Painel = lazyWithReload(() => import("./pages/Painel"));
 const Produtos = lazyWithReload(() => import("./pages/Produtos"));
 const Marketing = lazyWithReload(() => import("./pages/Marketing"));
 const MarketingFlowEditor = lazyWithReload(() => import("./pages/MarketingFlowEditor"));
@@ -140,6 +141,14 @@ const App = () => (
                       element={
                         <PermissionRoute permission="relatorios">
                           <Relatorios />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/painel"
+                      element={
+                        <PermissionRoute permission="relatorios">
+                          <Painel />
                         </PermissionRoute>
                       }
                     />

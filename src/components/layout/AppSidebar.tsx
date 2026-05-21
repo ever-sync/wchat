@@ -2,6 +2,7 @@ import {
   BarChart3,
   Briefcase,
   Check,
+  Gauge,
   LogOut,
   Megaphone,
   MessageCircle,
@@ -71,6 +72,7 @@ const primaryItems: MenuItem[] = [
   { title: "CRM", url: "/crm", icon: Briefcase, permission: "crm" },
   { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
   { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
+  { title: "Painel", url: "/painel", icon: Gauge, permission: "relatorios" },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3, permission: "relatorios" },
   { title: "Marketing", url: "/marketing", icon: Megaphone, permission: "marketing" },
 ];

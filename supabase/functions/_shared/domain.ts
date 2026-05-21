@@ -1052,6 +1052,28 @@ export async function ensureChat(
     .eq("remote_jid", params.remoteJid)
     .maybeSingle();
 
+  // Foto de perfil: as URLs do WhatsApp (pps.whatsapp.net) expiram e dão 403 em
+  // <img>. Espelhamos a imagem no Storage público e gravamos a URL estável. Só
+  // baixa de novo quando a foto muda (versão host+path difere da já espelhada);
+  // se falhar, mantém o que existia (nunca grava a URL volátil que o front bloqueia).
+  let resolvedAvatarUrl: string | null = existing?.avatar_url ?? null;
+  const incomingAvatar = typeof params.avatarUrl === "string" ? params.avatarUrl.trim() : "";
+  if (incomingAvatar) {
+    if (isMetaCdnAvatarUrl(incomingAvatar)) {
+      const version = avatarSourceVersion(incomingAvatar);
+      const alreadyCurrent =
+        isMirroredAvatarUrl(existing?.avatar_url) &&
+        mirroredAvatarVersion(existing?.avatar_url) === version;
+      resolvedAvatarUrl = alreadyCurrent
+        ? existing?.avatar_url ?? null
+        : (await mirrorAvatarToStorage(admin, instance, params.remoteJid, incomingAvatar, version)) ??
+          existing?.avatar_url ??
+          null;
+    } else {
+      resolvedAvatarUrl = incomingAvatar;
+    }
+  }
+
   let defaultAiMode = "off";
   if (!existing) {
     const { data: settings } = await admin
@@ -1076,7 +1098,7 @@ export async function ensureChat(
       params.displayName,
       existing?.display_name,
     ) ?? "Sem nome",
-    avatar_url: params.avatarUrl ?? existing?.avatar_url ?? null,
+    avatar_url: resolvedAvatarUrl,
     last_message_preview: params.lastMessagePreview ?? existing?.last_message_preview ?? null,
     last_message_at: params.lastMessageAt ?? existing?.last_message_at ?? null,
     unread_count: params.unreadCount != null
@@ -1431,6 +1453,115 @@ function inferExtensionFromMime(mime: string | null | undefined) {
 }
 
 const MEDIA_BUCKET = "whatsapp-media";
+
+const STORAGE_PUBLIC_MARKER = `/storage/v1/object/public/${MEDIA_BUCKET}/`;
+
+/** URL de CDN da Meta (foto de perfil do WhatsApp): expira e dá 403 em <img>. */
+function isMetaCdnAvatarUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host.includes("whatsapp.net") ||
+      host.includes("whatsapp.com") ||
+      host.includes("fbcdn.net") ||
+      host.includes("facebook.com") ||
+      host.includes("fbsbx.com") ||
+      host.includes("cdninstagram.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Já é uma cópia nossa no Storage (não precisa baixar de novo). */
+function isMirroredAvatarUrl(url: string | null | undefined): boolean {
+  return typeof url === "string" && url.includes(STORAGE_PUBLIC_MARKER) && url.includes("/avatars/");
+}
+
+/**
+ * Versão estável da imagem de origem. A query da URL do WhatsApp (assinatura/TTL)
+ * muda a cada request mesmo com a MESMA foto, então usamos só host+path — que só
+ * muda quando o lead realmente troca a foto. Hash djb2 → token curto, usado como
+ * `?v=` no avatar_url (compara mudança + fura cache do CDN/navegador).
+ */
+function avatarSourceVersion(sourceUrl: string): string {
+  let basis = sourceUrl;
+  try {
+    const u = new URL(sourceUrl);
+    basis = `${u.host}${u.pathname}`;
+  } catch {
+    /* mantém a string crua */
+  }
+  let hash = 5381;
+  for (let i = 0; i < basis.length; i += 1) {
+    hash = ((hash << 5) + hash + basis.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+/** Lê o `?v=` de um avatar já espelhado (para comparar com a versão da origem). */
+function mirroredAvatarVersion(url: string | null | undefined): string | null {
+  if (typeof url !== "string") return null;
+  try {
+    return new URL(url).searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Baixa a foto de perfil do WhatsApp (server-side, sem o referrer/cookie do
+ * browser que causa 403) e sobe pro bucket público. Devolve a URL estável ou
+ * null em falha. Caminho determinístico por remoteJid → 1 cópia por contato.
+ */
+async function mirrorAvatarToStorage(
+  admin: AdminClient,
+  instance: InstanceRecord,
+  remoteJid: string,
+  sourceUrl: string,
+  version: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(sourceUrl);
+    if (!res.ok) {
+      console.error("mirrorAvatarToStorage: fetch falhou", { status: res.status });
+      return null;
+    }
+    const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > 8_000_000) {
+      return null;
+    }
+    const mime = contentType.startsWith("image/") ? contentType : "image/jpeg";
+    const ext = inferExtensionFromMime(mime);
+    const safeJid = remoteJid.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80) || "lead";
+    const path = `${instance.tenant_id}/${instance.id}/avatars/${safeJid}.${ext}`;
+
+    const { error: uploadError } = await admin.storage
+      .from(MEDIA_BUCKET)
+      .upload(path, bytes, { contentType: mime, upsert: true });
+    if (uploadError) {
+      console.error("mirrorAvatarToStorage: upload falhou", uploadError);
+      return null;
+    }
+
+    const { data } = admin.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+    if (!data?.publicUrl) {
+      return null;
+    }
+    // `?v=` = versão da foto: muda quando o lead troca a imagem → fura cache.
+    try {
+      const out = new URL(data.publicUrl);
+      out.searchParams.set("v", version);
+      return out.toString();
+    } catch {
+      return `${data.publicUrl}?v=${version}`;
+    }
+  } catch (error) {
+    console.error("mirrorAvatarToStorage: erro", error);
+    return null;
+  }
+}
 
 function inferMediaKindFromHints(
   mimeType: string | null,

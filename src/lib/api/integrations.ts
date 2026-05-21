@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { DEFAULT_STALE_NEGOTIATION_DAYS, normalizeStaleNegotiationDays } from "@/lib/crm/negotiation-alerts";
+import {
+  DEFAULT_BUSINESS_HOURS,
+  normalizeBusinessHours,
+  normalizeSlaMinutes,
+  type BusinessHours,
+} from "@/lib/business-hours";
 import { requireSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export type TenantIntegrations = {
@@ -19,6 +25,10 @@ export type TenantSettings = {
   defaultAiMode: "off" | "qualifying" | "full" | "handoff";
   /** Dias sem interação para alerta "Parado" no Kanban (1–90). */
   staleNegotiationDays: number;
+  /** Minutos-alvo para a 1ª resposta (SLA), 1–1440. */
+  slaFirstResponseMinutes: number;
+  /** Horário de atendimento; quando ativo, pausa o SLA fora do expediente. */
+  businessHours: BusinessHours;
 };
 
 function mapIntegrations(row: Record<string, unknown>): TenantIntegrations {
@@ -39,6 +49,8 @@ function mapSettings(row: Record<string, unknown>): TenantSettings {
     autoAssignOnLead: Boolean(row.auto_assign_on_lead),
     defaultAiMode: (row.default_ai_mode as TenantSettings["defaultAiMode"]) ?? "off",
     staleNegotiationDays: normalizeStaleNegotiationDays(row.stale_negotiation_days),
+    slaFirstResponseMinutes: normalizeSlaMinutes(row.sla_first_response_minutes),
+    businessHours: normalizeBusinessHours(row.business_hours),
   };
 }
 
@@ -105,6 +117,8 @@ export async function fetchTenantSettings(): Promise<TenantSettings | null> {
       autoAssignOnLead: false,
       defaultAiMode: "off",
       staleNegotiationDays: DEFAULT_STALE_NEGOTIATION_DAYS,
+      slaFirstResponseMinutes: 15,
+      businessHours: { ...DEFAULT_BUSINESS_HOURS, intervals: DEFAULT_BUSINESS_HOURS.intervals.map((i) => ({ ...i })) },
     };
   }
   return mapSettings(data as Record<string, unknown>);
@@ -119,6 +133,8 @@ export async function upsertTenantSettings(
       | "autoAssignOnLead"
       | "defaultAiMode"
       | "staleNegotiationDays"
+      | "slaFirstResponseMinutes"
+      | "businessHours"
     >
   >,
 ): Promise<TenantSettings> {
@@ -131,6 +147,12 @@ export async function upsertTenantSettings(
   if (patch.defaultAiMode !== undefined) row.default_ai_mode = patch.defaultAiMode;
   if (patch.staleNegotiationDays !== undefined) {
     row.stale_negotiation_days = normalizeStaleNegotiationDays(patch.staleNegotiationDays);
+  }
+  if (patch.slaFirstResponseMinutes !== undefined) {
+    row.sla_first_response_minutes = normalizeSlaMinutes(patch.slaFirstResponseMinutes);
+  }
+  if (patch.businessHours !== undefined) {
+    row.business_hours = normalizeBusinessHours(patch.businessHours);
   }
 
   const { data, error } = await supabase

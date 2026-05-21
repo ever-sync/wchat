@@ -92,6 +92,7 @@ import {
   useUpsertTenantSettings,
 } from "@/lib/api/integrations";
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
+import { ChatBusinessHoursSettingsSection } from "@/components/settings/ChatBusinessHoursSettingsSection";
 import { ChatTagsSettingsSection } from "@/components/settings/ChatTagsSettingsSection";
 import { ChatTaskTemplatesSettingsSection } from "@/components/settings/ChatTaskTemplatesSettingsSection";
 import {
@@ -1841,6 +1842,10 @@ export default function Configuracoes() {
                   canEdit={canEditConfiguracoes}
                   canDelete={canDeleteConfiguracoes}
                 />
+              ) : null}
+
+              {chatConfigSection === "horario" ? (
+                <ChatBusinessHoursSettingsSection canEdit={canEditConfiguracoes} />
               ) : null}
             </div>
           </div>
