@@ -1,5 +1,6 @@
 import { ChevronDown, ListFilter, Search, SquarePen, Tag, X } from "lucide-react";
-import { useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -252,6 +253,15 @@ export function ConversationList({
     quickFilter !== null ||
     activeTagCount > 0;
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: chats.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 64,
+    getItemKey: (index) => chats[index]?.id ?? index,
+    overscan: 8,
+  });
+
   return (
     <aside className="flex h-full min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r border-border bg-card md:max-w-[336px] lg:max-w-none">
       <div className="shrink-0 border-b border-border px-2.5 pb-1.5 pt-2.5">
@@ -423,35 +433,55 @@ export function ConversationList({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain scrollbar-hide">
-        <div className="min-w-0 max-w-full space-y-3 px-1.5 py-1.5">
-          {chatsLoading ? (
-            <div className="rounded-lg bg-wchat-50 px-3 py-6 text-center text-sm text-muted-foreground">Carregando conversas...</div>
-          ) : chats.length === 0 ? (
-            <div className="rounded-lg bg-wchat-50 px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
-          ) : (
-            <section>
-              <div className="mb-2 flex items-center justify-between px-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {listHeading}
-                </p>
-                <span className="text-[11px] tabular-nums text-muted-foreground">{chats.length}</span>
-              </div>
-              <div className="space-y-0.5">
-                {chats.map((chat) => (
-                  <ConversationRow
-                    key={chat.id}
-                    chat={chat}
-                    active={activeChatId === chat.id}
-                    onSelect={onSelectChat}
-                    onPrefetch={onPrefetchChat}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+      {chatsLoading ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 scrollbar-hide">
+          <div className="rounded-lg bg-wchat-50 px-3 py-6 text-center text-sm text-muted-foreground">
+            Carregando conversas...
+          </div>
         </div>
-      </div>
+      ) : chats.length === 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 scrollbar-hide">
+          <div className="rounded-lg bg-wchat-50 px-3 py-6 text-center text-sm text-muted-foreground">
+            Nenhuma conversa encontrada.
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center justify-between px-3.5 pb-1 pt-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {listHeading}
+            </p>
+            <span className="text-[11px] tabular-nums text-muted-foreground">{chats.length}</span>
+          </div>
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-1.5 pb-1.5 scrollbar-hide"
+          >
+            {/* Virtualizado: só renderiza as linhas visíveis (+overscan). */}
+            <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const chat = chats[virtualRow.index];
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute left-0 top-0 w-full pb-0.5"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <ConversationRow
+                      chat={chat}
+                      active={activeChatId === chat.id}
+                      onSelect={onSelectChat}
+                      onPrefetch={onPrefetchChat}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
