@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { formatBRL } from "@/lib/format";
 import {
@@ -30,9 +30,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import { ConversationList } from "@/components/inbox/ConversationList";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
+import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
+import { CallButton } from "@/components/crm/CallButton";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
 import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -140,6 +143,16 @@ const INBOX_ASSIGN_NONE = "__none__";
 
 function formatMoney(value: number) {
   return formatBRL(value);
+}
+
+/** Mostra o nome da ação ao passar o mouse sobre um botão de ícone do cabeçalho. */
+function IconTip({ label, children }: { label: ReactNode; children: ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function parseMoneyInput(value: string) {
@@ -268,6 +281,7 @@ export default function Inbox() {
   const [snoozedFilter, setSnoozedFilter] = useState<"active" | "snoozed">("active");
   const [quickFilter, setQuickFilter] = useState<InboxQuickFilter | null>(null);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
+  const [createLeadOpen, setCreateLeadOpen] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
@@ -1841,6 +1855,19 @@ export default function Inbox() {
       if (sendMessage.isPending || retryingMessageId) return;
 
       setRetryingMessageId(failed.id);
+      // Remove a bolha falhada antes de reenviar; o próprio envio cria uma nova
+      // bolha otimista ("queued") que será reconciliada ou marcada falha de novo.
+      const queryKey = ["inbox-messages", failed.chatId] as const;
+      queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          pages: current.pages.map((page) => ({
+            ...page,
+            messages: page.messages.filter((m) => m.id !== failed.id),
+          })),
+        };
+      });
       try {
         await sendMessage.mutateAsync({
           instanceId: failed.instanceId,
@@ -1851,18 +1878,6 @@ export default function Inbox() {
           mediaUrl: failed.mediaUrl ?? undefined,
           payload: (failed.payloadJson ?? {}) as Record<string, unknown>,
           quotedMessageId: failed.quotedMessageId ?? undefined,
-        });
-
-        const queryKey = ["inbox-messages", failed.chatId] as const;
-        queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            pages: current.pages.map((page) => ({
-              ...page,
-              messages: page.messages.filter((m) => m.id !== failed.id),
-            })),
-          };
         });
       } catch (error) {
         console.error("Falha ao reenviar mensagem no inbox:", error);
@@ -2200,13 +2215,29 @@ export default function Inbox() {
                 <div className="flex min-w-0 items-center gap-3">
                   <ConversationAvatar name={activeChat.displayName} avatarUrl={activeChat.avatarUrl} />
                   <div className="min-w-0">
-                    <p className="truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
+                      {activeChat.customerId && !linkedNegotiation && !linkedNegotiationLoading ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 rounded-full text-xs"
+                          disabled={!canEditCrm}
+                          onClick={() => setCreateLeadOpen(true)}
+                        >
+                          <Briefcase className="mr-1.5 h-3.5 w-3.5" />
+                          Criar lead no CRM
+                        </Button>
+                      ) : null}
+                    </div>
                     <ChatCrmHeader chat={activeChat} />
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   {offerClaimBoth && linkedNegotiation ? (
+                    <IconTip label="Assumir ambos">
                     <button
                       type="button"
                       onClick={() => void handleClaimChatAndNegotiation()}
@@ -2217,15 +2248,16 @@ export default function Inbox() {
                         !canEditInbox ||
                         !canEditCrm
                       }
-                      className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                      title="Assumir conversa e negócio vinculado"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                      aria-label="Assumir ambos"
                       data-testid="inbox-claim-both"
                     >
                       <Hand className="h-4 w-4" />
-                      <span className="hidden sm:inline">Assumir ambos</span>
                     </button>
+                    </IconTip>
                   ) : null}
                   {!activeChat.assigneeId && !offerClaimBoth ? (
+                    <IconTip label="Assumir">
                     <button
                       type="button"
                       onClick={() => void claimChatMutation.mutateAsync(activeChat.id)}
@@ -2235,14 +2267,15 @@ export default function Inbox() {
                         claimCrmNegotiation.isPending ||
                         releaseCrmNegotiation.isPending
                       }
-                      className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                      title={!canEditInbox ? "Seu papel nao tem permissao para assumir conversa" : "Assumir conversa"}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                      aria-label="Assumir conversa"
                     >
                       <Hand className="h-4 w-4" />
-                      <span className="hidden sm:inline">Assumir</span>
                     </button>
+                    </IconTip>
                   ) : null}
                   {showClaimNegotiation && linkedNegotiation && !offerClaimBoth ? (
+                    <IconTip label="Assumir negócio">
                     <button
                       type="button"
                       onClick={() => {
@@ -2268,14 +2301,15 @@ export default function Inbox() {
                         releaseCrmNegotiation.isPending ||
                         !canEditCrm
                       }
-                      className="inline-flex h-10 items-center gap-2 rounded-full border border-[#c4b5fd] bg-[#F3EBFC] px-3 text-sm font-medium text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
-                      title="Assumir negócio do pool (CRM)"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#c4b5fd] bg-[#F3EBFC] text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
+                      aria-label="Assumir negócio"
                     >
                       <Briefcase className="h-4 w-4" />
-                      <span className="hidden sm:inline">Assumir negócio</span>
                     </button>
+                    </IconTip>
                   ) : null}
                   {showReleaseNegotiation && linkedNegotiation ? (
+                    <IconTip label="Devolver negócio">
                     <button
                       type="button"
                       onClick={() => {
@@ -2301,14 +2335,15 @@ export default function Inbox() {
                         claimChatMutation.isPending ||
                         !canEditCrm
                       }
-                      className="inline-flex h-10 items-center gap-2 rounded-full border border-[#c4b5fd] bg-[#F3EBFC] px-3 text-sm font-medium text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
-                      title="Devolver negócio ao pool (CRM)"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#c4b5fd] bg-[#F3EBFC] text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
+                      aria-label="Devolver negócio"
                     >
                       <Users className="h-4 w-4" />
-                      <span className="hidden sm:inline">Devolver negócio</span>
                     </button>
+                    </IconTip>
                   ) : null}
                   {isChatSnoozed(activeChat) ? (
+                    <IconTip label="Remover adiamento">
                     <button
                       type="button"
                       onClick={() => {
@@ -2332,11 +2367,13 @@ export default function Inbox() {
                       }}
                       disabled={clearSnoozeMutation.isPending || !canActOnChat || !canEditInbox}
                       className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-amber-800 transition-colors hover:bg-amber-100"
-                      title="Remover adiamento"
+                      aria-label="Remover adiamento"
                     >
                       <AlarmClock className="h-4 w-4" />
                     </button>
+                    </IconTip>
                   ) : (
+                    <IconTip label="Adiar conversa">
                     <button
                       type="button"
                       onClick={() => {
@@ -2360,11 +2397,13 @@ export default function Inbox() {
                       }}
                       disabled={!canActOnChat || !canEditInbox}
                       className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
-                      title={canActOnChat ? "Adiar conversa" : chatAssigneeBlockedMessage()}
+                      aria-label="Adiar conversa"
                     >
                       <AlarmClock className="h-4 w-4" />
                     </button>
+                    </IconTip>
                   )}
+                  <IconTip label="Transferir">
                   <button
                     type="button"
                     onClick={() => {
@@ -2401,19 +2440,14 @@ export default function Inbox() {
                       setAssignDialogOpen(true);
                     }}
                     disabled={!canEditInbox}
-                    className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                    title={
-                      !canEditInbox
-                        ? "Seu papel nao tem permissao para transferir conversa"
-                        : activeChat.assigneeName
-                          ? `Transferir · responsável: ${activeChat.assigneeName}`
-                          : "Atribuir conversa a um atendente"
-                    }
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
                     data-testid="inbox-transfer-chat"
+                    aria-label="Transferir"
                   >
                     <ArrowRightLeft className="h-4 w-4" />
-                    <span className="hidden text-xs sm:inline">Transferir</span>
                   </button>
+                  </IconTip>
+                  <IconTip label="Notificações">
                   <button
                     type="button"
                     onClick={() => {
@@ -2426,17 +2460,7 @@ export default function Inbox() {
                         ? "bg-wchat-100 text-primary hover:bg-wchat-200"
                         : "text-muted-foreground hover:bg-wchat-100 hover:text-foreground",
                     )}
-                    title={
-                      notificationSettings.permission === "unsupported"
-                        ? "Notificacoes nao suportadas neste navegador"
-                        : !notificationSettings.enabled
-                          ? "Ativar notificacoes"
-                          : notificationSettings.permission === "denied"
-                            ? "Permissao do navegador bloqueada"
-                            : notificationSettings.permission === "default"
-                              ? "Ativar permissao do navegador"
-                              : "Notificacoes ativas (clique para desligar)"
-                    }
+                    aria-label="Notificações"
                   >
                     {notificationSettings.enabled &&
                     notificationSettings.permission !== "denied" ? (
@@ -2445,32 +2469,41 @@ export default function Inbox() {
                       <BellOff className="h-4 w-4" />
                     )}
                   </button>
+                  </IconTip>
+                  <IconTip label="Venda">
                   <button
                     type="button"
                     onClick={handleOpenSaleFlow}
                     disabled={!canMarkSaleFromChat || !canEditCrm || !canEditInbox}
-                    title={
-                      !canEditCrm
-                        ? "Seu papel nao tem permissao para registrar venda"
-                        : !canActOnChat
-                        ? chatAssigneeBlockedMessage()
-                        : !canModifyLinkedNegotiation
-                          ? negotiationAssigneeBlockedMessage()
-                          : "Registrar venda"
-                    }
-                    className="inline-flex h-10 items-center gap-2 rounded-full bg-wchat-100 px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-wchat-200 disabled:pointer-events-none disabled:opacity-45"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-wchat-100 text-foreground transition-colors hover:bg-wchat-200 disabled:pointer-events-none disabled:opacity-45"
+                    aria-label="Registrar venda"
                   >
                     <ShoppingCart className="h-4 w-4" />
-                    <span className="hidden sm:inline">Venda</span>
                   </button>
+                  </IconTip>
+                  <IconTip label="Ligar">
+                    <span className="inline-flex">
+                      <CallButton
+                        phone={activeChat.remotePhoneE164 || activeChat.remotePhoneDigits || null}
+                        customerId={activeChat.customerId}
+                        chatId={activeChat.id}
+                        negotiationId={linkedNegotiation?.id ?? activeChat.primaryNegotiationId ?? null}
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 rounded-full text-muted-foreground hover:bg-wchat-100 hover:text-foreground"
+                      />
+                    </span>
+                  </IconTip>
+                  <IconTip label="Perfil do cliente">
                   <button
                     type="button"
                     onClick={() => setProfileOpen(true)}
                     className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                    title="Perfil do cliente"
+                    aria-label="Perfil do cliente"
                   >
                     <UserRound className="h-4 w-4" />
                   </button>
+                  </IconTip>
                 </div>
               </>
             ) : (
@@ -2572,7 +2605,6 @@ export default function Inbox() {
               setBodyText(value);
             }}
             onSend={handleSendMessage}
-            sendPending={sendMessage.isPending || createChatNote.isPending}
             sendDisabled={
               attachmentUploading ||
               !activeChat ||
@@ -2627,14 +2659,23 @@ export default function Inbox() {
 
       {/* Diálogo de atribuição/transferência de conversa */}
       {activeChat ? (
-        <SnoozeChatDialog
-          open={snoozeDialogOpen}
-          onOpenChange={setSnoozeDialogOpen}
-          pending={snoozeChatMutation.isPending}
-          onConfirm={(until) =>
-            snoozeChatMutation.mutateAsync({ chatId: activeChat.id, until })
-          }
-        />
+        <>
+          <SnoozeChatDialog
+            open={snoozeDialogOpen}
+            onOpenChange={setSnoozeDialogOpen}
+            pending={snoozeChatMutation.isPending}
+            onConfirm={(until) =>
+              snoozeChatMutation.mutateAsync({ chatId: activeChat.id, until })
+            }
+          />
+          <CreateLeadDialog
+            chat={activeChat}
+            open={createLeadOpen}
+            onOpenChange={setCreateLeadOpen}
+            canEditCrm={canEditCrm}
+            canActOnChat={canActOnChat}
+          />
+        </>
       ) : null}
 
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

@@ -42,7 +42,6 @@ export type MessageInputProps = {
   onBodyTextChange: (value: string) => void;
   onSend: () => void;
   sendDisabled: boolean;
-  sendPending?: boolean;
   /** Bloqueia anexo, áudio e emoji (ex.: lead não assumido). */
   composerActionsDisabled?: boolean;
   showEmojiPicker: boolean;
@@ -88,7 +87,6 @@ export function MessageInput({
   onBodyTextChange,
   onSend,
   sendDisabled,
-  sendPending = false,
   composerActionsDisabled = false,
   showEmojiPicker,
   onToggleEmojiPicker,
@@ -440,11 +438,6 @@ export function MessageInput({
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Subindo arquivo...
-              </>
-            ) : sendPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Enviando...
               </>
             ) : (
               <>

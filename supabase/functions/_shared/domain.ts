@@ -1015,6 +1015,8 @@ export async function ensureChat(
     lastMessageAt?: string | null;
     unreadIncrement?: number;
     unreadCount?: number | null;
+    /** Distribui o chat (round-robin) entre os atendentes da instância, se houver. */
+    autoAssign?: boolean;
   },
 ) {
   const normalized = normalizePhone(params.remoteJid);
@@ -1117,6 +1119,16 @@ export async function ensureChat(
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  // Distribuição por instância (round-robin) só para chats ainda sem dono.
+  if (params.autoAssign && data && !data.assignee_id) {
+    const { error: assignError } = await admin.rpc("auto_assign_instance_chat", {
+      p_chat_id: data.id,
+    });
+    if (assignError) {
+      console.error("ensureChat: auto_assign_instance_chat falhou", assignError);
+    }
   }
 
   return data;
@@ -1728,6 +1740,7 @@ export async function processMessagePayload(
     lastMessagePreview: bodyText,
     lastMessageAt: occurredAt,
     unreadIncrement: direction === "inbound" ? 1 : 0,
+    autoAssign: direction === "inbound",
   });
 
   const normalizedMediaMeta = extractNormalizedMediaMeta(payload);

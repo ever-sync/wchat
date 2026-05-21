@@ -1,4 +1,4 @@
-import { ChevronDown, ListFilter, Search, SquarePen, Tag, X } from "lucide-react";
+import { ChevronDown, ListFilter, Search, Smartphone, SquarePen, Tag, X } from "lucide-react";
 import { useRef, useState, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,9 +48,6 @@ export type ConversationListProps = {
 };
 
 type FilterSelectsProps = {
-  instances: WhatsappInstance[];
-  instanceId: string;
-  onInstanceChange: (value: string) => void;
   listScope: InboxListScope;
   onListScopeChange: (value: InboxListScope) => void;
   snoozedFilter: "active" | "snoozed";
@@ -61,9 +58,6 @@ type FilterSelectsProps = {
 };
 
 function ConversationFilterSelects({
-  instances,
-  instanceId,
-  onInstanceChange,
   listScope,
   onListScopeChange,
   snoozedFilter,
@@ -74,37 +68,21 @@ function ConversationFilterSelects({
 }: FilterSelectsProps) {
   return (
     <>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(104px,1fr)] gap-2">
-        <Select value={instanceId} onValueChange={onInstanceChange}>
-          <SelectTrigger className="h-9 rounded-lg border-0 bg-wchat-50 text-xs text-foreground focus:ring-primary">
-            <SelectValue placeholder="Instancia" />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-card text-foreground">
-            <SelectItem value="all">Todas as instancias</SelectItem>
-            {instances.map((instance) => (
-              <SelectItem key={instance.id} value={instance.id}>
-                {instance.displayName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={listScope}
-          onValueChange={(value) => onListScopeChange(value as InboxListScope)}
-        >
-          <SelectTrigger className="h-9 rounded-lg border-0 bg-wchat-50 text-xs text-foreground focus:ring-primary">
-            <SelectValue placeholder="Situacao" />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-card text-foreground">
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="open">Em aberto</SelectItem>
-            <SelectItem value="closed">Encerradas</SelectItem>
-            <SelectItem value="resolved">Resolvida</SelectItem>
-            <SelectItem value="lost">Perdidas</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Select
+        value={listScope}
+        onValueChange={(value) => onListScopeChange(value as InboxListScope)}
+      >
+        <SelectTrigger className="h-9 rounded-lg border-0 bg-wchat-50 text-xs text-foreground focus:ring-primary">
+          <SelectValue placeholder="Situacao" />
+        </SelectTrigger>
+        <SelectContent className="border-border bg-card text-foreground">
+          <SelectItem value="all">Todas</SelectItem>
+          <SelectItem value="open">Em aberto</SelectItem>
+          <SelectItem value="closed">Encerradas</SelectItem>
+          <SelectItem value="resolved">Resolvida</SelectItem>
+          <SelectItem value="lost">Perdidas</SelectItem>
+        </SelectContent>
+      </Select>
 
       <div className="grid grid-cols-2 gap-2">
         <Select
@@ -295,9 +273,6 @@ export function ConversationList({
                 <p className="mb-2 text-sm font-semibold tracking-tight">Filtros</p>
                 <div className="space-y-2.5">
                   <ConversationFilterSelects
-                    instances={instances}
-                    instanceId={instanceId}
-                    onInstanceChange={onInstanceChange}
                     listScope={listScope}
                     onListScopeChange={onListScopeChange}
                     snoozedFilter={snoozedFilter}
@@ -354,37 +329,62 @@ export function ConversationList({
             />
           </div>
 
-          <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
+          <div className="flex items-center gap-1.5">
+            <Select value={instanceId} onValueChange={onInstanceChange}>
+              <SelectTrigger
+                aria-label="Filtrar por instância"
                 className={cn(
-                  "flex h-8 w-full items-center justify-between gap-2 rounded-lg bg-wchat-50 px-2.5 text-[11px] text-foreground transition-colors hover:bg-wchat-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
-                  activeTagCount > 0 && "ring-1 ring-primary/35",
+                  "h-8 flex-1 min-w-0 rounded-lg border-0 bg-wchat-50 px-2.5 text-[11px] text-foreground shadow-none focus:ring-1 focus:ring-primary [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:opacity-100 [&>svg]:text-muted-foreground",
+                  instanceId !== "all" && "ring-1 ring-primary/35",
                 )}
-                aria-label="Filtrar por etiquetas"
               >
                 <span className="flex min-w-0 items-center gap-1.5 truncate">
-                  <Tag className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  {tagFilterLabel}
+                  <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <SelectValue placeholder="Instância" />
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              className="w-[var(--radix-popover-trigger-width)] border-border bg-card p-1.5 text-foreground"
-            >
-              <ConversationTagFilterList
-                tagsLoading={tagsLoading}
-                availableTags={availableTags}
-                selectedTagIds={selectedTagIds}
-                onTagToggle={onTagToggle}
-                onClearTags={onClearTags}
-                onAfterClear={() => setTagsPopoverOpen(false)}
-              />
-            </PopoverContent>
-          </Popover>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as instâncias</SelectItem>
+                {instances.map((instance) => (
+                  <SelectItem key={instance.id} value={instance.id}>
+                    {instance.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex h-8 flex-1 min-w-0 items-center justify-between gap-2 rounded-lg bg-wchat-50 px-2.5 text-[11px] text-foreground transition-colors hover:bg-wchat-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                    activeTagCount > 0 && "ring-1 ring-primary/35",
+                  )}
+                  aria-label="Filtrar por etiquetas"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    <Tag className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    {tagFilterLabel}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] border-border bg-card p-1.5 text-foreground"
+              >
+                <ConversationTagFilterList
+                  tagsLoading={tagsLoading}
+                  availableTags={availableTags}
+                  selectedTagIds={selectedTagIds}
+                  onTagToggle={onTagToggle}
+                  onClearTags={onClearTags}
+                  onAfterClear={() => setTagsPopoverOpen(false)}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
 
           <div
             className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"

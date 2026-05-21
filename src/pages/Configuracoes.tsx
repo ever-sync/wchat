@@ -6,9 +6,10 @@ import {
   Loader2,
   Mail,
   MessageSquare,
+  Eye,
   Pencil,
   Plus,
-  QrCode,
+  Settings,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -93,6 +94,10 @@ import {
 } from "@/lib/api/integrations";
 import { RolePermissionsMatrix } from "@/components/settings/RolePermissionsMatrix";
 import { ChatBusinessHoursSettingsSection } from "@/components/settings/ChatBusinessHoursSettingsSection";
+import { InstanceAttendantsDialog } from "@/components/settings/InstanceAttendantsDialog";
+import { InstanceDetailsDialog } from "@/components/settings/InstanceDetailsDialog";
+import { InstanceEditDialog } from "@/components/settings/InstanceEditDialog";
+import { useInstanceAttendantCounts } from "@/lib/api/instance-attendants";
 import { ChatTagsSettingsSection } from "@/components/settings/ChatTagsSettingsSection";
 import { ChatTaskTemplatesSettingsSection } from "@/components/settings/ChatTaskTemplatesSettingsSection";
 import {
@@ -110,7 +115,7 @@ import {
   parseIntegrationsSectionParam,
   type IntegrationsSettingsSection,
 } from "@/components/settings/IntegrationsSectionNav";
-import type { QuickReply, QuickReplyScope, UserRole } from "@/types/domain";
+import type { QuickReply, QuickReplyScope, UserRole, WhatsappInstance } from "@/types/domain";
 import { ROLE_LABELS } from "@/lib/permissions/role-permissions";
 
 const statusStyles = {
@@ -138,12 +143,6 @@ function parseSettingsTabParam(raw: string | null): SettingsTab {
   return "perfil";
 }
 
-function qrSrc(value?: string | null) {
-  if (!value?.trim()) return null;
-  if (value.startsWith("data:image") || value.startsWith("http")) return value;
-  return `data:image/png;base64,${value.trim()}`;
-}
-
 export default function Configuracoes() {
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -156,6 +155,9 @@ export default function Configuracoes() {
   const [integrationsSection, setIntegrationsSection] = useState<IntegrationsSettingsSection>(() =>
     parseIntegrationsSectionParam(searchParams.get("secao")),
   );
+  const [attendantsInstance, setAttendantsInstance] = useState<{ id: string; displayName: string } | null>(null);
+  const [viewInstance, setViewInstance] = useState<WhatsappInstance | null>(null);
+  const [editInstance, setEditInstance] = useState<WhatsappInstance | null>(null);
   const [chatConfigSection, setChatConfigSection] = useState<ChatConfigSettingsSection>(() =>
     parseChatConfigSectionParam(searchParams.get("secao")),
   );
@@ -333,6 +335,7 @@ export default function Configuracoes() {
   const deleteInvite = useDeleteCollaboratorInvite();
   const updateCollaboratorRole = useUpdateCollaboratorRole();
   const { data: instances = [], isLoading, error } = useWhatsappInstances({ enabled: tab === "integracoes" && canUseAuthenticatedActions });
+  const { data: attendantCounts } = useInstanceAttendantCounts({ enabled: tab === "integracoes" && canUseAuthenticatedActions });
   const { data: tenantIntegrations } = useTenantIntegrations();
   const { data: tenantSettings } = useTenantSettings();
   const upsertIntegrations = useUpsertTenantIntegrations();
@@ -902,106 +905,152 @@ export default function Configuracoes() {
               {isLoading ? <p className="text-sm text-muted-foreground">Carregando instancias...</p> : error ? <p className="text-sm text-destructive">{error.message}</p> : instances.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Nenhuma instancia conectada ainda.</div>
               ) : instances.map((instance) => {
-                const src = qrSrc(instance.lastQr);
                 return (
-                  <div key={instance.id} className="rounded-2xl border border-border p-5">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-bold text-foreground">{instance.displayName}</h3>
-                          <Badge className={statusStyles[instance.status]}>{instance.status === "connected" ? "Conectada" : instance.status === "connecting" ? "Conectando" : instance.status === "error" ? "Erro" : "Desconectada"}</Badge>
-                          {instance.isDefault ? <Badge className="bg-accent text-accent-foreground">Padrao</Badge> : null}
-                        </div>
-                        <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                          <p><strong className="text-foreground">Instancia:</strong> {instance.uazapiInstanceName}</p>
-                          <p><strong className="text-foreground">Numero:</strong> {instance.phoneNumber ?? "aguardando leitura"}</p>
-                          <p><strong className="text-foreground">Base URL:</strong> {instance.uazapiBaseUrl}</p>
-                          <p><strong className="text-foreground">Ultima sync:</strong> {instance.lastSyncAt ?? "nunca"}</p>
-                        </div>
-                        {instance.lastError ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"><AlertTriangle className="mr-2 inline h-4 w-4" />{instance.lastError}</div> : null}
-                        {src ? <div className="w-full max-w-[260px] rounded-2xl border border-border bg-white p-3"><img src={src} alt={`QR Code da instancia ${instance.displayName}`} className="h-auto w-full rounded-xl border border-border bg-white" /><p className="mt-3 text-xs text-muted-foreground">Escaneie este QR no WhatsApp.</p></div> : null}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3 xl:w-[420px]">
-                        <Card className="border-border/60 bg-secondary/50"><CardContent className="flex flex-col items-center justify-center gap-2 p-4 text-center"><QrCode className="h-6 w-6 text-accent" /><p className="text-xs text-muted-foreground">QR para conectar</p><p className="text-xs text-foreground">{src ? "Escaneie no WhatsApp" : "Aguardando QR"}</p></CardContent></Card>
-                        <Button
+                  <div
+                    key={instance.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3"
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h3 className="truncate text-base font-bold text-foreground">{instance.displayName}</h3>
+                      <Badge className={statusStyles[instance.status]}>{instance.status === "connected" ? "Conectada" : instance.status === "connecting" ? "Conectando" : instance.status === "error" ? "Erro" : "Desconectada"}</Badge>
+                      {instance.isDefault ? <Badge className="bg-accent text-accent-foreground">Padrao</Badge> : null}
+                      {attendantCounts && (attendantCounts[instance.id] ?? 0) === 0 ? (
+                        <Badge
                           variant="outline"
-                          onClick={() => {
-                            if (!canUseAuthenticatedActions) {
-                              toast({
-                                title: "Sessao indisponivel",
-                                description: "Faca login novamente antes de sincronizar esta instancia.",
-                                variant: "destructive",
-                              });
-                              useAppStore.getState().addNotification({
-                                tipo: "erro",
-                                titulo: "Sessao indisponivel",
-                                descricao: "Faca login novamente antes de sincronizar esta instancia.",
-                              });
-                              return;
-                            }
-
+                          className="gap-1 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300"
+                          title="Sem atendentes vinculados: os chats desta instância ficam visíveis só para gestores até você vincular atendentes (botão Configurações)."
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Sem atendentes
+                        </Badge>
+                      ) : null}
+                      {instance.lastError ? (
+                        <AlertTriangle className="h-4 w-4 text-destructive" aria-label="Com erro">
+                          <title>{instance.lastError}</title>
+                        </AlertTriangle>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        title="Configurações"
+                        aria-label="Configurações"
+                        disabled={!canEditConfiguracoes}
+                        onClick={() => {
                           if (!canEditConfiguracoes) {
-                            toast({
-                              title: "Ação indisponível",
-                              description: "Seu papel nao tem permissao para sincronizar instancias.",
-                              variant: "destructive",
-                            });
+                            toast({ title: "Ação indisponível", description: "Seu papel nao tem permissao para configurar atendentes.", variant: "destructive" });
                             return;
                           }
-
+                          setAttendantsInstance({ id: instance.id, displayName: instance.displayName });
+                        }}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        title="Sincronizar"
+                        aria-label="Sincronizar"
+                        disabled={syncInstances.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
+                        onClick={() => {
+                          if (!canUseAuthenticatedActions) {
+                            toast({ title: "Sessao indisponivel", description: "Faca login novamente antes de sincronizar esta instancia.", variant: "destructive" });
+                            useAppStore.getState().addNotification({ tipo: "erro", titulo: "Sessao indisponivel", descricao: "Faca login novamente antes de sincronizar esta instancia." });
+                            return;
+                          }
+                          if (!canEditConfiguracoes) {
+                            toast({ title: "Ação indisponível", description: "Seu papel nao tem permissao para sincronizar instancias.", variant: "destructive" });
+                            return;
+                          }
                           syncInstances.mutate({ instanceId: instance.id });
                         }}
-                          disabled={syncInstances.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
-                        >
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Sync
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={async () => {
-                            if (!canUseAuthenticatedActions) {
-                              toast({
-                                title: "Sessao indisponivel",
-                                description: "Faca login novamente antes de remover uma instancia.",
-                                variant: "destructive",
-                              });
-                              useAppStore.getState().addNotification({
-                                tipo: "erro",
-                                titulo: "Sessao indisponivel",
-                                descricao: "Faca login novamente antes de remover uma instancia.",
-                              });
-                              return;
-                            }
-
-                            if (!canEditConfiguracoes) {
-                              toast({
-                                title: "Ação indisponível",
-                                description: "Seu papel nao tem permissao para remover uma instancia.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            await deleteInstance.mutateAsync(instance.id);
-                            const archived = `${instance.displayName} saiu da operacao e as conversas ficaram arquivadas.`;
-                            toast({ title: "Canal arquivado", description: archived });
-                            useAppStore.getState().addNotification({
-                              tipo: "aviso",
-                              titulo: "Canal arquivado",
-                              descricao: archived,
-                            });
-                          }}
-                          disabled={deleteInstance.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remover
-                        </Button>
-                      </div>
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        title="Visualizar"
+                        aria-label="Visualizar"
+                        onClick={() => setViewInstance(instance)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        title="Editar"
+                        aria-label="Editar"
+                        disabled={!canEditConfiguracoes}
+                        onClick={() => {
+                          if (!canEditConfiguracoes) {
+                            toast({ title: "Ação indisponível", description: "Seu papel nao tem permissao para editar instancias.", variant: "destructive" });
+                            return;
+                          }
+                          setEditInstance(instance);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-destructive hover:text-destructive"
+                        title="Remover"
+                        aria-label="Remover"
+                        disabled={deleteInstance.isPending || !canUseAuthenticatedActions || !canEditConfiguracoes}
+                        onClick={async () => {
+                          if (!canUseAuthenticatedActions) {
+                            toast({ title: "Sessao indisponivel", description: "Faca login novamente antes de remover uma instancia.", variant: "destructive" });
+                            useAppStore.getState().addNotification({ tipo: "erro", titulo: "Sessao indisponivel", descricao: "Faca login novamente antes de remover uma instancia." });
+                            return;
+                          }
+                          if (!canEditConfiguracoes) {
+                            toast({ title: "Ação indisponível", description: "Seu papel nao tem permissao para remover uma instancia.", variant: "destructive" });
+                            return;
+                          }
+                          await deleteInstance.mutateAsync(instance.id);
+                          const archived = `${instance.displayName} saiu da operacao e as conversas ficaram arquivadas.`;
+                          toast({ title: "Canal arquivado", description: archived });
+                          useAppStore.getState().addNotification({ tipo: "aviso", titulo: "Canal arquivado", descricao: archived });
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 );
               })}
             </CardContent>
           </Card>
+          <InstanceAttendantsDialog
+            instance={attendantsInstance}
+            open={!!attendantsInstance}
+            onOpenChange={(o) => {
+              if (!o) setAttendantsInstance(null);
+            }}
+            canEdit={canEditConfiguracoes}
+          />
+          <InstanceDetailsDialog
+            instance={viewInstance}
+            open={!!viewInstance}
+            onOpenChange={(o) => {
+              if (!o) setViewInstance(null);
+            }}
+          />
+          <InstanceEditDialog
+            instance={editInstance}
+            open={!!editInstance}
+            onOpenChange={(o) => {
+              if (!o) setEditInstance(null);
+            }}
+            canEdit={canEditConfiguracoes}
+          />
                 </>
               ) : null}
 

@@ -338,6 +338,46 @@ export async function deleteWhatsappInstance(id: string) {
   }
 }
 
+export type WhatsappInstanceUpdateInput = {
+  displayName?: string;
+  uazapiBaseUrl?: string;
+  isDefault?: boolean;
+};
+
+export async function updateWhatsappInstance(id: string, input: WhatsappInstanceUpdateInput) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure o Supabase antes de editar uma instância.");
+  }
+  const tenantId = await getCurrentTenantId();
+  const supabase = requireSupabase();
+
+  const patch: Record<string, unknown> = {};
+  if (input.displayName !== undefined) patch.display_name = input.displayName.trim();
+  if (input.uazapiBaseUrl !== undefined) patch.uazapi_base_url = input.uazapiBaseUrl.trim();
+  if (input.isDefault !== undefined) patch.is_default = input.isDefault;
+
+  // Só pode haver uma instância padrão por tenant.
+  if (input.isDefault === true) {
+    const { error: clearError } = await supabase
+      .from("whatsapp_instances")
+      .update({ is_default: false })
+      .eq("tenant_id", tenantId)
+      .neq("id", id);
+    if (clearError) throw new Error(clearError.message);
+  }
+
+  const { data, error } = await supabase
+    .from("whatsapp_instances")
+    .update(patch)
+    .eq("tenant_id", tenantId)
+    .eq("id", id)
+    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapInstance(data as InstanceRow);
+}
+
 export async function listInboxChats(filters: InboxChatFilters = {}) {
   if (isE2eMockAuth) {
     return listE2eInboxChats(filters);
@@ -1063,6 +1103,21 @@ export function useDeleteWhatsappInstance(
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
       await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useUpdateWhatsappInstance(
+  options?: UseMutationOptions<WhatsappInstance, Error, { id: string; input: WhatsappInstanceUpdateInput }>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }) => updateWhatsappInstance(id, input),
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
       await options?.onSuccess?.(data, variables, context);
     },
   });
@@ -1825,11 +1880,51 @@ export function useSendWhatsappMessage(
         previewTimestamp,
       );
 
-      return { previousChats };
+      // Bolha otimista: a mensagem aparece na conversa na hora (status "queued" =
+      // relógio) e é reconciliada com a real no onSuccess/Realtime (dedupe por
+      // conteúdo) ou marcada "failed" no onError (com Reenviar/Descartar).
+      const tempId = `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const optimisticMessage: WhatsappMessage = {
+        id: tempId,
+        chatId: variables.chatId,
+        instanceId: variables.instanceId,
+        direction: "outbound",
+        messageType: variables.messageType,
+        status: "queued",
+        bodyText: variables.bodyText ?? null,
+        mediaUrl: variables.mediaUrl ?? null,
+        payloadJson: variables.payload as Record<string, unknown> | undefined,
+        quotedMessageId: variables.quotedMessageId ?? null,
+        createdAt: previewTimestamp,
+        sentAt: previewTimestamp,
+      };
+      patchInboxMessagesCache(queryClient, variables.chatId, (old) => {
+        if (!old?.pages?.length) {
+          return { pageParams: [null], pages: [{ messages: [optimisticMessage], hasMore: false }] };
+        }
+        return { ...old, pages: upsertOutboundInboxMessagePages(old.pages, optimisticMessage) };
+      });
+
+      return { previousChats, tempId };
     },
     onError: (error, variables, context) => {
       if (context?.previousChats) {
         restoreInboxChatsSnapshots(queryClient, context.previousChats);
+      }
+      // Mantém a bolha, marcada como "failed" → mostra Reenviar/Descartar.
+      if (context?.tempId) {
+        patchInboxMessagesCache(queryClient, variables.chatId, (old) => {
+          if (!old?.pages?.length) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((m) =>
+                m.id === context.tempId ? { ...m, status: "failed" as const } : m,
+              ),
+            })),
+          };
+        });
       }
       void options?.onError?.(error, variables, context);
     },
