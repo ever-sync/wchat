@@ -1,10 +1,11 @@
 import { memo } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlarmClock, Clock } from "lucide-react";
+import { AlarmClock, Clock, Lock } from "lucide-react";
 import { isChatSlaBreached, isChatSnoozed, slaMinutesRemaining } from "@/lib/inbox-chat-rules";
+import { mustAssumeUnassignedChatToView } from "@/lib/crm/negotiation-assignee";
 import { cn } from "@/lib/utils";
-import type { InboxChat } from "@/types/domain";
+import type { InboxChat, UserRole } from "@/types/domain";
 import { ConversationAvatar } from "./ConversationAvatar";
 
 const MESSAGE_PREVIEW_MAX_CHARS = 40;
@@ -91,12 +92,15 @@ export const ConversationRow = memo(function ConversationRow({
   active,
   onSelect,
   onPrefetch,
+  viewerRole,
 }: {
   chat: InboxChat;
   active: boolean;
   /** Recebe o id estável; mantenha a referência estável no pai para o memo valer. */
   onSelect: (chatId: string) => void;
   onPrefetch?: (chatId: string) => void;
+  /** Papel do usuário logado: atendimento não vê o preview de chats do pool até assumir. */
+  viewerRole?: UserRole;
 }) {
   const subtitle =
     chat.customerName && chat.customerName.trim() !== "" && chat.customerName !== chat.displayName
@@ -112,6 +116,9 @@ export const ConversationRow = memo(function ConversationRow({
     lastPreviewTrimmed && lastPreviewTrimmed.length > 0
       ? shortenMessagePreview(lastPreviewTrimmed)
       : "Sem mensagens recentes";
+  // Privacidade: atendimento não vê o conteúdo da última mensagem de um chat
+  // do pool (sem dono) até assumi-lo — mesma regra que bloqueia a thread.
+  const previewLocked = mustAssumeUnassignedChatToView(viewerRole, chat.assigneeId);
 
   return (
     <button
@@ -154,10 +161,18 @@ export const ConversationRow = memo(function ConversationRow({
             <p
               className={cn(
                 "min-w-0 flex-1 line-clamp-1 text-[12px] leading-snug text-muted-foreground",
-                chat.unreadCount > 0 && !active && "font-medium text-foreground",
+                !previewLocked && chat.unreadCount > 0 && !active && "font-medium text-foreground",
+                previewLocked && "italic",
               )}
             >
-              {messagePreviewDisplay}
+              {previewLocked ? (
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden />
+                  Assuma para ver a mensagem
+                </span>
+              ) : (
+                messagePreviewDisplay
+              )}
             </p>
             <div className="flex shrink-0 items-center gap-1">
               {snoozed ? (

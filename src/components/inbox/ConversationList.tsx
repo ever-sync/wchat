@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { INBOX_QUICK_FILTER_OPTIONS, inboxQuickFilterLabel } from "@/lib/inbox-quick-filters";
-import type { ChatTag, InboxChat, InboxListScope, InboxQuickFilter, WhatsappInstance } from "@/types/domain";
+import type { ChatTag, InboxChat, InboxListScope, InboxQuickFilter, UserRole, WhatsappInstance } from "@/types/domain";
 import { ConversationRow } from "./ConversationRow";
 
 export type ConversationListProps = {
@@ -35,6 +35,8 @@ export type ConversationListProps = {
   activeChatId: string | null;
   onSelectChat: (chatId: string) => void;
   onPrefetchChat: (chatId: string) => void;
+  /** Papel do usuário logado: repassado às linhas para ocultar preview de chats do pool. */
+  viewerRole?: UserRole;
   /** @deprecated Navegação ficou no rail estilo WhatsApp; mantido por compatibilidade. */
   showPainelExit?: boolean;
   searchInputRef?: RefObject<HTMLInputElement>;
@@ -230,6 +232,7 @@ export function ConversationList({
   activeChatId,
   onSelectChat,
   onPrefetchChat,
+  viewerRole,
   searchInputRef,
   assigneeFilterOptions,
   managerUnassignedCount,
@@ -474,6 +477,7 @@ export function ConversationList({
                       active={activeChatId === chat.id}
                       onSelect={onSelectChat}
                       onPrefetch={onPrefetchChat}
+                      viewerRole={viewerRole}
                     />
                   </div>
                 );

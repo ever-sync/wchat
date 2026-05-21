@@ -2108,6 +2108,7 @@ export default function Inbox() {
           activeChatId={activeChat?.id ?? null}
           onSelectChat={stableSelectChat}
           onPrefetchChat={stablePrefetchChat}
+          viewerRole={profile?.role}
           searchInputRef={searchInputRef}
           assigneeFilterOptions={inboxAssigneeFilterOptions}
           managerUnassignedCount={isManagerInbox ? managerUnassignedCount : undefined}

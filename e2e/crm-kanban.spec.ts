@@ -1,9 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { E2E_POOL_NEGOTIATION } from "../src/data/crm-e2e-fixtures";
 import { dragLocatorTo } from "./helpers/dnd";
+import { setE2eMockRole } from "./helpers/mock-role";
 
 test.describe("CRM Kanban (mock E2E)", () => {
   test.beforeEach(async ({ page }) => {
+    await setE2eMockRole(page, "operacao");
     await page.goto("/crm");
     await expect(page.getByTestId("crm-card-netoneto")).toBeVisible({ timeout: 20_000 });
   });

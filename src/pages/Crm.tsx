@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   closestCorners,
   DndContext,
@@ -2344,6 +2345,24 @@ function KanbanColumn({
     id: `stage-${stage.id}`,
   });
 
+  // O container de scroll da coluna é também o droppable do dnd-kit: compõe os
+  // dois refs (virtualizer + setNodeRef) no mesmo nó.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const setColumnRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollRef.current = node;
+      setNodeRef(node);
+    },
+    [setNodeRef],
+  );
+  const cardVirtualizer = useVirtualizer({
+    count: stage.cards.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 120,
+    getItemKey: (index) => stage.cards[index]?.id ?? index,
+    overscan: 6,
+  });
+
   return (
     <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col rounded-lg bg-[#E9ECEF] p-3 shadow-sm">
       <div className="mb-3 flex shrink-0 items-start justify-between gap-2">
@@ -2375,30 +2394,43 @@ function KanbanColumn({
       </div>
 
       <div
-        ref={setNodeRef}
+        ref={setColumnRef}
         data-testid={`crm-column-${stage.id}`}
         className={cn(
-          "scrollbar-hide flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain rounded-md transition-colors",
+          "scrollbar-hide min-h-0 flex-1 overflow-y-auto overscroll-y-contain rounded-md transition-colors",
           isOver && "bg-[#d8ecf7]/90 ring-2 ring-[#5B2FD4] ring-inset",
         )}
       >
-        {stage.cards.map((card) => (
-          <DraggableNegotiationCard
-            key={card.id}
-            card={card}
-            staleNegotiationDays={staleNegotiationDays}
-            canClaim={canClaim}
-            isClaimPending={isClaimPending}
-            canReleaseToPool={canReleaseToPool}
-            isReleasePending={isReleasePending}
-            onClaimNegotiation={onClaimNegotiation}
-            onReleaseNegotiation={onReleaseNegotiation}
-            onOpenNegotiation={onOpenNegotiation}
-            onOpenCustomer={onOpenCustomer}
-            onOpenChat={onOpenChat}
-            resolveAssigneeName={resolveAssigneeName}
-          />
-        ))}
+        {/* Virtualizado: renderiza só os cards visíveis (+overscan). Gap via pb-2. */}
+        <div className="relative w-full" style={{ height: cardVirtualizer.getTotalSize() }}>
+          {cardVirtualizer.getVirtualItems().map((virtualRow) => {
+            const card = stage.cards[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={cardVirtualizer.measureElement}
+                className="absolute left-0 top-0 w-full pb-2"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <DraggableNegotiationCard
+                  card={card}
+                  staleNegotiationDays={staleNegotiationDays}
+                  canClaim={canClaim}
+                  isClaimPending={isClaimPending}
+                  canReleaseToPool={canReleaseToPool}
+                  isReleasePending={isReleasePending}
+                  onClaimNegotiation={onClaimNegotiation}
+                  onReleaseNegotiation={onReleaseNegotiation}
+                  onOpenNegotiation={onOpenNegotiation}
+                  onOpenCustomer={onOpenCustomer}
+                  onOpenChat={onOpenChat}
+                  resolveAssigneeName={resolveAssigneeName}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
