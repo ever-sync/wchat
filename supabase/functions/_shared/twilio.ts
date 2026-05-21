@@ -1,5 +1,7 @@
 // Helpers Twilio (voz / click-to-call). Credenciais via secrets da Edge Function.
 
+import { timingSafeEqual } from "./timing-safe-equal.ts";
+
 export type TwilioConfig = {
   accountSid: string;
   authToken: string;
@@ -74,8 +76,8 @@ export async function validateTwilioSignature(
     data += key + params[key];
   }
   const expected = await hmacSha1Base64(authToken, data);
-  // Comparação simples (strings base64 de tamanho fixo).
-  return expected === signatureHeader;
+  // Comparação em tempo constante (evita timing side-channel).
+  return timingSafeEqual(expected, signatureHeader);
 }
 
 /** Cria uma chamada via Twilio REST. */

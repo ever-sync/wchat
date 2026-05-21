@@ -1,3 +1,5 @@
+import { formatBRL } from "@/lib/format";
+
 /** Tabela de honorários (parcela mensal × 36) — faixa por remuneração. */
 
 export const HONORARIOS_PARCELAS = 36;
@@ -71,7 +73,7 @@ export type HonorariosFaixaOpcao = {
 };
 
 function formatFaixaMoeda(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 export function labelFaixaRemuneracao(faixa: HonorariosFaixa, index: number): string {

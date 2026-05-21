@@ -106,8 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (supabase) {
+      // Captura a referência já estreitada: o TS perde o narrowing de `supabase`
+      // dentro dos closures async abaixo (hydrateProfile), então usamos `sb`.
+      const sb = supabase;
       let isMounted = true;
-      let profileChannel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+      let profileChannel: ReturnType<typeof sb.channel> | null = null;
 
       const applyDbProfile = (dbProfile: Partial<AppUserProfile>) => {
         if (!isMounted) return;
@@ -116,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const hydrateProfile = async (user: User | null) => {
         if (profileChannel) {
-          await supabase.removeChannel(profileChannel).catch(() => undefined);
+          await sb.removeChannel(profileChannel).catch(() => undefined);
           profileChannel = null;
         }
         if (!user) {
@@ -133,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         if (dbProfile) applyDbProfile(dbProfile);
 
-        profileChannel = supabase
+        profileChannel = sb
           .channel(`profile:${user.id}`)
           .on(
             "postgres_changes",

@@ -87,7 +87,7 @@ function ConverterTabTrigger({
             className="flex items-center justify-between gap-3 py-2 text-sm font-semibold"
           >
             <span>{item.label}</span>
-            {item.badge === "novo" ? (
+            {"badge" in item && item.badge === "novo" ? (
               <span className="inline-flex items-center rounded-md bg-cyan-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
                 Novo
               </span>

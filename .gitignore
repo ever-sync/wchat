@@ -13,6 +13,10 @@ dist-ssr
 *.tsbuildinfo
 *.local
 
+# Next.js build output (site institucional em website/)
+website/.next/
+website/out/
+
 # Secrets (use .env.example)
 .env
 .env.*

@@ -30,7 +30,17 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "Token do reCAPTCHA obrigatorio." }, 400);
   }
 
-  const secret = Deno.env.get("RECAPTCHA_SECRET_KEY")?.trim() || RECAPTCHA_TEST_SECRET_KEY;
+  // Fail-closed: sem RECAPTCHA_SECRET_KEY a verificação não pode acontecer.
+  // O secret de teste do Google retorna success:true para qualquer token, então
+  // só é permitido quando explicitamente habilitado em dev (RECAPTCHA_ALLOW_TEST_SECRET).
+  const configuredSecret = Deno.env.get("RECAPTCHA_SECRET_KEY")?.trim();
+  const allowTestSecret = Deno.env.get("RECAPTCHA_ALLOW_TEST_SECRET")?.trim() === "true";
+  const secret = configuredSecret || (allowTestSecret ? RECAPTCHA_TEST_SECRET_KEY : "");
+
+  if (!secret) {
+    console.error("RECAPTCHA_SECRET_KEY ausente; verificação indisponível.");
+    return jsonResponse({ error: "reCAPTCHA nao configurado no servidor." }, 500);
+  }
 
   const verifyResponse = await fetch(VERIFY_URL, {
     method: "POST",

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClienteRdPerfilView } from "@/components/cliente/ClienteRdPerfilView";
+import { formatBRL } from "@/lib/format";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
 import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
 import { CallButton } from "@/components/crm/CallButton";
@@ -1348,10 +1349,7 @@ function CrmNegotiationDetailContent({
                 funnelId: negotiation.funnelId,
               });
             }
-            const money = new Intl.NumberFormat("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            }).format(totalValue);
+            const money = formatBRL(totalValue);
             const itemsLabel =
               lines.length === 1 ? lines[0]?.productName : `${lines.length} itens`;
             toast({

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlarmClock, Clock } from "lucide-react";
@@ -85,16 +86,17 @@ function AssigneeChip({ name }: { name: string }) {
   );
 }
 
-export function ConversationRow({
+export const ConversationRow = memo(function ConversationRow({
   chat,
   active,
-  onClick,
-  onPointerEnter,
+  onSelect,
+  onPrefetch,
 }: {
   chat: InboxChat;
   active: boolean;
-  onClick: () => void;
-  onPointerEnter?: () => void;
+  /** Recebe o id estável; mantenha a referência estável no pai para o memo valer. */
+  onSelect: (chatId: string) => void;
+  onPrefetch?: (chatId: string) => void;
 }) {
   const subtitle =
     chat.customerName && chat.customerName.trim() !== "" && chat.customerName !== chat.displayName
@@ -115,8 +117,8 @@ export function ConversationRow({
     <button
       type="button"
       data-testid={`inbox-chat-${chat.id}`}
-      onClick={onClick}
-      onPointerEnter={onPointerEnter}
+      onClick={() => onSelect(chat.id)}
+      onPointerEnter={onPrefetch ? () => onPrefetch(chat.id) : undefined}
       className={cn(
         "group block w-full min-w-0 max-w-full overflow-hidden rounded-lg px-1.5 py-2 text-left transition-colors duration-150",
         active ? "bg-wchat-100 ring-1 ring-primary/20" : "hover:bg-wchat-50",
@@ -193,4 +195,4 @@ export function ConversationRow({
       </div>
     </button>
   );
-}
+});

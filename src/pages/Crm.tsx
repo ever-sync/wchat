@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   closestCorners,
@@ -22,6 +22,7 @@ import {
   Footprints,
   Info,
   List,
+  Loader2,
   MoreVertical,
   Pause,
   Play,
@@ -42,6 +43,7 @@ import {
   X,
 } from "lucide-react";
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
+import { formatBRL } from "@/lib/format";
 import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
@@ -427,7 +429,13 @@ export default function Crm() {
     return f;
   }, [appliedOwner, creationDateFilter, funnelId, profileId, statusFilter]);
 
-  const { data: dbRecords = [] } = useCrmNegotiations(crmListFilters);
+  const {
+    data: dbRecords = [],
+    isLoading: negotiationsLoading,
+    isError: negotiationsError,
+    error: negotiationsErrorObj,
+    refetch: refetchNegotiations,
+  } = useCrmNegotiations(crmListFilters);
   const { data: negotiationFunnelRefs = [] } = useCrmNegotiationFunnelRefs({
     enabled: isSupabaseConfigured,
   });
@@ -536,6 +544,16 @@ export default function Crm() {
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   }, [collaborators, isSupabaseConfigured, profile?.nome, profileId]);
+
+  // Callbacks estáveis p/ o card memoizado do Kanban (DraggableNegotiationCard).
+  const handleOpenCustomerCard = useCallback(
+    (customerId: string) => navigate(`/clientes/${customerId}`),
+    [navigate],
+  );
+  const resolveAssigneeName = useCallback(
+    (assigneeId: string) => attendants.find((a) => a.id === assigneeId)?.name?.trim() ?? null,
+    [attendants],
+  );
 
   const crmAttendantOptions = useMemo(() => {
     if (isSupabaseConfigured) {
@@ -1811,7 +1829,32 @@ export default function Crm() {
         </div>
       ) : null}
 
-      {view === "board" ? (
+      {isSupabaseConfigured && negotiationsError ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-6 py-8 text-center text-sm text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <p>
+              {negotiationsErrorObj instanceof Error
+                ? negotiationsErrorObj.message
+                : "Falha ao carregar as negociações."}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void refetchNegotiations()}
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      ) : isSupabaseConfigured && negotiationsLoading && dbRecords.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-sm text-[#868e96]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Carregando negociações...
+        </div>
+      ) : view === "board" ? (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={(e) => void handleDragEnd(e)}>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
             <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
@@ -1828,11 +1871,9 @@ export default function Crm() {
                   onClaimNegotiation={handleClaimNegotiation}
                   onReleaseNegotiation={handleReleaseNegotiation}
                   onOpenNegotiation={openNegotiationCard}
-                  onOpenCustomer={(customerId) => navigate(`/clientes/${customerId}`)}
+                  onOpenCustomer={handleOpenCustomerCard}
                   onOpenChat={openChatInbox}
-                  resolveAssigneeName={(assigneeId) =>
-                    attendants.find((a) => a.id === assigneeId)?.name?.trim() ?? null
-                  }
+                  resolveAssigneeName={resolveAssigneeName}
                   onColumnRefresh={() => {
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiation-stages"] });
@@ -1967,7 +2008,7 @@ export default function Crm() {
                         <TableCell className="text-[#495057]">{statusLabel(row.status)}</TableCell>
                         <TableCell className="text-[#495057]">
                           {row.totalValue > 0
-                            ? row.totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                            ? formatBRL(row.totalValue)
                             : "—"}
                         </TableCell>
                         <TableCell
@@ -2085,7 +2126,7 @@ function CrmPoolBadge({ className }: { className?: string }) {
   );
 }
 
-function DraggableNegotiationCard({
+const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   card,
   staleNegotiationDays,
   canClaim,
@@ -2259,7 +2300,7 @@ function DraggableNegotiationCard({
       </div>
     </article>
   );
-}
+});
 
 function KanbanColumn({
   stage,
@@ -2296,7 +2337,7 @@ function KanbanColumn({
   const columnValue = stage.cards.reduce((acc, c) => acc + c.totalValue, 0);
   const displayValue =
     columnValue > 0
-      ? columnValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      ? formatBRL(columnValue)
       : "R$ 0,00";
 
   const { setNodeRef, isOver } = useDroppable({

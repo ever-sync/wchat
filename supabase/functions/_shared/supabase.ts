@@ -9,6 +9,7 @@ import {
   PermissionDeniedError,
 } from "./role-permissions.ts";
 export { PermissionDeniedError } from "./role-permissions.ts";
+import { timingSafeEqual } from "./timing-safe-equal.ts";
 
 export function getRequiredEnv(name: string) {
   const value = Deno.env.get(name);
@@ -36,7 +37,9 @@ export function isInternalRequest(request: Request) {
   const expectedSecret = Deno.env.get("CRON_SECRET");
   const providedSecret = request.headers.get("x-cron-secret");
 
-  return Boolean(expectedSecret && providedSecret && expectedSecret === providedSecret);
+  return Boolean(
+    expectedSecret && providedSecret && timingSafeEqual(expectedSecret, providedSecret),
+  );
 }
 
 export async function requireTenantContext(request: Request) {

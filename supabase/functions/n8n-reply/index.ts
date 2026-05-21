@@ -8,18 +8,10 @@ import {
 } from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
+import { timingSafeEqual } from "../_shared/timing-safe-equal.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 300;
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
 
 function parseTimestampSeconds(raw: string | null): number | null {
   if (!raw) return null;

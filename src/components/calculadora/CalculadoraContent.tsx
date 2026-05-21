@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { buildMensagemOfertaCliente } from "@/lib/calculadora-mensagem-cliente";
+import { formatBRL } from "@/lib/format";
 import {
   maskCurrencyInputChange,
   parseCurrencyInput,
@@ -20,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 type CalculadoraContentProps = {

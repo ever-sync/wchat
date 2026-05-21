@@ -14,6 +14,7 @@ import {
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { logStructured } from "../_shared/log.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
+import { timingSafeEqual } from "../_shared/timing-safe-equal.ts";
 
 function normalizeReceiptStatus(value: unknown) {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -132,7 +133,7 @@ Deno.serve(async (request) => {
     }
 
     const instance = await getInstanceById(admin, instanceId);
-    if (instance.webhook_token !== token) {
+    if (!instance.webhook_token || !timingSafeEqual(instance.webhook_token, token)) {
       throw new Error("Invalid webhook token.");
     }
 

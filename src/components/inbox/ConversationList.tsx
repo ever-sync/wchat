@@ -443,8 +443,8 @@ export function ConversationList({
                     key={chat.id}
                     chat={chat}
                     active={activeChatId === chat.id}
-                    onClick={() => onSelectChat(chat.id)}
-                    onPointerEnter={() => onPrefetchChat(chat.id)}
+                    onSelect={onSelectChat}
+                    onPrefetch={onPrefetchChat}
                   />
                 ))}
               </div>

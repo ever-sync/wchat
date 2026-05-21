@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatBRL } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,7 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import type { CrmNegotiationProduct } from "@/types/domain";
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 function parseQuantity(value: string): number {

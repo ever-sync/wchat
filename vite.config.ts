@@ -29,7 +29,16 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      rollupOptions: {},
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "react-vendor": ["react", "react-dom", "react-router-dom"],
+            "supabase-vendor": ["@supabase/supabase-js"],
+            "query-vendor": ["@tanstack/react-query", "@tanstack/react-virtual"],
+            "chart-vendor": ["recharts"],
+          },
+        },
+      },
     },
   };
 });

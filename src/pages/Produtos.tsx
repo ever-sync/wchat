@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { formatBRL } from "@/lib/format";
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { Badge } from "@/components/ui/badge";
@@ -88,7 +89,7 @@ function parseTab(raw: string | null): PageTab {
 }
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 function parseOptionsText(text: string): string[] {

@@ -410,6 +410,36 @@ async function handleCreateNegotiation(auth: ApiKeyAuth, request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // FKs apontam para customers/profiles por id sem checar tenant; como aqui
+  // usamos o client service-role (bypassa RLS), validamos a posse por tenant
+  // manualmente para evitar referência cross-tenant.
+  const customerId = body.customer_id ? String(body.customer_id) : null;
+  if (customerId) {
+    const { data: customer } = await admin
+      .from("customers")
+      .select("id")
+      .eq("id", customerId)
+      .eq("tenant_id", auth.tenantId)
+      .maybeSingle();
+    if (!customer) {
+      return apiJsonResponse({ error: "customer_id not found in this tenant." }, 400);
+    }
+  }
+
+  const assigneeId = body.assignee_id ? String(body.assignee_id) : null;
+  if (assigneeId) {
+    const { data: assignee } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", assigneeId)
+      .eq("tenant_id", auth.tenantId)
+      .maybeSingle();
+    if (!assignee) {
+      return apiJsonResponse({ error: "assignee_id not found in this tenant." }, 400);
+    }
+  }
+
   const { data, error } = await admin
     .from("crm_negotiations")
     .insert({
@@ -418,8 +448,8 @@ async function handleCreateNegotiation(auth: ApiKeyAuth, request: Request) {
       funnel_id: funnelId,
       stage_id: stageId,
       status: String(body.status ?? "em_andamento"),
-      assignee_id: body.assignee_id ?? null,
-      customer_id: body.customer_id ?? null,
+      assignee_id: assigneeId,
+      customer_id: customerId,
       star_count: Number(body.star_count ?? 0),
       qualification: Number(body.qualification ?? 0),
       total_value: Number(body.total_value ?? 0),

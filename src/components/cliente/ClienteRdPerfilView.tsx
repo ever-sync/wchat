@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo, useState, type ReactElement } from "react";
+import { formatBRL } from "@/lib/format";
 import {
   ArrowLeft,
   Calendar,
@@ -1103,7 +1104,7 @@ export function ClienteRdPerfilView({
                       label="Valor total"
                       value={
                         totalViewValue > 0
-                          ? totalViewValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                          ? formatBRL(totalViewValue)
                           : ""
                       }
                     />

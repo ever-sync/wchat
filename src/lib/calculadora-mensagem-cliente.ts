@@ -3,9 +3,10 @@ import {
   type HonorariosOferta,
   type RetroativoCalculo,
 } from "@/lib/recuperei-honorarios";
+import { formatBRL } from "@/lib/format";
 
 function formatMoney(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 export type MensagemOfertaInput = {

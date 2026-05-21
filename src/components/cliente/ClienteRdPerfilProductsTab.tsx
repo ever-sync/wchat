@@ -4,9 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { useCustomerSales, useSales } from "@/lib/api/sales";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { SALE_PAYMENT_METHOD_LABELS, type SaleRecord } from "@/types/domain";
+import { formatBRL } from "@/lib/format";
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 function formatDateTime(iso: string) {

@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ApiDocsSwagger } from "@/components/settings/ApiDocsSwagger";
+import type { OpenAPIV3 } from "swagger-ui-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,6 +9,26 @@ import { useTenantIntegrations } from "@/lib/api/integrations";
 import { buildN8nInboundWebhookOpenApi, buildN8nReplyOpenApi } from "@/lib/api-docs/openapi-n8n-reply";
 import { buildWchatApiOpenApi } from "@/lib/api-docs/openapi-wchat-api";
 import { supabaseUrl } from "@/lib/supabase";
+
+// O swagger-ui-react (~1,2 MB) fica em um chunk próprio carregado só ao renderizar
+// a documentação — a casca da página abre na hora.
+const LazyApiDocsSwagger = lazy(() =>
+  import("@/components/settings/ApiDocsSwagger").then((m) => ({ default: m.ApiDocsSwagger })),
+);
+
+function ApiDocsSwagger({ spec }: { spec: OpenAPIV3.Document }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[70vh] items-center justify-center rounded-xl border border-border/60 bg-card text-sm text-muted-foreground">
+          Carregando documentação…
+        </div>
+      }
+    >
+      <LazyApiDocsSwagger spec={spec} />
+    </Suspense>
+  );
+}
 
 type ApiDocTab = "wchat-api" | "n8n-reply" | "n8n-inbound";
 

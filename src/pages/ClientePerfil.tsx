@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { formatBRL } from "@/lib/format";
 import {
   ArrowDownLeft,
   Calendar,
@@ -74,7 +75,7 @@ import { SALE_PAYMENT_METHOD_LABELS } from "@/types/domain";
 const CRM_TASK_FORM_ASSIGNEE_NONE = "__none__";
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return formatBRL(value);
 }
 
 function formatDate(value?: string) {

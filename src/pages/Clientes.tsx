@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { downloadBlob } from "@/lib/format";
 import {
   Search,
   Upload,
@@ -485,23 +486,13 @@ export default function Clientes() {
 
     const csvContent = buildCustomersCsv(customers);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${fileLabel}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(`${fileLabel}.csv`, blob);
   };
 
   function downloadMinimalImportTemplate() {
     const csv = buildMinimalCustomerImportTemplateCsv();
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "modelo-leads-telefone.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadBlob("modelo-leads-telefone.csv", blob);
   }
 
   function openQuickPastePreview() {

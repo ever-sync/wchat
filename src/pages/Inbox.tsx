@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { formatBRL } from "@/lib/format";
 import {
   Bell,
   AlarmClock,
@@ -138,10 +139,7 @@ const SALE_RETURN_HISTORY_LIMIT = 200;
 const INBOX_ASSIGN_NONE = "__none__";
 
 function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  return formatBRL(value);
 }
 
 function parseMoneyInput(value: string) {
@@ -331,6 +329,15 @@ export default function Inbox() {
       staleTime: 60_000,
     });
   };
+
+  // Callbacks estáveis para a lista de conversas: o ConversationRow é memoizado e
+  // só deve re-renderizar quando seu chat/active mudar — não quando o Inbox re-renderiza
+  // (ex.: digitação no composer). O ref guarda sempre a versão mais recente da lógica.
+  const selectChatRef = useRef<(chatId: string) => void>(() => {});
+  const prefetchChatRef = useRef<(chatId: string) => void>(() => {});
+  prefetchChatRef.current = prefetchChatMessages;
+  const stableSelectChat = useCallback((chatId: string) => selectChatRef.current(chatId), []);
+  const stablePrefetchChat = useCallback((chatId: string) => prefetchChatRef.current(chatId), []);
 
   const { data: instances = [] } = useWhatsappInstances();
   const { data: saleProducts = [] } = useProducts(
@@ -1752,6 +1759,7 @@ export default function Inbox() {
       }
     }
   }
+  selectChatRef.current = handleSelectChat;
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!hasNextPage || isFetchingNextPage) {
@@ -2098,8 +2106,8 @@ export default function Inbox() {
           chatsLoading={chatsLoading}
           chats={chats}
           activeChatId={activeChat?.id ?? null}
-          onSelectChat={handleSelectChat}
-          onPrefetchChat={prefetchChatMessages}
+          onSelectChat={stableSelectChat}
+          onPrefetchChat={stablePrefetchChat}
           searchInputRef={searchInputRef}
           assigneeFilterOptions={inboxAssigneeFilterOptions}
           managerUnassignedCount={isManagerInbox ? managerUnassignedCount : undefined}
