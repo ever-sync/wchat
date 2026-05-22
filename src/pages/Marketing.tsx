@@ -1,7 +1,17 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown, Megaphone, Send, Shuffle, Workflow } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ChevronDown,
+  FileText,
+  LayoutTemplate,
+  Link2,
+  type LucideIcon,
+  Megaphone,
+  MessageCircle,
+  Send,
+  Shuffle,
+  Workflow,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,10 +24,10 @@ import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTa
 import { cn } from "@/lib/utils";
 
 const CONVERTER_SUB_TABS = [
-  { value: "landing-pages", label: "Landing Pages" },
-  { value: "formularios", label: "Formulários" },
-  { value: "botoes-whatsapp", label: "Botões de WhatsApp" },
-  { value: "link-na-bio", label: "Link na Bio" },
+  { value: "landing-pages", label: "Landing Pages", icon: LayoutTemplate },
+  { value: "formularios", label: "Formulários", icon: FileText },
+  { value: "botoes-whatsapp", label: "Botões de WhatsApp", icon: MessageCircle },
+  { value: "link-na-bio", label: "Link na Bio", icon: Link2 },
 ] as const;
 
 const TABS = [
@@ -67,7 +77,7 @@ function ConverterTabTrigger({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             active
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
@@ -82,13 +92,28 @@ function ConverterTabTrigger({
           <DropdownMenuItem
             key={item.value}
             onSelect={() => onSelect(item.value)}
-            className="flex items-center gap-3 py-2 text-sm font-semibold"
+            className="flex items-center gap-2.5 py-2 text-sm font-medium"
           >
+            <item.icon className="h-4 w-4 text-muted-foreground" aria-hidden />
             <span>{item.label}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function ComingSoon({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 py-20 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Icon className="h-6 w-6" aria-hidden />
+      </div>
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">Em breve</p>
+      </div>
+    </div>
   );
 }
 
@@ -114,21 +139,16 @@ export default function Marketing() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Megaphone className="h-5 w-5" aria-hidden />
         </div>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Marketing</h1>
-          <p className="text-sm text-muted-foreground">
-            Campanhas e automações de relacionamento.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">Marketing</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col gap-4">
-        <TabsList className="w-full justify-start sm:w-auto">
-          <TabsTrigger value="campanhas" className="gap-2">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col gap-5">
+        <TabsList className="h-11 w-full justify-start gap-1 rounded-xl bg-muted/60 p-1 sm:w-auto">
+          <TabsTrigger value="campanhas" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
             <Send className="h-4 w-4" aria-hidden />
             Campanhas
           </TabsTrigger>
-          <TabsTrigger value="automacoes" className="gap-2">
+          <TabsTrigger value="automacoes" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
             <Workflow className="h-4 w-4" aria-hidden />
             Automações
           </TabsTrigger>
@@ -140,17 +160,7 @@ export default function Marketing() {
         </TabsList>
 
         <TabsContent value="campanhas" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>Campanhas</CardTitle>
-              <CardDescription>
-                Disparos em massa e segmentação de contatos.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Em breve: criação, agendamento e acompanhamento de campanhas.
-            </CardContent>
-          </Card>
+          <ComingSoon icon={Send} title="Campanhas" />
         </TabsContent>
 
         <TabsContent value="automacoes" className="mt-0">
@@ -162,17 +172,7 @@ export default function Marketing() {
             {item.value === "formularios" ? (
               <MarketingFormsTab />
             ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{item.label}</CardTitle>
-                  <CardDescription>
-                    Conversor de leads — {item.label.toLowerCase()}.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Em breve.
-                </CardContent>
-              </Card>
+              <ComingSoon icon={item.icon} title={item.label} />
             )}
           </TabsContent>
         ))}
