@@ -1,0 +1,33 @@
+Precificacao do add-on de IA (estimativas - ajuste as premissas)
+,
+PREMISSAS,VALOR
+Cambio USD->BRL,5.5
+Modelo padrao,claude-sonnet-4-6
+Preco Sonnet entrada (US$/1M),3
+Preco Sonnet saida (US$/1M),15
+Preco Sonnet cache lido (US$/1M),0.30
+Preco Haiku entrada (US$/1M),1
+Preco Haiku saida (US$/1M),5
+Tokens por conversa - entrada nao-cacheada,17000
+Tokens por conversa - cache lido,38000
+Tokens por conversa - saida,900
+Tokens contados na cota por conversa (entrada+saida),18000
+Custo por conversa - Sonnet (US$),0.076
+Custo por conversa - Haiku (US$),0.025
+Custo por 1M tokens de cota - Sonnet (R$),23
+Custo por 1M tokens de cota - Haiku (R$),8
+,
+TIERS DO ADD-ON,Cota (mi tokens/mes),Conversas/mes (~),Custo Sonnet (R$/mes),Custo Haiku (R$/mes),Preco sugerido (R$/mes),Margem Sonnet (R$),Margem Sonnet (%),Margem Haiku (%)
+Essencial,2,110,46,15,197,151,77,92
+Pro,10,555,232,76,497,265,53,85
+Avancado,30,1666,697,229,997,300,30,77
+,
+OVERAGE (alem da cota),Custo Sonnet (R$/1M),Custo Haiku (R$/1M),Preco sugerido (R$/1M),Margem Sonnet (%),Margem Haiku (%)
+Por 1M tokens extra,23,8,49,53,84
+,
+NOTAS,
+"A cota conta entrada+saida (cache lido NAO conta), por isso a cota rende mais conversas.",
+"Cache lido (~0.1x) e Voyage (embeddings, ~US$0.06/1M) sao centavos - ja embutidos no custo/conversa.",
+"Audio (transcricao Whisper) ~US$0.006/min (~R$0.03/min) - some se o canal recebe muito audio.",
+"Em volume alto, use Haiku no tier (margem sobe muito) ou ative overage para cobrir o Sonnet.",
+"Numeros de tokens/conversa vem do uso real observado; variam com o tamanho da base de conhecimento."
