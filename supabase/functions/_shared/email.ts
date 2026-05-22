@@ -79,7 +79,7 @@ interface ResendResult {
   raw: unknown;
 }
 
-async function sendViaResend(input: {
+export async function sendViaResend(input: {
   to: string;
   fromName: string;
   fromEmail: string;

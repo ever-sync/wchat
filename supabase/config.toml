@@ -50,3 +50,7 @@ verify_jwt = false
 # Painel super-admin do add-on de IA: JWT validado + gate por platform_admins.
 [functions.ai-admin]
 verify_jwt = false
+
+# Alertas de quota por e-mail (agendado por pg_cron via x-cron-secret).
+[functions.ai-alerts]
+verify_jwt = false
