@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, BookOpen, Bot, Radio, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Activity, BookOpen, Bot, CheckCircle2, Circle, Radio, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +73,7 @@ function nf(n: number): string {
 }
 
 export default function AgenteIA() {
+  const [tab, setTab] = useState("configuracao");
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
       <div className="flex items-center gap-3">
@@ -87,7 +88,9 @@ export default function AgenteIA() {
         </div>
       </div>
 
-      <Tabs defaultValue="configuracao">
+      <OnboardingChecklist onGo={setTab} />
+
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto flex-wrap gap-1">
           <TabsTrigger value="configuracao" className="gap-1.5">
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -124,6 +127,82 @@ export default function AgenteIA() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function OnboardingChecklist({ onGo }: { onGo: (tab: string) => void }) {
+  const { data: config } = useTenantAiConfig();
+  const { data: sources = [] } = useKnowledgeSources();
+  const { data: channels = [] } = useAiChannels();
+  const { data: sub } = useAiSubscription();
+
+  const trialExpired = sub?.trialEndsAt ? new Date(sub.trialEndsAt) <= new Date() : false;
+  const addonInactive = Boolean(sub) && (!sub!.active || trialExpired);
+
+  const steps = [
+    {
+      key: "persona",
+      label: "Personalize a IA",
+      desc: "Defina a persona — tom de voz, o que ela faz e quando passar para um humano.",
+      done: Boolean(config?.systemPrompt?.trim()),
+      tab: "configuracao",
+    },
+    {
+      key: "kb",
+      label: "Alimente a base de conhecimento",
+      desc: "Cole textos, importe uma página ou suba um PDF — é com isso que a IA responde com precisão.",
+      done: sources.length > 0,
+      tab: "conhecimento",
+    },
+    {
+      key: "channel",
+      label: "Ligue a IA num canal",
+      desc: "Sem isso a IA não atende. Ative no canal que quiser.",
+      done: channels.some((c) => c.ai_enabled),
+      tab: "canais",
+    },
+  ];
+  const allDone = steps.every((s) => s.done);
+
+  // Tudo pronto e add-on ok → não polui a tela.
+  if (allDone && !addonInactive) return null;
+
+  return (
+    <Card className={addonInactive ? "border-destructive/40" : undefined}>
+      <CardHeader>
+        <CardTitle className="text-base">Primeiros passos</CardTitle>
+        <CardDescription>Deixe a IA pronta para atender em 3 passos.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {addonInactive ? (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            Seu add-on de IA está inativo{trialExpired ? " (trial expirado)" : ""}. Fale com o suporte para ativar.
+          </p>
+        ) : null}
+        <ul className="space-y-2">
+          {steps.map((step) => (
+            <li key={step.key} className="flex items-start gap-3 rounded-md border border-border p-3">
+              {step.done ? (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+              ) : (
+                <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className={cn("text-sm font-medium", step.done ? "text-muted-foreground line-through" : "text-foreground")}>
+                  {step.label}
+                </p>
+                <p className="text-xs text-muted-foreground">{step.desc}</p>
+              </div>
+              {!step.done ? (
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => onGo(step.tab)}>
+                  Ir
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
