@@ -178,8 +178,8 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   }
 
   const config = await getTenantAiConfig(admin, tenantId);
-  if (await isOverQuota(admin, tenantId, config.monthlyTokenLimit)) {
-    console.warn("ai-orchestrator: tenant over monthly token limit", tenantId);
+  if (!(await aiBudgetAllows(admin, tenantId, config.monthlyTokenLimit))) {
+    console.warn("ai-orchestrator: add-on inativo ou cota mensal esgotada", tenantId);
     return;
   }
 
@@ -506,8 +506,7 @@ async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<Tenant
   };
 }
 
-async function isOverQuota(admin: Admin, tenantId: string, limit: number | null): Promise<boolean> {
-  if (!limit || limit <= 0) return false;
+async function monthlyTokensUsed(admin: Admin, tenantId: string): Promise<number> {
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
@@ -516,11 +515,36 @@ async function isOverQuota(admin: Admin, tenantId: string, limit: number | null)
     .select("input_tokens, output_tokens")
     .eq("tenant_id", tenantId)
     .gte("created_at", monthStart.toISOString());
-  const used = (data ?? []).reduce(
+  return (data ?? []).reduce(
     (sum: number, r: Record<string, number>) => sum + (r.input_tokens ?? 0) + (r.output_tokens ?? 0),
     0,
   );
-  return used >= limit;
+}
+
+/**
+ * Decide se a IA pode rodar considerando o add-on (plataforma) e o auto-teto (tenant):
+ * - há subscription e está inativa → bloqueia (add-on não pago);
+ * - cota do plano (sem overage) e/ou auto-teto do tenant formam o limite efetivo;
+ * - sem subscription → comportamento legado (só o auto-teto do tenant).
+ */
+async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number | null): Promise<boolean> {
+  const { data: sub } = await admin
+    .from("tenant_ai_subscription")
+    .select("active, monthly_token_quota, overage_allowed")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  let hardLimit: number | null = null;
+  if (sub) {
+    if (!sub.active) return false; // add-on inativo (não pago)
+    if (!sub.overage_allowed && sub.monthly_token_quota > 0) hardLimit = sub.monthly_token_quota;
+  }
+  if (selfLimit && selfLimit > 0) {
+    hardLimit = hardLimit == null ? selfLimit : Math.min(hardLimit, selfLimit);
+  }
+  if (hardLimit == null) return true; // sem limite efetivo
+
+  return (await monthlyTokensUsed(admin, tenantId)) < hardLimit;
 }
 
 /**

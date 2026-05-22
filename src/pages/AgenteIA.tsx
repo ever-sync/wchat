@@ -23,6 +23,7 @@ import {
   useAddKnowledgeSource,
   useAiChannels,
   useAiErrors,
+  useAiSubscription,
   useAiTurns,
   useImportKnowledgeUrl,
   useAiUsageThisMonth,
@@ -551,14 +552,19 @@ function ChannelCard({ channel }: { channel: AiChannel }) {
 function AtividadeTab() {
   const { data, isLoading } = useAiUsageThisMonth();
   const { data: config } = useTenantAiConfig();
+  const { data: sub } = useAiSubscription();
 
   if (isLoading || !data) {
     return <LoadingCard />;
   }
 
-  const limit = config?.monthlyTokenLimit ?? null;
   const totalTokens = data.inputTokens + data.outputTokens;
-  const quotaPct = limit && limit > 0 ? Math.round((totalTokens / limit) * 100) : null;
+  // Limite efetivo: cota do plano (add-on ativo, sem overage) e/ou auto-teto do tenant.
+  const planQuota = sub?.active && sub.monthlyTokenQuota > 0 && !sub.overageAllowed ? sub.monthlyTokenQuota : null;
+  const selfLimit = config?.monthlyTokenLimit && config.monthlyTokenLimit > 0 ? config.monthlyTokenLimit : null;
+  const candidates = [planQuota, selfLimit].filter((v): v is number => v != null);
+  const limit = candidates.length > 0 ? Math.min(...candidates) : null;
+  const quotaPct = limit ? Math.round((totalTokens / limit) * 100) : null;
 
   const stats = [
     {
@@ -577,6 +583,16 @@ function AtividadeTab() {
 
   return (
     <div className="space-y-4">
+      {sub ? (
+        <div className="text-sm text-muted-foreground">
+          Add-on de IA: <strong className={sub.active ? "text-foreground" : "text-destructive"}>
+            {sub.active ? "ativo" : "inativo"}
+          </strong>
+          {sub.active && sub.monthlyTokenQuota > 0
+            ? ` · cota ${nf(sub.monthlyTokenQuota)} tokens/mês${sub.overageAllowed ? " (com overage)" : ""}`
+            : ""}
+        </div>
+      ) : null}
       {quotaPct !== null && quotaPct >= 80 ? (
         <div
           className={cn(

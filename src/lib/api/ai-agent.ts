@@ -296,6 +296,31 @@ export function useAiErrors(options?: Omit<UseQueryOptions<AiError[], Error>, "q
   return useQuery({ queryKey: ["ai-errors"], queryFn: fetchAiErrors, staleTime: 30_000, ...options });
 }
 
+// Add-on de IA (controlado pela plataforma): status + cota mensal. Somente leitura.
+export type AiSubscription = { active: boolean; monthlyTokenQuota: number; overageAllowed: boolean };
+
+export async function fetchAiSubscription(): Promise<AiSubscription | null> {
+  if (!isSupabaseConfigured) return null;
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { data, error } = await supabase
+    .from("tenant_ai_subscription")
+    .select("active, monthly_token_quota, overage_allowed")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    active: Boolean(data.active),
+    monthlyTokenQuota: data.monthly_token_quota ?? 0,
+    overageAllowed: Boolean(data.overage_allowed),
+  };
+}
+
+export function useAiSubscription(options?: Omit<UseQueryOptions<AiSubscription | null, Error>, "queryKey" | "queryFn">) {
+  return useQuery({ queryKey: ["ai-subscription"], queryFn: fetchAiSubscription, staleTime: 60_000, ...options });
+}
+
 // ---------------------------------------------------------------------------
 // Canais (IA por instância de WhatsApp)
 // ---------------------------------------------------------------------------
