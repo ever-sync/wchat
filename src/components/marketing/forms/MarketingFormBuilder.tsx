@@ -53,17 +53,70 @@ import { EmailTemplatesDialog } from "./EmailTemplatesDialog";
 
 const TENANT_DEFAULT = "__tenant_default__";
 
+function PreviewField({ field }: { field: FormField }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium">
+        {field.label || "Sem rótulo"}
+        {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+      </label>
+
+      {(field.type === "text" || field.type === "email" || field.type === "phone" || field.type === "date") && (
+        <input
+          disabled
+          type={field.type === "phone" ? "tel" : field.type}
+          placeholder={field.placeholder || ""}
+          className="w-full rounded-md border px-3 py-2 text-sm"
+        />
+      )}
+
+      {field.type === "textarea" && (
+        <textarea disabled rows={3} placeholder={field.placeholder || ""} className="w-full rounded-md border px-3 py-2 text-sm" />
+      )}
+
+      {field.type === "select" && (
+        <select disabled className="w-full rounded-md border px-3 py-2 text-sm">
+          <option>Selecione...</option>
+          {(field.options ?? []).map((option) => (
+            <option key={option.value}>{option.label}</option>
+          ))}
+        </select>
+      )}
+
+      {(field.type === "checkbox" || field.type === "radio") && (
+        <div className="space-y-1.5 rounded-md border p-2.5">
+          {(field.options ?? []).map((option) => (
+            <label key={option.value} className="flex items-center gap-2 text-sm">
+              <input type={field.type} disabled />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {field.helpText ? <p className="text-xs opacity-70">{field.helpText}</p> : null}
+    </div>
+  );
+}
+
 function FormPreview({
   fields,
   device,
   submitMessage,
   theme,
+  conversational,
 }: {
   fields: FormField[];
   device: "desktop" | "mobile";
   submitMessage: string;
   theme: FormTheme;
+  conversational: boolean;
 }) {
+  const visibleFields = fields.filter((f) => f.type !== "hidden");
+  const [step, setStep] = useState(0);
+  const safeStep = Math.min(step, Math.max(0, visibleFields.length - 1));
+  const btnStyle = { backgroundColor: theme.primaryColor, borderRadius: `${theme.borderRadius}px` };
+
   return (
     <div className="h-full overflow-y-auto p-4">
       <div
@@ -75,71 +128,55 @@ function FormPreview({
           borderRadius: `${theme.borderRadius}px`,
         }}
       >
-        <h3 className="mb-1 text-base font-semibold">Pré-visualização</h3>
+        <h3 className="mb-1 text-base font-semibold">Pré-visualização{conversational ? " · conversacional" : ""}</h3>
         <p className="mb-4 text-xs opacity-70">Visualização local do rascunho atual.</p>
 
-        {fields.length === 0 ? (
+        {visibleFields.length === 0 ? (
           <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm opacity-60">
             Adicione campos para visualizar o formulário.
           </div>
+        ) : conversational ? (
+          <div className="space-y-3">
+            <p className="text-xs opacity-60">
+              Pergunta {safeStep + 1} de {visibleFields.length}
+            </p>
+            <PreviewField field={visibleFields[safeStep]} />
+            <div className="mt-2 flex gap-2">
+              {safeStep > 0 ? (
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm font-medium"
+                  onClick={() => setStep((s) => Math.max(0, s - 1))}
+                >
+                  Voltar
+                </button>
+              ) : null}
+              {safeStep < visibleFields.length - 1 ? (
+                <button
+                  type="button"
+                  className="flex-1 px-3 py-2 text-sm font-medium text-white"
+                  style={btnStyle}
+                  onClick={() => setStep((s) => Math.min(visibleFields.length - 1, s + 1))}
+                >
+                  Avançar
+                </button>
+              ) : (
+                <button type="button" className="flex-1 px-3 py-2 text-sm font-medium text-white" style={btnStyle} disabled>
+                  Enviar
+                </button>
+              )}
+            </div>
+            <p className="text-center text-xs opacity-60">{submitMessage || "Obrigado!"}</p>
+          </div>
         ) : (
           <div className="space-y-3">
-            {fields.map((field) => {
-              if (field.type === "hidden") return null;
-              return (
-                <div key={field.id} className="space-y-1.5">
-                  <label className="text-sm font-medium">
-                    {field.label || "Sem rótulo"}
-                    {field.required ? <span className="ml-1 text-red-500">*</span> : null}
-                  </label>
-
-                  {(field.type === "text" || field.type === "email" || field.type === "phone" || field.type === "date") && (
-                    <input
-                      disabled
-                      type={field.type === "phone" ? "tel" : field.type}
-                      placeholder={field.placeholder || ""}
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                    />
-                  )}
-
-                  {field.type === "textarea" && (
-                    <textarea
-                      disabled
-                      rows={3}
-                      placeholder={field.placeholder || ""}
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                    />
-                  )}
-
-                  {field.type === "select" && (
-                    <select disabled className="w-full rounded-md border px-3 py-2 text-sm">
-                      <option>Selecione...</option>
-                      {(field.options ?? []).map((option) => (
-                        <option key={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  )}
-
-                  {(field.type === "checkbox" || field.type === "radio") && (
-                    <div className="space-y-1.5 rounded-md border p-2.5">
-                      {(field.options ?? []).map((option) => (
-                        <label key={option.value} className="flex items-center gap-2 text-sm">
-                          <input type={field.type} disabled />
-                          {option.label}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-
-                  {field.helpText ? <p className="text-xs opacity-70">{field.helpText}</p> : null}
-                </div>
-              );
-            })}
-
+            {visibleFields.map((field) => (
+              <PreviewField key={field.id} field={field} />
+            ))}
             <button
               type="button"
               className="mt-2 w-full px-3 py-2 text-sm font-medium text-white"
-              style={{ backgroundColor: theme.primaryColor, borderRadius: `${theme.borderRadius}px` }}
+              style={btnStyle}
               disabled
             >
               Enviar
@@ -375,7 +412,13 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                   )}
                 </div>
               ) : (
-                <FormPreview fields={fields} device={previewDevice} submitMessage={submitMessage} theme={theme} />
+                <FormPreview
+                  fields={fields}
+                  device={previewDevice}
+                  submitMessage={submitMessage}
+                  theme={theme}
+                  conversational={!!settings.conversational}
+                />
               )}
 
               {fields.length > 0 ? (
