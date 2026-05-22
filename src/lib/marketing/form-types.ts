@@ -120,7 +120,7 @@ export const DEFAULT_FORM_SETTINGS: FormSettings = {
   allowDuplicates: true,
   requireEmailVerification: false,
   conversational: false,
-  progressiveProfiling: false,
+  progressiveProfiling: true,
 };
 
 export const DEFAULT_FORM_THEME: FormTheme = {

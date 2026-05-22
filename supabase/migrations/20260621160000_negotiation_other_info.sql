@@ -72,12 +72,15 @@ declare
   v_ckind text;
   v_storage text;
   v_other jsonb := '{}'::jsonb;
+  v_progressive boolean;
 begin
   select f.* into v_form from public.marketing_forms f where f.id = p_form_id;
   if v_form.id is null or v_form.is_active is not true then
     raise exception 'Formulário não encontrado ou inativo';
   end if;
   v_tenant := v_form.tenant_id;
+  -- Perfil progressivo (padrão ligado): reaproveita a negociação ativa do contato.
+  v_progressive := coalesce((v_form.settings->>'progressiveProfiling')::boolean, true);
 
   v_name := nullif(trim(coalesce(p_data->>'name', p_data->>'nome', p_data->>'full_name', '')), '');
   v_email := lower(nullif(trim(coalesce(p_data->>'email', '')), ''));
@@ -133,11 +136,14 @@ begin
 
   v_title := coalesce(v_name, v_email, v_phone, 'Lead de formulário');
 
-  select n.id into v_neg_id
-  from public.crm_negotiations n
-  where n.tenant_id = v_tenant and n.customer_id = v_customer_id and n.status = 'em_andamento'
-  order by n.updated_at desc
-  limit 1;
+  -- Progressivo ligado: reaproveita negociação ativa. Desligado: sempre cria nova.
+  if v_progressive then
+    select n.id into v_neg_id
+    from public.crm_negotiations n
+    where n.tenant_id = v_tenant and n.customer_id = v_customer_id and n.status = 'em_andamento'
+    order by n.updated_at desc
+    limit 1;
+  end if;
 
   if v_neg_id is null then
     insert into public.crm_negotiations (

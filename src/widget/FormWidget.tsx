@@ -51,6 +51,7 @@ export function FormWidget() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [step, setStep] = useState(0);
   const startedAt = useRef<number>(Date.now());
 
   const theme = useMemo<FormTheme>(() => ({ ...DEFAULT_FORM_THEME, ...(form?.theme ?? {}) }), [form]);
@@ -79,6 +80,7 @@ export function FormWidget() {
   }, [formId]);
 
   const visibleFields = useMemo(() => (form?.fields ?? []).filter((f) => f.type !== "hidden"), [form]);
+  const conversational = Boolean((form?.settings as Record<string, unknown> | undefined)?.conversational);
 
   function setValue(name: string, value: unknown) {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -154,6 +156,144 @@ export function FormWidget() {
     fontFamily: "inherit",
   };
   const labelStyle: React.CSSProperties = { display: "block", fontSize: 14, fontWeight: 500, marginBottom: 6 };
+  const primaryBtnStyle: React.CSSProperties = {
+    padding: "11px 16px",
+    border: "none",
+    borderRadius: theme.borderRadius,
+    backgroundColor: theme.primaryColor,
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: submitting ? "default" : "pointer",
+    opacity: submitting ? 0.7 : 1,
+    fontFamily: "inherit",
+  };
+  const secondaryBtnStyle: React.CSSProperties = {
+    padding: "11px 16px",
+    border: "1px solid #d1d5db",
+    borderRadius: theme.borderRadius,
+    background: "transparent",
+    color: "inherit",
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+
+  function goNext() {
+    const field = visibleFields[step];
+    if (!field) return;
+    const errs = validateFormSubmission([field], { [field.name]: values[field.name] });
+    if (errs[field.name]) {
+      setErrors((p) => ({ ...p, [field.name]: errs[field.name] }));
+      return;
+    }
+    setErrors((p) => {
+      const next = { ...p };
+      delete next[field.name];
+      return next;
+    });
+    setStep((s) => Math.min(s + 1, visibleFields.length - 1));
+  }
+
+  function goBack() {
+    setStep((s) => Math.max(0, s - 1));
+  }
+
+  function renderField(field: FormField) {
+    const err = errors[field.name];
+    return (
+      <div key={field.id}>
+        {field.type !== "checkbox" && field.type !== "radio" ? (
+          <label style={labelStyle} htmlFor={`f_${field.id}`}>
+            {field.label}
+            {field.required ? <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span> : null}
+          </label>
+        ) : (
+          <p style={labelStyle}>
+            {field.label}
+            {field.required ? <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span> : null}
+          </p>
+        )}
+
+        {(field.type === "text" || field.type === "email" || field.type === "phone" || field.type === "date") && (
+          <input
+            id={`f_${field.id}`}
+            type={fieldInputType(field.type)}
+            placeholder={field.placeholder ?? ""}
+            style={inputStyle}
+            value={(values[field.name] as string) ?? ""}
+            onChange={(e) => setValue(field.name, e.target.value)}
+          />
+        )}
+
+        {field.type === "textarea" && (
+          <textarea
+            id={`f_${field.id}`}
+            rows={3}
+            placeholder={field.placeholder ?? ""}
+            style={inputStyle}
+            value={(values[field.name] as string) ?? ""}
+            onChange={(e) => setValue(field.name, e.target.value)}
+          />
+        )}
+
+        {field.type === "select" && (
+          <select
+            id={`f_${field.id}`}
+            style={inputStyle}
+            value={(values[field.name] as string) ?? ""}
+            onChange={(e) => setValue(field.name, e.target.value)}
+          >
+            <option value="">Selecione...</option>
+            {(field.options ?? []).map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {field.type === "radio" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {(field.options ?? []).map((opt) => (
+              <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                <input
+                  type="radio"
+                  name={field.name}
+                  value={opt.value}
+                  checked={values[field.name] === opt.value}
+                  onChange={() => setValue(field.name, opt.value)}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        )}
+
+        {field.type === "checkbox" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {(field.options ?? []).map((opt) => {
+              const arr = Array.isArray(values[field.name]) ? (values[field.name] as string[]) : [];
+              return (
+                <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={arr.includes(opt.value)}
+                    onChange={(e) => toggleCheckbox(field.name, opt.value, e.target.checked)}
+                  />
+                  {opt.label}
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {field.helpText ? <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{field.helpText}</p> : null}
+        {err ? <p style={{ fontSize: 12, color: "#ef4444", marginTop: 4 }}>{err}</p> : null}
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
@@ -187,124 +327,39 @@ export function FormWidget() {
         onChange={(e) => setValue("_hp", e.target.value)}
       />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {visibleFields.map((field) => {
-          const err = errors[field.name];
-          return (
-            <div key={field.id}>
-              {field.type !== "checkbox" && field.type !== "radio" ? (
-                <label style={labelStyle} htmlFor={`f_${field.id}`}>
-                  {field.label}
-                  {field.required ? <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span> : null}
-                </label>
-              ) : (
-                <p style={labelStyle}>
-                  {field.label}
-                  {field.required ? <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span> : null}
-                </p>
-              )}
-
-              {(field.type === "text" || field.type === "email" || field.type === "phone" || field.type === "date") && (
-                <input
-                  id={`f_${field.id}`}
-                  type={fieldInputType(field.type)}
-                  placeholder={field.placeholder ?? ""}
-                  style={inputStyle}
-                  value={(values[field.name] as string) ?? ""}
-                  onChange={(e) => setValue(field.name, e.target.value)}
-                />
-              )}
-
-              {field.type === "textarea" && (
-                <textarea
-                  id={`f_${field.id}`}
-                  rows={3}
-                  placeholder={field.placeholder ?? ""}
-                  style={inputStyle}
-                  value={(values[field.name] as string) ?? ""}
-                  onChange={(e) => setValue(field.name, e.target.value)}
-                />
-              )}
-
-              {field.type === "select" && (
-                <select
-                  id={`f_${field.id}`}
-                  style={inputStyle}
-                  value={(values[field.name] as string) ?? ""}
-                  onChange={(e) => setValue(field.name, e.target.value)}
-                >
-                  <option value="">Selecione...</option>
-                  {(field.options ?? []).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {field.type === "radio" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {(field.options ?? []).map((opt) => (
-                    <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                      <input
-                        type="radio"
-                        name={field.name}
-                        value={opt.value}
-                        checked={values[field.name] === opt.value}
-                        onChange={() => setValue(field.name, opt.value)}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {field.type === "checkbox" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {(field.options ?? []).map((opt) => {
-                    const arr = Array.isArray(values[field.name]) ? (values[field.name] as string[]) : [];
-                    return (
-                      <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                        <input
-                          type="checkbox"
-                          checked={arr.includes(opt.value)}
-                          onChange={(e) => toggleCheckbox(field.name, opt.value, e.target.checked)}
-                        />
-                        {opt.label}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              {field.helpText ? <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{field.helpText}</p> : null}
-              {err ? <p style={{ fontSize: 12, color: "#ef4444", marginTop: 4 }}>{err}</p> : null}
-            </div>
-          );
-        })}
-
-        {errors._form ? <p style={{ fontSize: 13, color: "#ef4444" }}>{errors._form}</p> : null}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            width: "100%",
-            padding: "11px 16px",
-            border: "none",
-            borderRadius: theme.borderRadius,
-            backgroundColor: theme.primaryColor,
-            color: "#fff",
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: submitting ? "default" : "pointer",
-            opacity: submitting ? 0.7 : 1,
-            fontFamily: "inherit",
-          }}
-        >
-          {submitting ? "Enviando…" : "Enviar"}
-        </button>
-      </div>
+      {conversational && visibleFields.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
+            Pergunta {Math.min(step + 1, visibleFields.length)} de {visibleFields.length}
+          </p>
+          {renderField(visibleFields[Math.min(step, visibleFields.length - 1)])}
+          {errors._form ? <p style={{ fontSize: 13, color: "#ef4444" }}>{errors._form}</p> : null}
+          <div style={{ display: "flex", gap: 8 }}>
+            {step > 0 ? (
+              <button type="button" onClick={goBack} style={secondaryBtnStyle}>
+                Voltar
+              </button>
+            ) : null}
+            {step < visibleFields.length - 1 ? (
+              <button type="button" onClick={goNext} style={{ ...primaryBtnStyle, flex: 1 }}>
+                Avançar
+              </button>
+            ) : (
+              <button type="submit" disabled={submitting} style={{ ...primaryBtnStyle, flex: 1 }}>
+                {submitting ? "Enviando…" : "Enviar"}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {visibleFields.map((field) => renderField(field))}
+          {errors._form ? <p style={{ fontSize: 13, color: "#ef4444" }}>{errors._form}</p> : null}
+          <button type="submit" disabled={submitting} style={{ ...primaryBtnStyle, width: "100%" }}>
+            {submitting ? "Enviando…" : "Enviar"}
+          </button>
+        </div>
+      )}
     </form>
   );
 }
