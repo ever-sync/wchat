@@ -382,3 +382,60 @@ export function useUpdateAiChannel(
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Painel super-admin — provisionamento do add-on por tenant (edge ai-admin)
+// ---------------------------------------------------------------------------
+
+export type AiTenantRow = {
+  tenant_id: string;
+  nome: string;
+  active: boolean;
+  monthly_token_quota: number;
+  overage_allowed: boolean;
+  has_subscription: boolean;
+  tokens_used: number;
+};
+
+export type AiTenantSubscriptionInput = {
+  tenantId: string;
+  active: boolean;
+  monthlyTokenQuota: number;
+  overageAllowed: boolean;
+};
+
+export async function listAiTenants(): Promise<AiTenantRow[]> {
+  const res = await invokeAuthedFunction<{ tenants: AiTenantRow[] }>("ai-admin", undefined, "GET");
+  return res.tenants ?? [];
+}
+
+export async function setAiTenantSubscription(input: AiTenantSubscriptionInput): Promise<void> {
+  await invokeAuthedFunction(
+    "ai-admin",
+    {
+      tenant_id: input.tenantId,
+      active: input.active,
+      monthly_token_quota: input.monthlyTokenQuota,
+      overage_allowed: input.overageAllowed,
+    },
+    "POST",
+  );
+}
+
+export function useAiTenants(options?: Omit<UseQueryOptions<AiTenantRow[], Error>, "queryKey" | "queryFn">) {
+  return useQuery({ queryKey: ["ai-admin-tenants"], queryFn: listAiTenants, staleTime: 30_000, retry: false, ...options });
+}
+
+export function useSetAiTenantSubscription(
+  options?: UseMutationOptions<void, Error, AiTenantSubscriptionInput>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setAiTenantSubscription,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["ai-admin-tenants"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}

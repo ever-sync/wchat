@@ -34,6 +34,7 @@ const Produtos = lazyWithReload(() => import("./pages/Produtos"));
 const Marketing = lazyWithReload(() => import("./pages/Marketing"));
 const MarketingFlowEditor = lazyWithReload(() => import("./pages/MarketingFlowEditor"));
 const AgenteIA = lazyWithReload(() => import("./pages/AgenteIA"));
+const AdminIA = lazyWithReload(() => import("./pages/AdminIA"));
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando…
@@ -176,6 +177,7 @@ const App = () => (
                         </PermissionRoute>
                       }
                     />
+                    <Route path="/admin/ia" element={<AdminIA />} />
                     <Route
                       path="/configuracoes"
                       element={

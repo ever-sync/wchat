@@ -46,3 +46,7 @@ verify_jwt = false
 # Ingestão da base de conhecimento (RAG): JWT do admin (requireTenantContext valida).
 [functions.ai-knowledge]
 verify_jwt = false
+
+# Painel super-admin do add-on de IA: JWT validado + gate por platform_admins.
+[functions.ai-admin]
+verify_jwt = false
