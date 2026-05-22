@@ -144,18 +144,18 @@ function MetricTile({
   return (
     <div
       className={cn(
-        "rounded-lg border px-4 py-3",
-        variant === "danger" && "border-destructive/40 bg-destructive/10",
-        variant === "warning" && "border-warning/40 bg-warning/10",
-        variant === "default" && "border-border/60 bg-card/80",
+        "group rounded-xl border bg-gradient-to-br p-4 transition-shadow hover:shadow-md",
+        variant === "danger" && "border-destructive/30 from-destructive/10 to-card",
+        variant === "warning" && "border-warning/30 from-warning/10 to-card",
+        variant === "default" && "border-border/60 from-muted/50 to-card",
       )}
     >
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="mt-1 flex items-baseline justify-between gap-2">
-        <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <p className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{value}</p>
         {delta ? <DeltaBadge current={delta.current} prev={delta.prev} invertColor={delta.invertColor} /> : null}
       </div>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -748,11 +748,11 @@ export default function Relatorios() {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Painel</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Visão ao vivo do atendimento e relatórios de desempenho.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <BarChart3 className="h-5 w-5" aria-hidden />
+          </div>
+          <h1 className="text-xl font-semibold tracking-tight">Painel</h1>
         </div>
         {tab !== "painel" ? (
         <div className="flex flex-wrap items-end gap-3">
@@ -801,27 +801,27 @@ export default function Relatorios() {
         </p>
       ) : null}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
-        <TabsList className="flex h-auto flex-wrap gap-1">
-          <TabsTrigger value="painel" className="gap-1.5">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex flex-col gap-5">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl bg-muted/60 p-1">
+          <TabsTrigger value="painel" className="gap-1.5 rounded-lg px-3 data-[state=active]:shadow-sm">
             <Gauge className="h-3.5 w-3.5" />
             Tempo real
           </TabsTrigger>
-          <TabsTrigger value="atendimento">Atendimento</TabsTrigger>
-          <TabsTrigger value="funil">Funil CRM</TabsTrigger>
-          <TabsTrigger value="parados">Parados</TabsTrigger>
-          <TabsTrigger value="sla">SLA comercial</TabsTrigger>
-          <TabsTrigger value="crm-vendedores">Performance CRM</TabsTrigger>
-          <TabsTrigger value="vendas">Vendas Trendii</TabsTrigger>
-          <TabsTrigger value="perdas">Motivos de perda</TabsTrigger>
-          <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
+          <TabsTrigger value="atendimento" className="rounded-lg px-3 data-[state=active]:shadow-sm">Atendimento</TabsTrigger>
+          <TabsTrigger value="funil" className="rounded-lg px-3 data-[state=active]:shadow-sm">Funil CRM</TabsTrigger>
+          <TabsTrigger value="parados" className="rounded-lg px-3 data-[state=active]:shadow-sm">Parados</TabsTrigger>
+          <TabsTrigger value="sla" className="rounded-lg px-3 data-[state=active]:shadow-sm">SLA comercial</TabsTrigger>
+          <TabsTrigger value="crm-vendedores" className="rounded-lg px-3 data-[state=active]:shadow-sm">Performance CRM</TabsTrigger>
+          <TabsTrigger value="vendas" className="rounded-lg px-3 data-[state=active]:shadow-sm">Vendas Trendii</TabsTrigger>
+          <TabsTrigger value="perdas" className="rounded-lg px-3 data-[state=active]:shadow-sm">Motivos de perda</TabsTrigger>
+          <TabsTrigger value="tarefas" className="rounded-lg px-3 data-[state=active]:shadow-sm">Tarefas</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="painel" className="mt-4">
+        <TabsContent value="painel" className="mt-0">
           <PainelAoVivo />
         </TabsContent>
 
-        <TabsContent value="atendimento" className="mt-4 space-y-3">
+        <TabsContent value="atendimento" className="mt-0 space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <Label htmlFor="att-assignee" className="text-xs">Atendente</Label>
@@ -948,7 +948,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="funil" className="mt-4 space-y-4">
+        <TabsContent value="funil" className="mt-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={exportFunnel} disabled={sortedFunnelRows.length === 0}>
@@ -1052,7 +1052,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="parados" className="mt-4 space-y-4">
+        <TabsContent value="parados" className="mt-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={exportStale} disabled={staleRows.length === 0}>
@@ -1158,7 +1158,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="sla" className="mt-4 space-y-4">
+        <TabsContent value="sla" className="mt-0 space-y-4">
           <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
           {crmSlaQ.isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
@@ -1239,7 +1239,7 @@ export default function Relatorios() {
           )}
         </TabsContent>
 
-        <TabsContent value="crm-vendedores" className="mt-4 space-y-4">
+        <TabsContent value="crm-vendedores" className="mt-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={exportCrmSellers} disabled={crmSellers.length === 0}>
@@ -1348,7 +1348,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="vendas" className="mt-4 space-y-4">
+        <TabsContent value="vendas" className="mt-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <MonthYearSelect
               year={salesYear}
@@ -1454,7 +1454,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="perdas" className="mt-4 space-y-4">
+        <TabsContent value="perdas" className="mt-0 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={exportLostReasons} disabled={lostReasons.length === 0}>
@@ -1540,7 +1540,7 @@ export default function Relatorios() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tarefas" className="mt-4 space-y-4">
+        <TabsContent value="tarefas" className="mt-0 space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricTile label="Tarefas criadas" value={tasksTotals.total} />
             <MetricTile label="Concluídas" value={tasksTotals.done} />
