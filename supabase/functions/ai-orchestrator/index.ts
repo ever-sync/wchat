@@ -55,7 +55,14 @@ type TenantAiConfig = {
   systemPrompt: string | null;
   maxOutputTokens: number;
   monthlyTokenLimit: number | null;
+  disclosureEnabled: boolean;
+  disclosureMessage: string | null;
 };
+
+// Aviso de transparência (LGPD): enviado uma vez por chat na primeira atuação da IA.
+const DEFAULT_DISCLOSURE =
+  "Olá! Você está sendo atendido por um assistente virtual com inteligência artificial. " +
+  "Se preferir falar com uma pessoa, é só pedir. 🙂";
 
 Deno.serve(async (request) => {
   const cors = handleCors(request);
@@ -224,6 +231,13 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     knowledge: retrieved.map((r) => r.content),
   });
   const ctx: ToolContext = { admin, tenantId, chat, negotiationId, customerId, aiMode };
+
+  // Transparência (LGPD): na primeira atuação da IA neste chat, avisa que é um assistente.
+  if (config.disclosureEnabled && !chat.ai_disclosure_sent) {
+    const text = (config.disclosureMessage ?? "").trim() || DEFAULT_DISCLOSURE;
+    await executeTool(ctx, "send_whatsapp_message", { text });
+    await admin.from("whatsapp_chats").update({ ai_disclosure_sent: true }).eq("id", chatId);
+  }
 
   // Roda o loop de tool-use no provedor de LLM configurado (Anthropic ou OpenAI).
   const result = config.llmProvider === "openai"
@@ -494,7 +508,7 @@ async function loadCustomFieldNames(admin: Admin, tenantId: string): Promise<str
 async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<TenantAiConfig> {
   const { data } = await admin
     .from("tenant_ai_config")
-    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit")
+    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   return {
@@ -503,6 +517,8 @@ async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<Tenant
     systemPrompt: data?.system_prompt ?? null,
     maxOutputTokens: data?.max_output_tokens ?? 1024,
     monthlyTokenLimit: data?.monthly_token_limit ?? null,
+    disclosureEnabled: data?.ai_disclosure_enabled ?? true,
+    disclosureMessage: data?.ai_disclosure_message ?? null,
   };
 }
 

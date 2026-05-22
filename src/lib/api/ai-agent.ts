@@ -24,6 +24,8 @@ export type TenantAiConfig = {
   debounceSeconds: number;
   maxOutputTokens: number;
   monthlyTokenLimit: number | null;
+  disclosureEnabled: boolean;
+  disclosureMessage: string;
 };
 
 export const DEFAULT_AI_CONFIG: TenantAiConfig = {
@@ -34,6 +36,8 @@ export const DEFAULT_AI_CONFIG: TenantAiConfig = {
   debounceSeconds: 8,
   maxOutputTokens: 1024,
   monthlyTokenLimit: null,
+  disclosureEnabled: true,
+  disclosureMessage: "",
 };
 
 const CONFIG_KEY = ["tenant-ai-config"] as const;
@@ -48,7 +52,9 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
   const tenantId = await getCurrentTenantId();
   const { data, error } = await supabase
     .from("tenant_ai_config")
-    .select("provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit")
+    .select(
+      "provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message",
+    )
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -61,6 +67,8 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
     debounceSeconds: data.debounce_seconds ?? DEFAULT_AI_CONFIG.debounceSeconds,
     maxOutputTokens: data.max_output_tokens ?? DEFAULT_AI_CONFIG.maxOutputTokens,
     monthlyTokenLimit: data.monthly_token_limit ?? null,
+    disclosureEnabled: data.ai_disclosure_enabled ?? true,
+    disclosureMessage: data.ai_disclosure_message ?? "",
   };
 }
 
@@ -78,6 +86,8 @@ export async function upsertTenantAiConfig(input: TenantAiConfig): Promise<void>
       debounce_seconds: input.debounceSeconds,
       max_output_tokens: input.maxOutputTokens,
       monthly_token_limit: input.monthlyTokenLimit,
+      ai_disclosure_enabled: input.disclosureEnabled,
+      ai_disclosure_message: input.disclosureMessage.trim() || null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id" },
