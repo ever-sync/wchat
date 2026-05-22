@@ -541,7 +541,7 @@ async function monthlyTokensUsed(admin: Admin, tenantId: string): Promise<number
  * Decide se a IA pode rodar considerando o add-on (plataforma) e o auto-teto (tenant):
  * - há subscription e está inativa → bloqueia (add-on não pago);
  * - cota do plano (sem overage) e/ou auto-teto do tenant formam o limite efetivo;
- * - sem subscription → comportamento legado (só o auto-teto do tenant).
+ * - DENY-BY-DEFAULT: sem assinatura ativa do add-on, a IA NÃO roda (produto pago).
  */
 async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number | null): Promise<boolean> {
   const { data: sub } = await admin
@@ -550,16 +550,16 @@ async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number 
     .eq("tenant_id", tenantId)
     .maybeSingle();
 
+  // Deny-by-default: sem add-on provisionado/ativo → sem IA (integridade comercial).
+  if (!sub || !sub.active) return false;
+  if (sub.trial_ends_at && new Date(sub.trial_ends_at as string) < new Date()) return false; // trial expirado
+
   let hardLimit: number | null = null;
-  if (sub) {
-    if (!sub.active) return false; // add-on inativo (não pago)
-    if (sub.trial_ends_at && new Date(sub.trial_ends_at as string) < new Date()) return false; // trial expirado
-    if (!sub.overage_allowed && sub.monthly_token_quota > 0) hardLimit = sub.monthly_token_quota;
-  }
+  if (!sub.overage_allowed && sub.monthly_token_quota > 0) hardLimit = sub.monthly_token_quota;
   if (selfLimit && selfLimit > 0) {
     hardLimit = hardLimit == null ? selfLimit : Math.min(hardLimit, selfLimit);
   }
-  if (hardLimit == null) return true; // sem limite efetivo
+  if (hardLimit == null) return true; // add-on ativo, sem teto efetivo
 
   return (await monthlyTokensUsed(admin, tenantId)) < hardLimit;
 }
