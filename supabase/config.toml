@@ -29,3 +29,12 @@ verify_jwt = false
 # StatusCallback do Twilio (sem JWT) — protegido por assinatura X-Twilio-Signature
 [functions.twilio-voice-webhook]
 verify_jwt = false
+
+# Formulários públicos: GET (config do form) + POST (submit) embedados em sites externos.
+# Sem JWT — protegido por allowed_domains, honeypot e rate-limit.
+[functions.forms-public]
+verify_jwt = false
+
+# Dispatch de e-mails: cron (x-cron-secret) processa todos; admin (JWT) processa o próprio tenant.
+[functions.marketing-email-dispatch]
+verify_jwt = false

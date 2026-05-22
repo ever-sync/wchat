@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketingAutomations } from "@/components/marketing/MarketingAutomations";
+import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTab";
 import { cn } from "@/lib/utils";
 
 const CONVERTER_SUB_TABS = [
@@ -166,17 +167,21 @@ export default function Marketing() {
 
         {CONVERTER_SUB_TABS.map((item) => (
           <TabsContent key={item.value} value={item.value} className="mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>{item.label}</CardTitle>
-                <CardDescription>
-                  Conversor de leads — {item.label.toLowerCase()}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                Em breve.
-              </CardContent>
-            </Card>
+            {item.value === "formularios" ? (
+              <MarketingFormsTab />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{item.label}</CardTitle>
+                  <CardDescription>
+                    Conversor de leads — {item.label.toLowerCase()}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Em breve.
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         ))}
       </Tabs>
