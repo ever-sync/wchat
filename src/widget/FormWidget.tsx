@@ -5,6 +5,7 @@ import {
   type FormTheme,
 } from "@/lib/marketing/form-types";
 import { validateFormSubmission } from "@/lib/marketing/form-validation";
+import { formatPhone } from "@/lib/brasil-api";
 
 type PublicForm = {
   id: string;
@@ -91,6 +92,22 @@ export function FormWidget() {
       const current = Array.isArray(prev[name]) ? (prev[name] as string[]) : [];
       const next = checked ? [...current, optionValue] : current.filter((v) => v !== optionValue);
       return { ...prev, [name]: next };
+    });
+  }
+
+  /** onChange com máscara de telefone (BR). */
+  function handleInputChange(field: FormField, raw: string) {
+    setValue(field.name, field.type === "phone" ? formatPhone(raw) : raw);
+  }
+
+  /** Valida um único campo (e-mail/telefone) no blur, dando feedback imediato. */
+  function validateSingleField(field: FormField) {
+    const errs = validateFormSubmission([field], { [field.name]: values[field.name] });
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (errs[field.name]) next[field.name] = errs[field.name];
+      else delete next[field.name];
+      return next;
     });
   }
 
@@ -220,10 +237,15 @@ export function FormWidget() {
           <input
             id={`f_${field.id}`}
             type={fieldInputType(field.type)}
+            inputMode={field.type === "phone" ? "tel" : field.type === "email" ? "email" : undefined}
+            maxLength={field.type === "phone" ? 16 : undefined}
             placeholder={field.placeholder ?? ""}
             style={inputStyle}
             value={(values[field.name] as string) ?? ""}
-            onChange={(e) => setValue(field.name, e.target.value)}
+            onChange={(e) => handleInputChange(field, e.target.value)}
+            onBlur={() => {
+              if (field.type === "email" || field.type === "phone") validateSingleField(field);
+            }}
           />
         )}
 

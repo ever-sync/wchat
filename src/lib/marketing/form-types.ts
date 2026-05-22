@@ -195,6 +195,12 @@ export const DEFAULT_CONTACT_FIELDS: { key: DefaultContactKey; label: string; ty
   { key: "telefone", label: "Telefone", type: "phone" },
 ];
 
+const DEFAULT_CONTACT_PLACEHOLDERS: Record<DefaultContactKey, string> = {
+  nome: "Seu nome",
+  email: "voce@exemplo.com",
+  telefone: "(11) 99999-9999",
+};
+
 /** Cria um campo de formulário mapeado a um campo padrão do contato. */
 export function buildDefaultContactField(key: DefaultContactKey): FormField {
   const def = DEFAULT_CONTACT_FIELDS.find((d) => d.key === key)!;
@@ -203,6 +209,7 @@ export function buildDefaultContactField(key: DefaultContactKey): FormField {
     type: def.type,
     name: key,
     label: def.label,
+    placeholder: DEFAULT_CONTACT_PLACEHOLDERS[key],
     required: key !== "email" ? true : false,
     mapping: { kind: "default", key },
   };
