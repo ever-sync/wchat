@@ -132,7 +132,17 @@ export function mapCrmNegotiationDbRow(row: Record<string, unknown>): CrmNegotia
     lostReason: row.lost_reason != null ? String(row.lost_reason) : null,
     sourceChatPreview: parseSourceChatEmbed(row.source_chat)?.lastMessagePreview ?? null,
     sourceChatUnread: parseSourceChatEmbed(row.source_chat)?.unreadCount ?? 0,
+    otherInfo: parseOtherInfo(row.other_info),
   };
+}
+
+function parseOtherInfo(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value != null) out[key] = String(value);
+  }
+  return out;
 }
 
 function parseSourceChatEmbed(raw: unknown): { lastMessagePreview: string | null; unreadCount: number } | null {
@@ -165,5 +175,6 @@ export function crmNegotiationRecordToCard(row: CrmNegotiationRecord): CrmNegoti
     sourceChatId: row.sourceChatId ?? undefined,
     sourceChatPreview: row.sourceChatPreview ?? undefined,
     sourceChatUnread: row.sourceChatUnread,
+    otherInfo: row.otherInfo,
   };
 }

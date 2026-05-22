@@ -188,6 +188,7 @@ export interface CrmNegotiation {
   sourceChatId?: string;
   sourceChatPreview?: string | null;
   sourceChatUnread?: number;
+  otherInfo?: Record<string, string>;
 }
 
 /** Linha persistida em `public.crm_negotiations` (mapeamento camelCase para o app). */
@@ -263,6 +264,7 @@ export interface CrmNegotiationRecord {
   closingForecast?: string | null;
   lastContactAt?: string | null;
   lastInteractionAt?: string | null;
+  otherInfo?: Record<string, string>;
 }
 
 export interface CustomerFilters {

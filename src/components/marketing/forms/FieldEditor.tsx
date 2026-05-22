@@ -74,16 +74,24 @@ export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) 
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Identificador</Label>
-        <Input
-          value={field.name}
-          onChange={(e) => onUpdate({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
-          placeholder="nome_do_campo"
-          className="h-8 font-mono text-sm"
-        />
-        <p className="text-[10px] text-muted-foreground">Chave nos dados do lead</p>
-      </div>
+      {!field.mapping || field.mapping.kind === "extra" ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Identificador</Label>
+          <Input
+            value={field.name}
+            onChange={(e) => onUpdate({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
+            placeholder="nome_do_campo"
+            className="h-8 font-mono text-sm"
+          />
+          <p className="text-[10px] text-muted-foreground">Chave nos dados do lead</p>
+        </div>
+      ) : (
+        <p className="rounded-md bg-muted/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+          {field.mapping.kind === "default"
+            ? "Campo padrão do contato — salva no cadastro."
+            : "Campo personalizado do contato — salva no cadastro."}
+        </p>
+      )}
 
       {hasPlaceholder && (
         <div className="space-y-1.5">

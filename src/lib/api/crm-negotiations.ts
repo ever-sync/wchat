@@ -34,6 +34,7 @@ const SELECT = [
   "last_interaction_at",
   "source_chat_id",
   "lost_reason",
+  "other_info",
   "created_at",
   "updated_at",
   "source_chat:whatsapp_chats!source_chat_id(last_message_preview, unread_count)",

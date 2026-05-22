@@ -559,6 +559,7 @@ function CrmNegotiationDetailContent({
                 totalValue: negotiation.totalValue,
                 closingForecast: negotiation.closingForecast ?? null,
                 createdAt: negotiation.createdAt,
+                otherInfo: negotiation.otherInfo ?? {},
               }
             : undefined
         }

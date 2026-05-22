@@ -44,7 +44,7 @@ import {
   type FormTheme,
   type MarketingFormRecord,
 } from "@/lib/marketing/form-types";
-import { FieldPalette } from "./FieldPalette";
+import { ContactFieldPalette } from "./ContactFieldPalette";
 import { SortableFieldItem } from "./SortableFieldItem";
 import { FieldEditor } from "./FieldEditor";
 import { EmbedSnippetDialog } from "./EmbedSnippetDialog";
@@ -203,6 +203,12 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
     markDirty();
   }
 
+  function addContactField(field: FormField) {
+    setFields((prev) => [...prev, field]);
+    setSelectedId(field.id);
+    markDirty();
+  }
+
   function updateField(id: string, updates: Partial<FormField>) {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
     markDirty();
@@ -317,7 +323,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
         {/* Builder */}
         <TabsContent value="builder" className="mt-3 min-h-0 flex-1">
           <div className="flex h-full min-h-[420px] overflow-hidden rounded-xl border bg-card shadow-sm">
-            <FieldPalette onAddField={addField} />
+            <ContactFieldPalette existingFields={fields} onAddField={addContactField} onAddExtra={addField} />
 
             <div className="flex flex-1 flex-col overflow-hidden border-x">
               <div className="flex items-center justify-end gap-1.5 border-b bg-muted/40 px-3 py-2">

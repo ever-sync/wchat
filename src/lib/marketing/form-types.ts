@@ -17,6 +17,12 @@ export interface FormFieldOption {
   value: string;
 }
 
+/** Para onde o valor do campo vai no envio. */
+export type FormFieldMapping =
+  | { kind: "default"; key: "nome" | "email" | "telefone" }
+  | { kind: "custom"; fieldId: string }
+  | { kind: "extra" };
+
 export interface FormField {
   id: string;
   type: FormFieldType;
@@ -27,6 +33,8 @@ export interface FormField {
   options?: FormFieldOption[];
   defaultValue?: string;
   helpText?: string;
+  /** Mapeamento p/ o cadastro do contato (default/custom) ou "Outras informações" (extra). */
+  mapping?: FormFieldMapping;
   validation?: {
     minLength?: number;
     maxLength?: number;
@@ -167,6 +175,7 @@ export function createDefaultField(type: FormFieldType): FormField {
     label,
     required: false,
   };
+  field.mapping = { kind: "extra" };
   if (fieldNeedsOptions(type)) {
     field.options = [
       { label: "Opção 1", value: "opcao_1" },
@@ -174,4 +183,76 @@ export function createDefaultField(type: FormFieldType): FormField {
     ];
   }
   return field;
+}
+
+// ----------------------------------------------------- Campos do contato
+
+export type DefaultContactKey = "nome" | "email" | "telefone";
+
+export const DEFAULT_CONTACT_FIELDS: { key: DefaultContactKey; label: string; type: FormFieldType }[] = [
+  { key: "nome", label: "Nome", type: "text" },
+  { key: "email", label: "E-mail", type: "email" },
+  { key: "telefone", label: "Telefone", type: "phone" },
+];
+
+/** Cria um campo de formulário mapeado a um campo padrão do contato. */
+export function buildDefaultContactField(key: DefaultContactKey): FormField {
+  const def = DEFAULT_CONTACT_FIELDS.find((d) => d.key === key)!;
+  return {
+    id: `field_${shortId()}`,
+    type: def.type,
+    name: key,
+    label: def.label,
+    required: key !== "email" ? true : false,
+    mapping: { kind: "default", key },
+  };
+}
+
+/** Converte o tipo (kind) de um campo personalizado de contato em tipo/opções de formulário. */
+export function customFieldKindToFormField(
+  kind: string,
+  options: string[] = [],
+): { type: FormFieldType; options?: FormFieldOption[] } {
+  switch (kind) {
+    case "lista":
+      return { type: "select", options: options.map((o) => ({ label: o, value: o })) };
+    case "booleano":
+      return {
+        type: "select",
+        options: [
+          { label: "Sim", value: "1" },
+          { label: "Não", value: "0" },
+        ],
+      };
+    case "data":
+      return { type: "date" };
+    case "email":
+      return { type: "email" };
+    case "telefone":
+      return { type: "phone" };
+    case "texto_longo":
+      return { type: "textarea" };
+    default:
+      return { type: "text" };
+  }
+}
+
+/** Cria um campo de formulário mapeado a um campo personalizado do contato. */
+export function buildCustomContactField(field: {
+  id: string;
+  nome: string;
+  kind: string;
+  options?: string[];
+}): FormField {
+  const { type, options } = customFieldKindToFormField(field.kind, field.options ?? []);
+  const result: FormField = {
+    id: `field_${shortId()}`,
+    type,
+    name: `c_${field.id.replace(/-/g, "").slice(0, 12)}`,
+    label: field.nome,
+    required: false,
+    mapping: { kind: "custom", fieldId: field.id },
+  };
+  if (options) result.options = options;
+  return result;
 }

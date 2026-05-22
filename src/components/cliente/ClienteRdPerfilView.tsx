@@ -92,6 +92,7 @@ export type NegotiationPanelSnapshot = {
   totalValue: number;
   closingForecast: string | null;
   createdAt: string;
+  otherInfo?: Record<string, string>;
 };
 
 export type NegotiationPanelSavePayload = {
@@ -1110,6 +1111,7 @@ export function ClienteRdPerfilView({
                     />
                     <NegField label="Previsão de fechamento" value={prevView} />
                     <NegField label="Fonte" value={fonteView} />
+                    <NegField label="Canal de origem" value={sourceColumn(cliente, "canal_origem", "Canal de origem")} />
                     <NegField label="Campanha" value={sourceColumn(cliente, "campanha", "Campanha")} />
                     {customFieldsLoading && customFieldDefs.length > 0 ? (
                       <p className="border-b border-[#eceff1] py-2.5 text-[12px] text-[#90a4ae] last:border-b-0">
@@ -1120,6 +1122,12 @@ export function ClienteRdPerfilView({
                         <NegField key={field.id} label={field.nome} value={value} />
                       ))
                     )}
+                    <NegField
+                      label="Outras informações"
+                      value={Object.entries(negotiationPanelSnapshot?.otherInfo ?? {})
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join("; ")}
+                    />
                     <NegField label="Telefone" value={cliente.telefone ?? ""} />
                     <NegField label="E-mail" value={cliente.email ?? ""} />
                   </>
