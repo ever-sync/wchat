@@ -82,57 +82,52 @@ export default function AgenteIA() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Bot className="h-5 w-5" aria-hidden />
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Agente IA</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Configure a IA que atende, qualifica e passa para o humano nos seus canais.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">Agente IA</h1>
       </div>
 
       <OnboardingChecklist onGo={setTab} />
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex h-auto flex-wrap gap-1">
-          <TabsTrigger value="configuracao" className="gap-1.5">
-            <SlidersHorizontal className="h-3.5 w-3.5" />
+      <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-5">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl bg-muted/60 p-1 sm:w-auto">
+          <TabsTrigger value="configuracao" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <SlidersHorizontal className="h-4 w-4" />
             Configuração
           </TabsTrigger>
-          <TabsTrigger value="conhecimento" className="gap-1.5">
-            <BookOpen className="h-3.5 w-3.5" />
+          <TabsTrigger value="conhecimento" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <BookOpen className="h-4 w-4" />
             Base de conhecimento
           </TabsTrigger>
-          <TabsTrigger value="canais" className="gap-1.5">
-            <Radio className="h-3.5 w-3.5" />
+          <TabsTrigger value="canais" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <Radio className="h-4 w-4" />
             Canais
           </TabsTrigger>
-          <TabsTrigger value="atividade" className="gap-1.5">
-            <Activity className="h-3.5 w-3.5" />
+          <TabsTrigger value="atividade" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <Activity className="h-4 w-4" />
             Atividade
           </TabsTrigger>
-          <TabsTrigger value="testar" className="gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />
+          <TabsTrigger value="testar" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <MessageSquare className="h-4 w-4" />
             Testar
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="configuracao" className="mt-4">
+        <TabsContent value="configuracao" className="mt-0">
           <ConfiguracaoTab />
         </TabsContent>
 
-        <TabsContent value="conhecimento" className="mt-4">
+        <TabsContent value="conhecimento" className="mt-0">
           <ConhecimentoTab />
         </TabsContent>
 
-        <TabsContent value="canais" className="mt-4">
+        <TabsContent value="canais" className="mt-0">
           <CanaisTab />
         </TabsContent>
 
-        <TabsContent value="atividade" className="mt-4">
+        <TabsContent value="atividade" className="mt-0">
           <AtividadeTab />
         </TabsContent>
 
-        <TabsContent value="testar" className="mt-4">
+        <TabsContent value="testar" className="mt-0">
           <TestarTab />
         </TabsContent>
       </Tabs>
