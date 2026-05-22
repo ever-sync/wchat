@@ -36,7 +36,7 @@ Deno.serve(async (request) => {
   if (request.method === "GET") {
     const [{ data: tenants }, { data: subs }, { data: usage }] = await Promise.all([
       admin.from("tenants").select("id, nome").order("nome", { ascending: true }),
-      admin.from("tenant_ai_subscription").select("tenant_id, active, monthly_token_quota, overage_allowed"),
+      admin.from("tenant_ai_subscription").select("tenant_id, active, monthly_token_quota, overage_allowed, trial_ends_at"),
       admin.from("ai_usage").select("tenant_id, input_tokens, output_tokens").gte("created_at", monthStartIso()),
     ]);
 
@@ -56,6 +56,7 @@ Deno.serve(async (request) => {
         active: Boolean(sub?.active),
         monthly_token_quota: Number(sub?.monthly_token_quota ?? 0),
         overage_allowed: Boolean(sub?.overage_allowed),
+        trial_ends_at: (sub?.trial_ends_at as string | null) ?? null,
         has_subscription: Boolean(sub),
         tokens_used: usedByTenant.get(String(t.id)) ?? 0,
       };
@@ -79,6 +80,7 @@ Deno.serve(async (request) => {
         active: Boolean(body.active),
         monthly_token_quota: Math.max(0, Math.floor(Number(body.monthly_token_quota ?? 0))),
         overage_allowed: Boolean(body.overage_allowed),
+        trial_ends_at: body.trial_ends_at ? new Date(String(body.trial_ends_at)).toISOString() : null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "tenant_id" },

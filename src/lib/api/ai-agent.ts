@@ -297,7 +297,12 @@ export function useAiErrors(options?: Omit<UseQueryOptions<AiError[], Error>, "q
 }
 
 // Add-on de IA (controlado pela plataforma): status + cota mensal. Somente leitura.
-export type AiSubscription = { active: boolean; monthlyTokenQuota: number; overageAllowed: boolean };
+export type AiSubscription = {
+  active: boolean;
+  monthlyTokenQuota: number;
+  overageAllowed: boolean;
+  trialEndsAt: string | null;
+};
 
 export async function fetchAiSubscription(): Promise<AiSubscription | null> {
   if (!isSupabaseConfigured) return null;
@@ -305,7 +310,7 @@ export async function fetchAiSubscription(): Promise<AiSubscription | null> {
   const tenantId = await getCurrentTenantId();
   const { data, error } = await supabase
     .from("tenant_ai_subscription")
-    .select("active, monthly_token_quota, overage_allowed")
+    .select("active, monthly_token_quota, overage_allowed, trial_ends_at")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -314,6 +319,7 @@ export async function fetchAiSubscription(): Promise<AiSubscription | null> {
     active: Boolean(data.active),
     monthlyTokenQuota: data.monthly_token_quota ?? 0,
     overageAllowed: Boolean(data.overage_allowed),
+    trialEndsAt: (data.trial_ends_at as string | null) ?? null,
   };
 }
 
@@ -393,6 +399,7 @@ export type AiTenantRow = {
   active: boolean;
   monthly_token_quota: number;
   overage_allowed: boolean;
+  trial_ends_at: string | null;
   has_subscription: boolean;
   tokens_used: number;
 };
@@ -402,6 +409,7 @@ export type AiTenantSubscriptionInput = {
   active: boolean;
   monthlyTokenQuota: number;
   overageAllowed: boolean;
+  trialEndsAt?: string | null;
 };
 
 export async function listAiTenants(): Promise<AiTenantRow[]> {
@@ -417,6 +425,7 @@ export async function setAiTenantSubscription(input: AiTenantSubscriptionInput):
       active: input.active,
       monthly_token_quota: input.monthlyTokenQuota,
       overage_allowed: input.overageAllowed,
+      trial_ends_at: input.trialEndsAt ?? null,
     },
     "POST",
   );

@@ -584,14 +584,23 @@ function AtividadeTab() {
   return (
     <div className="space-y-4">
       {sub ? (
-        <div className="text-sm text-muted-foreground">
-          Add-on de IA: <strong className={sub.active ? "text-foreground" : "text-destructive"}>
-            {sub.active ? "ativo" : "inativo"}
-          </strong>
-          {sub.active && sub.monthlyTokenQuota > 0
-            ? ` · cota ${nf(sub.monthlyTokenQuota)} tokens/mês${sub.overageAllowed ? " (com overage)" : ""}`
-            : ""}
-        </div>
+        (() => {
+          const trialDate = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
+          const trialExpired = trialDate ? trialDate <= new Date() : false;
+          const effectiveActive = sub.active && !trialExpired;
+          return (
+            <div className="text-sm text-muted-foreground">
+              Add-on de IA:{" "}
+              <strong className={effectiveActive ? "text-foreground" : "text-destructive"}>
+                {trialExpired ? "trial expirado" : sub.active ? "ativo" : "inativo"}
+              </strong>
+              {effectiveActive && trialDate ? ` · trial até ${trialDate.toLocaleDateString("pt-BR")}` : ""}
+              {effectiveActive && sub.monthlyTokenQuota > 0
+                ? ` · cota ${nf(sub.monthlyTokenQuota)} tokens/mês${sub.overageAllowed ? " (com overage)" : ""}`
+                : ""}
+            </div>
+          );
+        })()
       ) : null}
       {quotaPct !== null && quotaPct >= 80 ? (
         <div

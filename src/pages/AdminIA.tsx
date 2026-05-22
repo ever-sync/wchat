@@ -13,6 +13,9 @@ function nf(n: number): string {
   return n.toLocaleString("pt-BR");
 }
 
+const TRIAL_DAYS = 14;
+const TRIAL_QUOTA = 1_000_000;
+
 /** Painel super-admin: provisiona o add-on de IA por tenant (ativar/desativar + cota). */
 export default function AdminIA() {
   const { data: tenants = [], isLoading, isError, error } = useAiTenants();
@@ -70,14 +73,31 @@ function TenantRow({ row }: { row: AiTenantRow }) {
   const dirty = active !== row.active || quota !== row.monthly_token_quota || overage !== row.overage_allowed;
   const usagePct = quota > 0 ? Math.round((row.tokens_used / quota) * 100) : null;
 
+  const trialDate = row.trial_ends_at ? new Date(row.trial_ends_at) : null;
+  const trialActive = trialDate ? trialDate > new Date() : false;
+  const trialExpired = trialDate ? trialDate <= new Date() : false;
+
+  function startTrial() {
+    const ends = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    save.mutate({ tenantId: row.tenant_id, active: true, monthlyTokenQuota: TRIAL_QUOTA, overageAllowed: false, trialEndsAt: ends });
+  }
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-base">{row.nome}</CardTitle>
-          <Badge variant={active ? "default" : "outline"} className="font-normal">
-            {active ? "ativo" : "inativo"}
-          </Badge>
+          {trialActive ? (
+            <Badge variant="secondary" className="font-normal">
+              trial até {trialDate!.toLocaleDateString("pt-BR")}
+            </Badge>
+          ) : trialExpired ? (
+            <Badge variant="outline" className="font-normal text-destructive">trial expirado</Badge>
+          ) : (
+            <Badge variant={active ? "default" : "outline"} className="font-normal">
+              {active ? "ativo" : "inativo"}
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -107,7 +127,10 @@ function TenantRow({ row }: { row: AiTenantRow }) {
           {quota > 0 ? ` de ${nf(quota)} (${usagePct}%)` : " (sem cota definida)"}
         </p>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" disabled={save.isPending} onClick={startTrial}>
+            Iniciar trial ({TRIAL_DAYS}d)
+          </Button>
           <Button
             size="sm"
             disabled={!dirty || save.isPending}
@@ -117,10 +140,12 @@ function TenantRow({ row }: { row: AiTenantRow }) {
                 active,
                 monthlyTokenQuota: quota,
                 overageAllowed: overage,
+                trialEndsAt: null,
               })
             }
+            title="Salva como plano permanente (encerra o trial)"
           >
-            {save.isPending ? "Salvando…" : "Salvar"}
+            {save.isPending ? "Salvando…" : "Salvar (permanente)"}
           </Button>
         </div>
       </CardContent>
