@@ -530,13 +530,14 @@ async function monthlyTokensUsed(admin: Admin, tenantId: string): Promise<number
 async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number | null): Promise<boolean> {
   const { data: sub } = await admin
     .from("tenant_ai_subscription")
-    .select("active, monthly_token_quota, overage_allowed")
+    .select("active, monthly_token_quota, overage_allowed, trial_ends_at")
     .eq("tenant_id", tenantId)
     .maybeSingle();
 
   let hardLimit: number | null = null;
   if (sub) {
     if (!sub.active) return false; // add-on inativo (não pago)
+    if (sub.trial_ends_at && new Date(sub.trial_ends_at as string) < new Date()) return false; // trial expirado
     if (!sub.overage_allowed && sub.monthly_token_quota > 0) hardLimit = sub.monthly_token_quota;
   }
   if (selfLimit && selfLimit > 0) {
