@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, BookOpen, Bot, CheckCircle2, Circle, Radio, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Activity, BookOpen, Bot, CheckCircle2, Circle, MessageSquare, Radio, Send, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import {
   type AiProvider,
   type AiTurn,
   type LlmProvider,
+  type PlaygroundMessage,
   type TenantAiConfig,
   useAddKnowledgeSource,
   useAiChannels,
@@ -26,6 +27,7 @@ import {
   useAiSubscription,
   useAiTurns,
   useImportKnowledgeUrl,
+  useRunPlayground,
   useAiUsageThisMonth,
   useDeleteKnowledgeSource,
   useKnowledgeSources,
@@ -108,6 +110,10 @@ export default function AgenteIA() {
             <Activity className="h-3.5 w-3.5" />
             Atividade
           </TabsTrigger>
+          <TabsTrigger value="testar" className="gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5" />
+            Testar
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="configuracao" className="mt-4">
@@ -125,8 +131,101 @@ export default function AgenteIA() {
         <TabsContent value="atividade" className="mt-4">
           <AtividadeTab />
         </TabsContent>
+
+        <TabsContent value="testar" className="mt-4">
+          <TestarTab />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function TestarTab() {
+  const { toast } = useToast();
+  const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
+  const [input, setInput] = useState("");
+  const run = useRunPlayground({
+    onError: (e) => toast({ title: "Falha ao testar", description: e.message, variant: "destructive" }),
+  });
+
+  async function send() {
+    const text = input.trim();
+    if (!text || run.isPending) return;
+    const next: PlaygroundMessage[] = [...messages, { role: "user", text }];
+    setMessages(next);
+    setInput("");
+    try {
+      const res = await run.mutateAsync(next);
+      setMessages([...next, { role: "assistant", text: res.reply || "(a IA não retornou texto)" }]);
+    } catch {
+      // erro já tratado no onError
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Testar a IA</CardTitle>
+            <CardDescription>
+              Conversa de teste com a persona e a base atuais. Não envia WhatsApp nem consome cota.
+            </CardDescription>
+          </div>
+          {messages.length > 0 ? (
+            <Button variant="ghost" size="sm" onClick={() => setMessages([])}>
+              Limpar
+            </Button>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex max-h-[420px] min-h-[220px] flex-col gap-2 overflow-y-auto rounded-md border border-border bg-muted/30 p-3">
+          {messages.length === 0 ? (
+            <p className="m-auto text-sm text-muted-foreground">Escreva como se fosse o cliente para começar.</p>
+          ) : (
+            messages.map((m, i) => (
+              <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+                <div
+                  className={cn(
+                    "max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm",
+                    m.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border bg-card text-foreground",
+                  )}
+                >
+                  {m.text}
+                </div>
+              </div>
+            ))
+          )}
+          {run.isPending ? (
+            <div className="flex justify-start">
+              <div className="rounded-2xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                digitando…
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            placeholder="Escreva como se fosse o cliente…"
+            disabled={run.isPending}
+          />
+          <Button onClick={() => void send()} disabled={!input.trim() || run.isPending} aria-label="Enviar">
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -54,3 +54,7 @@ verify_jwt = false
 # Alertas de quota por e-mail (agendado por pg_cron via x-cron-secret).
 [functions.ai-alerts]
 verify_jwt = false
+
+# Playground de teste da IA: JWT do tenant (requireTenantContext valida).
+[functions.ai-playground]
+verify_jwt = false

@@ -458,3 +458,18 @@ export function useSetAiTenantSubscription(
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Playground — testar a IA na tela (edge ai-playground; sem WhatsApp/cota)
+// ---------------------------------------------------------------------------
+
+export type PlaygroundMessage = { role: "user" | "assistant"; text: string };
+export type PlaygroundReply = { reply: string; knowledge_count: number };
+
+export async function runPlayground(messages: PlaygroundMessage[]): Promise<PlaygroundReply> {
+  return await invokeAuthedFunction<PlaygroundReply>("ai-playground", { messages }, "POST");
+}
+
+export function useRunPlayground(options?: UseMutationOptions<PlaygroundReply, Error, PlaygroundMessage[]>) {
+  return useMutation({ mutationFn: runPlayground, ...options });
+}
