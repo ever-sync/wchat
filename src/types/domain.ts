@@ -808,6 +808,7 @@ export interface WhatsappMessage {
   sentAt?: string | null;
   receivedAt?: string | null;
   createdAt?: string;
+  actorType?: "human" | "ai" | "system" | null;
 }
 
 export interface SendWhatsappMessageInput {

@@ -219,6 +219,14 @@ function MessageMeta({
         isOutbound ? "text-primary-foreground/75" : "text-muted-foreground",
       )}
     >
+      {isOutbound && message.actorType === "ai" ? (
+        <span
+          className="mr-0.5 rounded bg-primary-foreground/20 px-1 text-[9px] font-bold uppercase leading-none tracking-wide"
+          title="Resposta enviada pela IA"
+        >
+          IA
+        </span>
+      ) : null}
       <span>{formatMessageTime(timestamp)}</span>
       {statusMeta ? (
         <span title={statusMeta.label} aria-label={statusMeta.label}>

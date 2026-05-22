@@ -274,6 +274,28 @@ export function useAiTurns(options?: Omit<UseQueryOptions<AiTurn[], Error>, "que
   return useQuery({ queryKey: TURNS_KEY, queryFn: fetchAiTurns, staleTime: 15_000, ...options });
 }
 
+// Falhas atuais (jobs em erro) — útil para depurar atendimentos que não responderam.
+export type AiError = { chat_id: string | null; last_error: string | null; updated_at: string };
+
+export async function fetchAiErrors(): Promise<AiError[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { data, error } = await supabase
+    .from("ai_jobs")
+    .select("chat_id, last_error, updated_at")
+    .eq("tenant_id", tenantId)
+    .eq("status", "error")
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AiError[];
+}
+
+export function useAiErrors(options?: Omit<UseQueryOptions<AiError[], Error>, "queryKey" | "queryFn">) {
+  return useQuery({ queryKey: ["ai-errors"], queryFn: fetchAiErrors, staleTime: 30_000, ...options });
+}
+
 // ---------------------------------------------------------------------------
 // Canais (IA por instância de WhatsApp)
 // ---------------------------------------------------------------------------

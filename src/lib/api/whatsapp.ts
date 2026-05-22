@@ -125,6 +125,7 @@ type MessageRow = {
   sent_at: string | null;
   received_at: string | null;
   created_at: string;
+  actor_type?: WhatsappMessage["actorType"];
 };
 
 function mapInstance(row: InstanceRow): WhatsappInstance {
@@ -217,6 +218,7 @@ function mapMessage(row: MessageRow): WhatsappMessage {
     sentAt: row.sent_at,
     receivedAt: row.received_at,
     createdAt: row.created_at,
+    actorType: row.actor_type ?? null,
   };
 }
 

@@ -15,12 +15,14 @@ import { cn } from "@/lib/utils";
 import {
   type AiChannel,
   type AiDefaultMode,
+  type AiError,
   type AiProvider,
   type AiTurn,
   type LlmProvider,
   type TenantAiConfig,
   useAddKnowledgeSource,
   useAiChannels,
+  useAiErrors,
   useAiTurns,
   useImportKnowledgeUrl,
   useAiUsageThisMonth,
@@ -548,10 +550,15 @@ function ChannelCard({ channel }: { channel: AiChannel }) {
 
 function AtividadeTab() {
   const { data, isLoading } = useAiUsageThisMonth();
+  const { data: config } = useTenantAiConfig();
 
   if (isLoading || !data) {
     return <LoadingCard />;
   }
+
+  const limit = config?.monthlyTokenLimit ?? null;
+  const totalTokens = data.inputTokens + data.outputTokens;
+  const quotaPct = limit && limit > 0 ? Math.round((totalTokens / limit) * 100) : null;
 
   const stats = [
     {
@@ -570,6 +577,20 @@ function AtividadeTab() {
 
   return (
     <div className="space-y-4">
+      {quotaPct !== null && quotaPct >= 80 ? (
+        <div
+          className={cn(
+            "rounded-md border p-3 text-sm",
+            quotaPct >= 100
+              ? "border-destructive bg-destructive/10 text-destructive"
+              : "border-amber-300 bg-amber-50 text-amber-800",
+          )}
+        >
+          {quotaPct >= 100
+            ? `Limite mensal de tokens atingido (${nf(totalTokens)}/${nf(limit!)}). A IA fica em pausa até virar o mês ou você aumentar o limite na aba Configuração.`
+            : `Você já usou ${quotaPct}% do limite mensal de tokens (${nf(totalTokens)}/${nf(limit!)}).`}
+        </div>
+      ) : null}
       <div>
         <p className="mb-3 text-sm text-muted-foreground">Consumo no mês atual.</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -586,8 +607,35 @@ function AtividadeTab() {
           Custo estimado em US$ a partir dos tokens e do modelo de cada turno (preços de tabela; pode variar).
         </p>
       </div>
+      <FailuresList />
       <TurnsList />
     </div>
+  );
+}
+
+function FailuresList() {
+  const { data: errors = [] } = useAiErrors();
+  if (errors.length === 0) return null;
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="text-base text-destructive">Falhas recentes</CardTitle>
+        <CardDescription>Atendimentos em que a IA falhou após as tentativas — veja o motivo.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {errors.map((err: AiError, i) => (
+            <li key={`${err.chat_id}-${i}`} className="rounded-md border border-border p-3 text-sm">
+              <div className="mb-1 text-xs text-muted-foreground">
+                {new Date(err.updated_at).toLocaleString("pt-BR")}
+              </div>
+              <p className="break-words text-destructive">{err.last_error ?? "Erro desconhecido."}</p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
