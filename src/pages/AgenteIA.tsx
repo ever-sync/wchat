@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Activity, BookOpen, Bot, Radio, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { extractPdfText } from "@/lib/pdf-text";
 import { cn } from "@/lib/utils";
 import {
   type AiChannel,
@@ -273,6 +274,8 @@ function ConhecimentoTab() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const add = useAddKnowledgeSource({
     onSuccess: () => {
@@ -292,6 +295,31 @@ function ConhecimentoTab() {
   const del = useDeleteKnowledgeSource({
     onError: (e) => toast({ title: "Não foi possível remover", description: e.message, variant: "destructive" }),
   });
+
+  async function handlePdf(file: File) {
+    setPdfLoading(true);
+    try {
+      const text = await extractPdfText(file);
+      if (!text.trim()) {
+        toast({
+          title: "PDF sem texto extraível",
+          description: "Pode ser um PDF escaneado (imagem). Tente colar o texto manualmente.",
+          variant: "destructive",
+        });
+        return;
+      }
+      await add.mutateAsync({ title: file.name.replace(/\.pdf$/i, ""), content: text });
+      toast({ title: "PDF importado para a base." });
+    } catch (e) {
+      toast({
+        title: "Não foi possível ler o PDF",
+        description: e instanceof Error ? e.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -335,10 +363,12 @@ function ConhecimentoTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Importar de uma página</CardTitle>
-          <CardDescription>Cole o link do seu site/FAQ — a IA extrai o texto da página automaticamente.</CardDescription>
+          <CardTitle className="text-base">Importar página ou PDF</CardTitle>
+          <CardDescription>
+            Cole o link do seu site/FAQ ou suba um PDF — a IA extrai o texto automaticamente.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               value={url}
@@ -349,6 +379,23 @@ function ConhecimentoTab() {
             <Button onClick={() => importUrl.mutate(url.trim())} disabled={!url.trim() || importUrl.isPending}>
               {importUrl.isPending ? "Importando…" : "Importar"}
             </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handlePdf(file);
+                e.target.value = "";
+              }}
+            />
+            <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={pdfLoading || add.isPending}>
+              {pdfLoading ? "Lendo PDF…" : "Subir PDF"}
+            </Button>
+            <span className="text-xs text-muted-foreground">PDF com texto (não escaneado).</span>
           </div>
         </CardContent>
       </Card>
