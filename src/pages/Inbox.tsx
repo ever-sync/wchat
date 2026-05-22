@@ -79,6 +79,7 @@ import {
   useChatTags,
   useClaimChat,
   useClearChatSnooze,
+  useSetChatAiMode,
   useSnoozeChat,
   useUnassignChat,
 } from "@/lib/api/chat-tags";
@@ -374,6 +375,14 @@ export default function Inbox() {
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
   const snoozeChatMutation = useSnoozeChat();
   const clearSnoozeMutation = useClearChatSnooze();
+  const setAiModeMutation = useSetChatAiMode({
+    onError: (error) =>
+      toast({
+        title: "Não foi possível alterar a IA",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      }),
+  });
 
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
@@ -422,6 +431,12 @@ export default function Inbox() {
     }
     return chats.find((chat) => chat.id === activeChatId) ?? null;
   }, [activeChatId, chats]);
+
+  // O botão de pausar/retomar IA só faz sentido se o canal do chat tem IA ligada.
+  const activeChannelAiEnabled = useMemo(
+    () => instances.find((i) => i.id === activeChat?.instanceId)?.aiEnabled ?? false,
+    [instances, activeChat?.instanceId],
+  );
 
   const mustAssumeChatToView = useMemo(
     () => mustAssumeUnassignedChatToView(profile?.role, activeChat?.assigneeId),
@@ -2342,6 +2357,55 @@ export default function Inbox() {
                     </button>
                     </IconTip>
                   ) : null}
+                  {activeChannelAiEnabled && (() => {
+                    const aiPaused = activeChat.aiMode === "off" || activeChat.aiMode === "handoff";
+                    return (
+                      <IconTip label={aiPaused ? "Retomar IA" : "Pausar IA"}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canEditInbox) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel nao tem permissao para esta ação.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            if (!canActOnChat) {
+                              toast({
+                                title: "Assuma a conversa",
+                                description: chatAssigneeBlockedMessage(),
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setAiModeMutation.mutate(
+                              { chatId: activeChat.id, aiMode: aiPaused ? "full" : "off" },
+                              {
+                                onSuccess: () =>
+                                  toast({
+                                    title: aiPaused
+                                      ? "IA reativada nesta conversa"
+                                      : "IA pausada nesta conversa",
+                                  }),
+                              },
+                            );
+                          }}
+                          disabled={setAiModeMutation.isPending || !canActOnChat || !canEditInbox}
+                          className={cn(
+                            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-45",
+                            aiPaused
+                              ? "text-muted-foreground hover:bg-wchat-100 hover:text-foreground"
+                              : "bg-primary text-primary-foreground hover:bg-primary/90",
+                          )}
+                          aria-label={aiPaused ? "Retomar IA" : "Pausar IA"}
+                        >
+                          <Hand className="h-4 w-4" />
+                        </button>
+                      </IconTip>
+                    );
+                  })()}
                   {isChatSnoozed(activeChat) ? (
                     <IconTip label="Remover adiamento">
                     <button

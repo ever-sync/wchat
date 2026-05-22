@@ -164,6 +164,15 @@ export async function clearChatSnooze(chatId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
+
+/** Liga/desliga a IA nesta conversa (RLS exige poder agir no chat). */
+export async function setChatAiMode(chatId: string, aiMode: ChatAiMode): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase.from("whatsapp_chats").update({ ai_mode: aiMode }).eq("id", chatId);
+  if (error) throw new Error(error.message);
+}
+
 // ─── React Query hooks ────────────────────────────────────────────────────────
 
 export function useChatTags() {
@@ -216,6 +225,20 @@ export function useDeleteChatTag(options?: UseMutationOptions<void, Error, strin
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["chat-tags"] });
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useSetChatAiMode(
+  options?: UseMutationOptions<void, Error, { chatId: string; aiMode: ChatAiMode }>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, aiMode }) => setChatAiMode(chatId, aiMode),
+    ...options,
+    onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
       await options?.onSuccess?.(data, variables, context);
     },

@@ -65,6 +65,7 @@ type InstanceRow = {
   last_error: string | null;
   archived_at?: string | null;
   created_at: string;
+  ai_enabled?: boolean | null;
 };
 
 type ChatTagJunctionRow = {
@@ -139,6 +140,7 @@ function mapInstance(row: InstanceRow): WhatsappInstance {
     lastSyncAt: row.last_sync_at,
     lastError: row.last_error,
     createdAt: row.created_at,
+    aiEnabled: row.ai_enabled ?? false,
   };
 }
 
@@ -227,7 +229,7 @@ export async function listWhatsappInstances() {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from("whatsapp_instances")
-    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at")
+    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
     .eq("tenant_id", tenantId)
     .is("archived_at", null)
     .order("is_default", { ascending: false })
@@ -371,7 +373,7 @@ export async function updateWhatsappInstance(id: string, input: WhatsappInstance
     .update(patch)
     .eq("tenant_id", tenantId)
     .eq("id", id)
-    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at")
+    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
     .single();
 
   if (error) throw new Error(error.message);

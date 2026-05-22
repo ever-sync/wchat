@@ -668,6 +668,7 @@ export interface WhatsappInstance {
   lastSyncAt?: string | null;
   lastError?: string | null;
   createdAt?: string;
+  aiEnabled?: boolean;
 }
 
 export interface WhatsappInstanceConnectInput {
