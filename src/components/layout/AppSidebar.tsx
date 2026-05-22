@@ -1,5 +1,5 @@
 import {
-  BarChart3,
+  Bot,
   Briefcase,
   Check,
   Gauge,
@@ -64,7 +64,7 @@ type MenuItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
-  permission: "inbox" | "crm" | "clientes" | "produtos" | "relatorios" | "marketing" | "configuracoes";
+  permission: "inbox" | "crm" | "clientes" | "produtos" | "relatorios" | "marketing" | "ia" | "configuracoes";
 };
 
 const primaryItems: MenuItem[] = [
@@ -73,8 +73,8 @@ const primaryItems: MenuItem[] = [
   { title: "Clientes", url: "/clientes", icon: Users2, permission: "clientes" },
   { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
   { title: "Painel", url: "/painel", icon: Gauge, permission: "relatorios" },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3, permission: "relatorios" },
   { title: "Marketing", url: "/marketing", icon: Megaphone, permission: "marketing" },
+  { title: "Agente IA", url: "/agente-ia", icon: Bot, permission: "ia" },
 ];
 
 function SidebarTooltip({

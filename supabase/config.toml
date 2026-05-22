@@ -38,3 +38,11 @@ verify_jwt = false
 # Dispatch de e-mails: cron (x-cron-secret) processa todos; admin (JWT) processa o próprio tenant.
 [functions.marketing-email-dispatch]
 verify_jwt = false
+
+# Orquestrador de IA: drenado por cron (x-cron-secret); valida internamente.
+[functions.ai-orchestrator]
+verify_jwt = false
+
+# Ingestão da base de conhecimento (RAG): JWT do admin (requireTenantContext valida).
+[functions.ai-knowledge]
+verify_jwt = false

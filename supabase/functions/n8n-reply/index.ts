@@ -1,15 +1,14 @@
 import { aiBlockReasonMessage, evaluateAiReplyEligibility } from "../_shared/ai-business-rules.ts";
-import { decryptSecret } from "../_shared/crypto.ts";
 import {
-  ensureLeadFromChat,
-  getInstanceById,
-  insertOrDedupeOutboundMessage,
-  normalizeUazapiMessageId,
-} from "../_shared/domain.ts";
+  addNegotiationTag,
+  handoffChat,
+  moveNegotiationStage,
+  sendWhatsappText,
+} from "../_shared/ai-tools.ts";
+import { ensureLeadFromChat } from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 import { timingSafeEqual } from "../_shared/timing-safe-equal.ts";
-import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 300;
 
@@ -157,61 +156,16 @@ Deno.serve(async (request) => {
     const handoff = body.handoff === true;
 
     if (text) {
-      const instance = await getInstanceById(admin, chat.instance_id);
-      const apiKey = await decryptSecret(instance.encrypted_apikey);
-      const config = {
-        instanceName: instance.uazapi_instance_name,
-        baseUrl: instance.uazapi_base_url,
-        apiKey,
-      };
-
-      const response = await sendMessageViaUazapi(config, {
-        messageType: "text",
-        remoteJid: chat.remote_jid,
-        bodyText: text,
-        payload: {},
-      });
-
-      const rawProviderId = response.key?.id ?? response.data?.key?.id ?? response.id;
-      const uazapiMessageId = normalizeUazapiMessageId(
-        typeof rawProviderId === "string" ? rawProviderId : null,
-      ) || null;
-
-      await insertOrDedupeOutboundMessage(admin, instance, chat.id, {
-        uazapiMessageId,
-        messageType: "text",
-        status: "sent",
-        bodyText: text,
-        payloadJson: { source: "n8n" },
-        rawEvent: response,
-        sentAt: new Date().toISOString(),
-        actorType: "ai",
-      });
-
-      await admin
-        .from("whatsapp_chats")
-        .update({
-          last_message_preview: text,
-          last_message_at: new Date().toISOString(),
-        })
-        .eq("id", chat.id);
+      await sendWhatsappText(admin, chat, text, "n8n");
     }
 
     const setStage = typeof body.set_stage === "string" ? body.set_stage.trim() : null;
     if (setStage && chat.primary_negotiation_id) {
-      await admin
-        .from("crm_negotiations")
-        .update({ stage_id: setStage, last_interaction_at: new Date().toISOString() })
-        .eq("id", chat.primary_negotiation_id);
+      await moveNegotiationStage(admin, chat.primary_negotiation_id, setStage);
     }
 
     if (handoff) {
-      await admin
-        .from("whatsapp_chats")
-        .update({ ai_mode: "handoff" })
-        .eq("id", chat.id);
-
-      await admin.rpc("auto_assign_chat_system", { p_chat_id: chatId });
+      await handoffChat(admin, tenantId, chatId);
     }
 
     const tagsAdd = body.tags_add;
@@ -219,38 +173,7 @@ Deno.serve(async (request) => {
       for (const tagName of tagsAdd) {
         const name = String(tagName).trim();
         if (!name) continue;
-
-        let tagId: string | null = null;
-        const { data: existingTag } = await admin
-          .from("tags")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("scope", "negotiation")
-          .ilike("name", name)
-          .maybeSingle();
-
-        if (existingTag?.id) {
-          tagId = existingTag.id;
-        } else {
-          const { data: newTag } = await admin
-            .from("tags")
-            .insert({ tenant_id: tenantId, name, color: "#6366f1", scope: "negotiation" })
-            .select("id")
-            .single();
-          tagId = newTag?.id ?? null;
-        }
-
-        if (tagId) {
-          await admin.from("entity_tags").upsert(
-            {
-              tenant_id: tenantId,
-              tag_id: tagId,
-              entity_type: "negotiation",
-              entity_id: chat.primary_negotiation_id,
-            },
-            { onConflict: "tag_id,entity_type,entity_id", ignoreDuplicates: true },
-          );
-        }
+        await addNegotiationTag(admin, tenantId, chat.primary_negotiation_id, name);
       }
     }
 

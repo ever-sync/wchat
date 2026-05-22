@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   BarChart3,
   Download,
+  Gauge,
   Inbox,
   RefreshCcw,
   TrendingDown,
@@ -54,8 +55,10 @@ import {
 } from "@/lib/api/reports";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { PainelAoVivo } from "./Painel";
 
 type TabKey =
+  | "painel"
   | "atendimento"
   | "funil"
   | "parados"
@@ -383,7 +386,7 @@ function DeltaBadge({ current, prev, invertColor = false }: { current: number; p
 export default function Relatorios() {
   const { toast } = useToast();
   const now = useMemo(() => new Date(), []);
-  const [tab, setTab] = useState<TabKey>("atendimento");
+  const [tab, setTab] = useState<TabKey>("painel");
   const [period, setPeriod] = useState<QuickPeriod>("thisMonth");
   const initialThisMonth = useMemo(() => rangeForPeriod("thisMonth", now)!, [now]);
   const [from, setFrom] = useState(initialThisMonth.from);
@@ -746,11 +749,12 @@ export default function Relatorios() {
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Relatórios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Painel</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Atendimento WhatsApp, funil CRM, negócios parados, SLA comercial e performance da equipe.
+            Visão ao vivo do atendimento e relatórios de desempenho.
           </p>
         </div>
+        {tab !== "painel" ? (
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <Label htmlFor="period" className="text-xs">Período</Label>
@@ -789,8 +793,9 @@ export default function Relatorios() {
             Comparar com período anterior
           </label>
         </div>
+        ) : null}
       </div>
-      {compare ? (
+      {tab !== "painel" && compare ? (
         <p className="text-xs text-muted-foreground">
           Comparando com <strong>{prev.from}</strong> → <strong>{prev.to}</strong>
         </p>
@@ -798,6 +803,10 @@ export default function Relatorios() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
         <TabsList className="flex h-auto flex-wrap gap-1">
+          <TabsTrigger value="painel" className="gap-1.5">
+            <Gauge className="h-3.5 w-3.5" />
+            Tempo real
+          </TabsTrigger>
           <TabsTrigger value="atendimento">Atendimento</TabsTrigger>
           <TabsTrigger value="funil">Funil CRM</TabsTrigger>
           <TabsTrigger value="parados">Parados</TabsTrigger>
@@ -807,6 +816,10 @@ export default function Relatorios() {
           <TabsTrigger value="perdas">Motivos de perda</TabsTrigger>
           <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="painel" className="mt-4">
+          <PainelAoVivo />
+        </TabsContent>
 
         <TabsContent value="atendimento" className="mt-4 space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-2">

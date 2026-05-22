@@ -16,10 +16,7 @@ import { cn } from "@/lib/utils";
 const CONVERTER_SUB_TABS = [
   { value: "landing-pages", label: "Landing Pages" },
   { value: "formularios", label: "Formulários" },
-  { value: "pop-ups", label: "Pop-ups" },
-  { value: "campos-personalizados", label: "Campos Personalizados" },
   { value: "botoes-whatsapp", label: "Botões de WhatsApp" },
-  { value: "web-push", label: "Web Push", badge: "novo" as const },
   { value: "link-na-bio", label: "Link na Bio" },
 ] as const;
 
@@ -85,14 +82,9 @@ function ConverterTabTrigger({
           <DropdownMenuItem
             key={item.value}
             onSelect={() => onSelect(item.value)}
-            className="flex items-center justify-between gap-3 py-2 text-sm font-semibold"
+            className="flex items-center gap-3 py-2 text-sm font-semibold"
           >
             <span>{item.label}</span>
-            {"badge" in item && item.badge === "novo" ? (
-              <span className="inline-flex items-center rounded-md bg-cyan-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
-                Novo
-              </span>
-            ) : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

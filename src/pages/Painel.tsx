@@ -60,7 +60,7 @@ function formatWait(minutes: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-export default function Painel() {
+export function PainelAoVivo() {
   useAttendanceDashboardRealtime();
   const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } =
     useAttendanceDashboard();
@@ -91,38 +91,30 @@ export default function Painel() {
   const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Painel de atendimento</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Visão ao vivo da fila, do SLA de 1ª resposta e da equipe. Atualiza automaticamente.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {expediente ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium",
-                expediente.className,
-              )}
-            >
-              <Clock className="h-3.5 w-3.5" />
-              {expediente.label}
-            </span>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => void refetch()}
-            disabled={isFetching}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {expediente ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium",
+              expediente.className,
+            )}
           >
-            <RefreshCcw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-            Atualizar
-          </Button>
-        </div>
+            <Clock className="h-3.5 w-3.5" />
+            {expediente.label}
+          </span>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+        >
+          <RefreshCcw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+          Atualizar
+        </Button>
       </div>
 
       {isError ? (

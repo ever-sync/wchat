@@ -30,10 +30,10 @@ const ClientePerfil = lazyWithReload(() => import("./pages/ClientePerfil"));
 const Crm = lazyWithReload(() => import("./pages/Crm"));
 const CrmNegotiationDetail = lazyWithReload(() => import("./pages/CrmNegotiationDetail"));
 const Relatorios = lazyWithReload(() => import("./pages/Relatorios"));
-const Painel = lazyWithReload(() => import("./pages/Painel"));
 const Produtos = lazyWithReload(() => import("./pages/Produtos"));
 const Marketing = lazyWithReload(() => import("./pages/Marketing"));
 const MarketingFlowEditor = lazyWithReload(() => import("./pages/MarketingFlowEditor"));
+const AgenteIA = lazyWithReload(() => import("./pages/AgenteIA"));
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando…
@@ -142,17 +142,13 @@ const App = () => (
                     />
                     <Route
                       path="/relatorios"
-                      element={
-                        <PermissionRoute permission="relatorios">
-                          <Relatorios />
-                        </PermissionRoute>
-                      }
+                      element={<Navigate to="/painel" replace />}
                     />
                     <Route
                       path="/painel"
                       element={
                         <PermissionRoute permission="relatorios">
-                          <Painel />
+                          <Relatorios />
                         </PermissionRoute>
                       }
                     />
@@ -169,6 +165,14 @@ const App = () => (
                       element={
                         <PermissionRoute permission="marketing">
                           <MarketingFlowEditor />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/agente-ia"
+                      element={
+                        <PermissionRoute permission="ia">
+                          <AgenteIA />
                         </PermissionRoute>
                       }
                     />

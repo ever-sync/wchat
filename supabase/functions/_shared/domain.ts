@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
-import { evaluateAiReplyEligibility } from "./ai-business-rules.ts";
+import { evaluateAiReplyEligibility, normalizeChatAiMode } from "./ai-business-rules.ts";
 import { decryptSecret } from "./crypto.ts";
 import {
   downloadIncomingMediaFromUazapi,
@@ -32,6 +32,9 @@ type InstanceRecord = {
   is_default: boolean;
   webhook_token: string;
   archived_at?: string | null;
+  ai_enabled?: boolean;
+  ai_default_mode?: string | null;
+  ai_persona?: string | null;
 };
 
 type MessageDirection = "inbound" | "outbound";
@@ -1076,16 +1079,10 @@ export async function ensureChat(
     }
   }
 
+  // Auto-on por canal: conversas novas num canal com IA ligada já entram no modo padrão.
   let defaultAiMode = "off";
-  if (!existing) {
-    const { data: settings } = await admin
-      .from("tenant_settings")
-      .select("default_ai_mode")
-      .eq("tenant_id", instance.tenant_id)
-      .maybeSingle();
-    if (settings?.default_ai_mode) {
-      defaultAiMode = String(settings.default_ai_mode);
-    }
+  if (!existing && instance.ai_enabled) {
+    defaultAiMode = instance.ai_default_mode || "full";
   }
 
   const payload = {
@@ -1122,7 +1119,11 @@ export async function ensureChat(
   }
 
   // Distribuição por instância (round-robin) só para chats ainda sem dono.
-  if (params.autoAssign && data && !data.assignee_id) {
+  // Quando a IA está atendendo o chat (canal ligado + modo qualifying/full), NÃO
+  // auto-atribui a um humano — a IA é a primeira linha; o handoff atribui depois.
+  const aiHandling = Boolean(instance.ai_enabled) &&
+    (data?.ai_mode === "qualifying" || data?.ai_mode === "full");
+  if (params.autoAssign && data && !data.assignee_id && !aiHandling) {
     const { error: assignError } = await admin.rpc("auto_assign_instance_chat", {
       p_chat_id: data.id,
     });
@@ -1840,10 +1841,77 @@ export async function processMessagePayload(
     }
 
     await ensureLeadFromChat(admin, chat.id);
-    await notifyN8nInbound(admin, instance, chat, message, bodyText);
+
+    // Roteia o inbound conforme o provider de IA do tenant:
+    //  - 'native' → enfileira um turno pro orquestrador nativo (ai-orchestrator)
+    //  - 'n8n'/'off' → caminho atual (notifyN8nInbound, que no-op se n8n desligado)
+    const aiProvider = await getNativeAiProvider(admin, instance.tenant_id);
+    if (aiProvider === "native") {
+      await enqueueAiTurn(admin, instance, chat);
+    } else {
+      await notifyN8nInbound(admin, instance, chat, message, bodyText);
+    }
   }
 
   return { chat, message };
+}
+
+/** Lê o provider de IA do tenant (default 'off' se não houver config). */
+export async function getNativeAiProvider(
+  admin: AdminClient,
+  tenantId: string,
+): Promise<"off" | "n8n" | "native"> {
+  try {
+    const { data } = await admin
+      .from("tenant_ai_config")
+      .select("provider")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    const provider = String(data?.provider ?? "off");
+    return provider === "native" || provider === "n8n" ? provider : "off";
+  } catch (err) {
+    console.error("getNativeAiProvider:", err);
+    return "off";
+  }
+}
+
+/**
+ * Enfileira (ou re-agenda) um turno de IA pro chat. UPSERT por chat_id: uma nova
+ * mensagem dentro da janela de debounce empurra `run_after` e coalesce a rajada
+ * num único turno. Pré-filtro barato por ai_mode; a elegibilidade autoritativa
+ * (assignee/negociação/opt-out) roda no orquestrador.
+ */
+export async function enqueueAiTurn(
+  admin: AdminClient,
+  instance: InstanceRecord,
+  chat: Record<string, unknown>,
+) {
+  try {
+    if (!instance.ai_enabled) {
+      return; // IA desligada neste canal (master switch por instância)
+    }
+    const aiMode = normalizeChatAiMode(chat.ai_mode as string | null | undefined);
+    if (aiMode === "off" || aiMode === "handoff") {
+      return;
+    }
+    const debounceSeconds = 8;
+    const runAfter = new Date(Date.now() + debounceSeconds * 1000).toISOString();
+    await admin.from("ai_jobs").upsert(
+      {
+        tenant_id: instance.tenant_id,
+        chat_id: chat.id,
+        instance_id: instance.id,
+        status: "pending",
+        run_after: runAfter,
+        attempts: 0,
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "chat_id" },
+    );
+  } catch (err) {
+    console.error("enqueueAiTurn:", err);
+  }
 }
 
 /** Links chat to CRM negotiation (create if needed). */

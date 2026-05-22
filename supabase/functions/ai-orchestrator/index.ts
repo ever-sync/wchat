@@ -1,0 +1,566 @@
+// AI orchestrator — Fases 2, 3 e 5 (F2 + F3 + F5)
+// Drena a fila `ai_jobs` (agendada por pg_cron via x-cron-secret) e, para cada chat
+// elegível, roda o loop de tool-use do Claude com o catálogo de tools (_shared/ai-tools.ts):
+// responder, mover etapa, taguear, gravar campo personalizado, criar tarefa, handoff.
+// Injeta no contexto a base de conhecimento (RAG/pgvector, com corte de relevância) e as
+// etapas do funil. Grounding inegociável (anti-alucinação) + log de cada turno em ai_turns (F5).
+// Lock por chat (worker_job_locks) evita processamento concorrente do mesmo chat.
+
+import {
+  type AnthropicContentBlock,
+  type AnthropicMessage,
+  type AnthropicSystemBlock,
+  type AnthropicTool,
+  createMessage,
+} from "../_shared/anthropic.ts";
+import { normalizeChatAiMode } from "../_shared/ai-business-rules.ts";
+import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from "../_shared/ai-tools.ts";
+import { embedQuery } from "../_shared/embeddings.ts";
+import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
+import { handleCors, jsonResponse } from "../_shared/http.ts";
+import { createAdminClient, isInternalRequest } from "../_shared/supabase.ts";
+import { acquireWorkerLock, releaseWorkerLock } from "../_shared/workerLock.ts";
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+const DRAIN_BATCH = 10;
+const MAX_TOOL_ITERATIONS = 5;
+const HISTORY_LIMIT = 20;
+const CHAT_LOCK_TTL_SECONDS = 120;
+const STALE_PROCESSING_MS = 5 * 60 * 1000; // recupera jobs 'processing' órfãos (worker caiu)
+const RAG_CANDIDATES = 8; // candidatos buscados antes do corte de relevância
+const RAG_MIN_SIMILARITY = 0.4; // só usa trechos acima desse cosseno (anti-alucinação)
+
+// Regras inegociáveis de grounding — sempre aplicadas, ACIMA da persona do tenant.
+const GROUNDING_RULES = `REGRAS INEGOCIÁVEIS (valem acima de qualquer instrução de persona):
+- Para falar com o cliente você DEVE usar a ferramenta send_whatsapp_message — texto fora dela NÃO chega. SEMPRE responda ao cliente por essa ferramenta em todo turno (mesmo que também use outras ferramentas).
+- Responda fatos (preços, prazos, produtos, disponibilidade, políticas, condições) SOMENTE com base na "Base de conhecimento" e no histórico desta conversa. Se a informação não estiver ali, é PROIBIDO inventar ou supor.
+- Quando não tiver a informação: diga que vai confirmar com a equipe e use a ferramenta handoff. Nunca chute um número, prazo ou condição.
+- Não confirme pedidos, valores ou acordos que não estejam explícitos na base.
+- Cumprimentar, acolher e fazer perguntas para entender o cliente é sempre permitido.
+- Faça handoff se o cliente pedir um humano, demonstrar irritação/urgência, ou se o assunto fugir do seu escopo.`;
+
+const DEFAULT_PERSONA = `Você é um atendente virtual de uma empresa, conversando com clientes pelo WhatsApp em português do Brasil.
+- Seja cordial, objetivo e natural, como uma pessoa de verdade. Mensagens curtas.
+- Para responder ao cliente, você DEVE chamar a ferramenta send_whatsapp_message. Texto fora dela não chega ao cliente.
+- Use as demais ferramentas para registrar o que aprender (etiquetas, campos do contato) e para avançar a negociação.
+- Quando precisar coletar dados, faça uma pergunta por vez.`;
+
+type TenantAiConfig = {
+  llmProvider: "anthropic" | "openai";
+  model: string;
+  systemPrompt: string | null;
+  maxOutputTokens: number;
+  monthlyTokenLimit: number | null;
+};
+
+Deno.serve(async (request) => {
+  const cors = handleCors(request);
+  if (cors) return cors;
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405);
+  }
+  if (!isInternalRequest(request)) {
+    return jsonResponse({ error: "Unauthorized." }, 401);
+  }
+
+  const admin = createAdminClient();
+  const nowIso = new Date().toISOString();
+  const staleIso = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+
+  const { data: jobs, error } = await admin
+    .from("ai_jobs")
+    .select("*")
+    .lte("run_after", nowIso)
+    .or(`status.eq.pending,and(status.eq.processing,updated_at.lt.${staleIso})`)
+    .order("run_after", { ascending: true })
+    .limit(DRAIN_BATCH);
+
+  if (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+
+  let processed = 0;
+  let skipped = 0;
+  for (const job of jobs ?? []) {
+    const lockKey = `ai_chat:${job.chat_id}`;
+    let locked = false;
+    try {
+      locked = await acquireWorkerLock(admin, lockKey, CHAT_LOCK_TTL_SECONDS);
+      if (!locked) {
+        skipped++;
+        continue;
+      }
+      await admin
+        .from("ai_jobs")
+        .update({ status: "processing", attempts: (job.attempts ?? 0) + 1, updated_at: new Date().toISOString() })
+        .eq("id", job.id);
+
+      await processJob(admin, job);
+
+      // Marca done só se nada re-agendou o job (run_after intacto). Se uma nova mensagem
+      // chegou durante o processamento, o job voltou a 'pending' e será reprocessado.
+      await admin
+        .from("ai_jobs")
+        .update({ status: "done", last_error: null, updated_at: new Date().toISOString() })
+        .eq("id", job.id)
+        .eq("run_after", job.run_after);
+      processed++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await admin
+        .from("ai_jobs")
+        .update({ status: "error", last_error: message, updated_at: new Date().toISOString() })
+        .eq("id", job.id)
+        .eq("run_after", job.run_after);
+      console.error("ai-orchestrator job failed:", job.id, message);
+    } finally {
+      if (locked) await releaseWorkerLock(admin, lockKey);
+    }
+  }
+
+  return jsonResponse({ ok: true, processed, skipped, picked: (jobs ?? []).length });
+});
+
+async function processJob(admin: Admin, job: Record<string, unknown>) {
+  const chatId = String(job.chat_id);
+  const tenantId = String(job.tenant_id);
+
+  const { data: chat } = await admin
+    .from("whatsapp_chats")
+    .select("*, customers(opt_out)")
+    .eq("id", chatId)
+    .maybeSingle();
+  if (!chat) return;
+
+  if (!(await isChatStillEligible(admin, chatId))) return;
+
+  // O canal pode ter sido desligado durante o debounce; também pega a persona do canal.
+  const { data: inst } = await admin
+    .from("whatsapp_instances")
+    .select("ai_enabled, ai_persona")
+    .eq("id", chat.instance_id)
+    .maybeSingle();
+  if (!inst?.ai_enabled) return;
+  const channelPersona = (inst.ai_persona as string | null) ?? null;
+
+  const config = await getTenantAiConfig(admin, tenantId);
+  if (await isOverQuota(admin, tenantId, config.monthlyTokenLimit)) {
+    console.warn("ai-orchestrator: tenant over monthly token limit", tenantId);
+    return;
+  }
+
+  const aiMode = normalizeChatAiMode(chat.ai_mode as string | null | undefined);
+  let tools = toolsForMode(aiMode);
+  if (tools.length === 0) return; // off/handoff — sem ferramentas
+
+  const negotiationId = (chat.primary_negotiation_id as string | null) ?? null;
+  const customerId = (chat.customer_id as string | null) ?? null;
+
+  const negotiation = negotiationId ? await loadNegotiation(admin, negotiationId) : null;
+  const stages = negotiation?.funnelId ? await loadFunnelStages(admin, tenantId, negotiation.funnelId) : [];
+  const fieldNames = await loadCustomFieldNames(admin, tenantId);
+  // Sem campos personalizados definidos, não ofereça set_custom_field (evita erro/ruído).
+  if (fieldNames.length === 0) {
+    tools = tools.filter((t) => t.name !== "set_custom_field");
+  }
+
+  const { data: rows } = await admin
+    .from("whatsapp_messages")
+    .select("direction, body_text, created_at, actor_type")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_LIMIT);
+
+  const conversation = buildConversation((rows ?? []).reverse());
+  if (conversation.length === 0) return;
+
+  // RAG: busca os trechos relevantes (acima do corte de similaridade) da base do tenant.
+  const startedAt = Date.now();
+  const userMessage = lastUserText(conversation);
+  const retrieved = await retrieveKnowledge(admin, tenantId, userMessage);
+
+  const system = buildSystem(config, {
+    chat,
+    personaOverride: channelPersona,
+    stageId: negotiation?.stageId ?? null,
+    stages,
+    fieldNames,
+    knowledge: retrieved.map((r) => r.content),
+  });
+  const ctx: ToolContext = { admin, tenantId, chat, negotiationId, customerId, aiMode };
+
+  // Roda o loop de tool-use no provedor de LLM configurado (Anthropic ou OpenAI).
+  const result = config.llmProvider === "openai"
+    ? await runOpenAiLoop(ctx, config, system, conversation, tools)
+    : await runAnthropicLoop(ctx, config, system, conversation, tools);
+
+  await admin.from("ai_usage").insert({
+    tenant_id: tenantId,
+    chat_id: chatId,
+    model: config.model,
+    input_tokens: result.usage.input,
+    output_tokens: result.usage.output,
+    cache_read_tokens: result.usage.cacheRead,
+    cache_creation_tokens: result.usage.cacheCreation,
+  });
+
+  // Observabilidade (F5): registra o turno completo para auditar/depurar alucinação.
+  await admin.from("ai_turns").insert({
+    tenant_id: tenantId,
+    chat_id: chatId,
+    model: config.model,
+    user_message: userMessage || null,
+    retrieved,
+    reply: result.replies.join("\n\n") || null,
+    tools: result.toolLog,
+    stop_reason: result.stopReason,
+    iterations: result.iterations,
+    input_tokens: result.usage.input,
+    output_tokens: result.usage.output,
+    cache_read_tokens: result.usage.cacheRead,
+    cache_creation_tokens: result.usage.cacheCreation,
+    latency_ms: Date.now() - startedAt,
+  });
+}
+
+type LoopUsage = { input: number; output: number; cacheRead: number; cacheCreation: number };
+type LoopResult = {
+  usage: LoopUsage;
+  toolLog: Array<Record<string, unknown>>;
+  replies: string[];
+  stopReason: string | null;
+  iterations: number;
+};
+
+function recordTool(
+  result: LoopResult,
+  name: string,
+  input: Record<string, unknown> | undefined,
+  outcome: { content: string; isError: boolean },
+) {
+  result.toolLog.push({ name, input: input ?? {}, result: outcome.content, is_error: outcome.isError });
+  if (name === "send_whatsapp_message" && !outcome.isError) {
+    const text = String((input?.text as string | undefined) ?? "").trim();
+    if (text) result.replies.push(text);
+  }
+}
+
+/** Loop de tool-use na Messages API da Anthropic (com cache_control no system/tools). */
+async function runAnthropicLoop(
+  ctx: ToolContext,
+  config: TenantAiConfig,
+  system: AnthropicSystemBlock[],
+  conversation: AnthropicMessage[],
+  tools: AnthropicTool[],
+): Promise<LoopResult> {
+  const result: LoopResult = {
+    usage: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+    toolLog: [],
+    replies: [],
+    stopReason: null,
+    iterations: 0,
+  };
+  let messages = conversation;
+  let finalText = "";
+
+  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    result.iterations = i + 1;
+    const response = await createMessage({ model: config.model, maxTokens: config.maxOutputTokens, system, tools, messages });
+    result.usage.input += response.usage.input_tokens ?? 0;
+    result.usage.output += response.usage.output_tokens ?? 0;
+    result.usage.cacheRead += response.usage.cache_read_input_tokens ?? 0;
+    result.usage.cacheCreation += response.usage.cache_creation_input_tokens ?? 0;
+    result.stopReason = response.stop_reason;
+
+    if (response.stop_reason !== "tool_use") {
+      finalText = response.content.filter((b) => b.type === "text").map((b) => String(b.text ?? "")).join("").trim();
+      break;
+    }
+
+    const toolResults: AnthropicContentBlock[] = [];
+    let aborted = false;
+    for (const block of response.content.filter((b) => b.type === "tool_use")) {
+      const outcome = await executeTool(ctx, String(block.name), block.input);
+      recordTool(result, String(block.name), block.input, outcome);
+      toolResults.push({ type: "tool_result", tool_use_id: block.id, content: outcome.content, is_error: outcome.isError });
+      if (outcome.aborted) aborted = true;
+    }
+
+    messages = [...messages, { role: "assistant", content: response.content }, { role: "user", content: toolResults }];
+    if (aborted) break;
+  }
+
+  await deliverFallback(ctx, result, finalText);
+  return result;
+}
+
+/** Se o modelo respondeu em texto sem chamar send_whatsapp_message, entrega o texto. */
+async function deliverFallback(ctx: ToolContext, result: LoopResult, finalText: string) {
+  if (result.replies.length === 0 && finalText) {
+    const outcome = await executeTool(ctx, "send_whatsapp_message", { text: finalText });
+    recordTool(result, "send_whatsapp_message", { text: finalText }, outcome);
+  }
+}
+
+/** Loop de tool-use na Chat Completions API da OpenAI (system vira texto único). */
+async function runOpenAiLoop(
+  ctx: ToolContext,
+  config: TenantAiConfig,
+  system: AnthropicSystemBlock[],
+  conversation: AnthropicMessage[],
+  tools: AnthropicTool[],
+): Promise<LoopResult> {
+  const result: LoopResult = {
+    usage: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+    toolLog: [],
+    replies: [],
+    stopReason: null,
+    iterations: 0,
+  };
+
+  const systemText = system.map((b) => b.text).join("\n\n");
+  const oaTools: OpenAiTool[] = tools.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
+  const messages: OpenAiMessage[] = [
+    { role: "system", content: systemText },
+    ...conversation.map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : "",
+    })),
+  ];
+
+  let finalText = "";
+  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    result.iterations = i + 1;
+    const response = await createChatCompletion({
+      model: config.model,
+      maxTokens: config.maxOutputTokens,
+      messages,
+      tools: oaTools,
+    });
+    const cached = response.usage?.prompt_tokens_details?.cached_tokens ?? 0;
+    result.usage.input += Math.max(0, (response.usage?.prompt_tokens ?? 0) - cached);
+    result.usage.cacheRead += cached;
+    result.usage.output += response.usage?.completion_tokens ?? 0;
+
+    const choice = response.choices?.[0];
+    const message = choice?.message;
+    result.stopReason = choice?.finish_reason ?? null;
+    if (!message) break;
+
+    const toolCalls = message.tool_calls ?? [];
+    // Reanexa a mensagem do assistant (com tool_calls) ao histórico.
+    messages.push({ role: "assistant", content: message.content ?? "", tool_calls: toolCalls.length ? toolCalls : undefined });
+
+    if (choice?.finish_reason !== "tool_calls" || toolCalls.length === 0) {
+      finalText = (message.content ?? "").trim();
+      break;
+    }
+
+    let aborted = false;
+    for (const call of toolCalls) {
+      let input: Record<string, unknown> = {};
+      try {
+        input = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+      } catch {
+        input = {};
+      }
+      const outcome = await executeTool(ctx, call.function.name, input);
+      recordTool(result, call.function.name, input, outcome);
+      messages.push({ role: "tool", tool_call_id: call.id, content: outcome.content });
+      if (outcome.aborted) aborted = true;
+    }
+    if (aborted) break;
+  }
+
+  await deliverFallback(ctx, result, finalText);
+  return result;
+}
+
+type NegotiationCtx = { stageId: string | null; funnelId: string | null };
+type FunnelStage = { id: string; title: string };
+
+const DEFAULT_FUNNEL_STAGES: FunnelStage[] = [
+  { id: "lead", title: "LEAD QUALIFICADA" },
+  { id: "contato", title: "CONTATO FEITO" },
+  { id: "andamento", title: "EM ANDAMENTO" },
+  { id: "contrato", title: "ENVIO CONTRATO" },
+  { id: "venda", title: "VENDA" },
+];
+
+async function loadNegotiation(admin: Admin, negotiationId: string): Promise<NegotiationCtx> {
+  const { data } = await admin
+    .from("crm_negotiations")
+    .select("stage_id, funnel_id")
+    .eq("id", negotiationId)
+    .maybeSingle();
+  return {
+    stageId: (data?.stage_id as string | null) ?? null,
+    funnelId: (data?.funnel_id as string | null) ?? null,
+  };
+}
+
+/** Etapas do funil do tenant (config custom) com fallback para os padrões. */
+async function loadFunnelStages(admin: Admin, tenantId: string, funnelId: string): Promise<FunnelStage[]> {
+  const { data } = await admin
+    .from("tenant_crm_funnel_config")
+    .select("funnels")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  const funnels = Array.isArray(data?.funnels) ? (data!.funnels as Array<Record<string, unknown>>) : null;
+  if (funnels) {
+    const funnel = funnels.find((f) => String(f?.id) === funnelId);
+    const stages = Array.isArray(funnel?.stages) ? (funnel!.stages as Array<Record<string, unknown>>) : null;
+    if (stages && stages.length > 0) {
+      return stages.map((s) => ({ id: String(s.id), title: String(s.title ?? s.id) }));
+    }
+  }
+  return DEFAULT_FUNNEL_STAGES;
+}
+
+function lastUserText(conversation: AnthropicMessage[]): string {
+  for (let i = conversation.length - 1; i >= 0; i--) {
+    const m = conversation[i];
+    if (m.role === "user" && typeof m.content === "string") return m.content;
+  }
+  return "";
+}
+
+type KnowledgeMatch = { content: string; similarity: number };
+
+async function retrieveKnowledge(admin: Admin, tenantId: string, query: string): Promise<KnowledgeMatch[]> {
+  if (!query.trim()) return [];
+  try {
+    const embedding = await embedQuery(query);
+    const { data } = await admin.rpc("match_ai_knowledge", {
+      p_tenant_id: tenantId,
+      p_query_embedding: embedding,
+      p_match_count: RAG_CANDIDATES,
+    });
+    return (data ?? [])
+      .map((m: Record<string, unknown>) => ({ content: String(m.content), similarity: Number(m.similarity ?? 0) }))
+      // Corte de relevância: trechos irrelevantes confundem o modelo e geram alucinação.
+      .filter((m: KnowledgeMatch) => m.content && m.similarity >= RAG_MIN_SIMILARITY);
+  } catch (err) {
+    // RAG é best-effort: se a busca falhar (ex.: VOYAGE_API_KEY ausente), responde sem ela.
+    console.error("retrieveKnowledge:", err);
+    return [];
+  }
+}
+
+async function loadCustomFieldNames(admin: Admin, tenantId: string): Promise<string[]> {
+  const { data } = await admin
+    .from("customer_custom_fields")
+    .select("nome")
+    .eq("tenant_id", tenantId)
+    .order("sort_order", { ascending: true });
+  return (data ?? []).map((f: Record<string, unknown>) => String(f.nome)).filter(Boolean);
+}
+
+async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<TenantAiConfig> {
+  const { data } = await admin
+    .from("tenant_ai_config")
+    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  return {
+    llmProvider: data?.llm_provider === "openai" ? "openai" : "anthropic",
+    model: data?.model ?? "claude-sonnet-4-6",
+    systemPrompt: data?.system_prompt ?? null,
+    maxOutputTokens: data?.max_output_tokens ?? 1024,
+    monthlyTokenLimit: data?.monthly_token_limit ?? null,
+  };
+}
+
+async function isOverQuota(admin: Admin, tenantId: string, limit: number | null): Promise<boolean> {
+  if (!limit || limit <= 0) return false;
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const { data } = await admin
+    .from("ai_usage")
+    .select("input_tokens, output_tokens")
+    .eq("tenant_id", tenantId)
+    .gte("created_at", monthStart.toISOString());
+  const used = (data ?? []).reduce(
+    (sum: number, r: Record<string, number>) => sum + (r.input_tokens ?? 0) + (r.output_tokens ?? 0),
+    0,
+  );
+  return used >= limit;
+}
+
+/** Histórico (cronológico) → mensagens do Claude. Garante que comece em 'user'. */
+function buildConversation(rows: Array<Record<string, unknown>>): AnthropicMessage[] {
+  const messages: AnthropicMessage[] = [];
+  for (const row of rows) {
+    const text = String(row.body_text ?? "").trim();
+    if (!text) continue;
+    const role = row.direction === "inbound" ? "user" : "assistant";
+    messages.push({ role, content: text });
+  }
+  while (messages.length > 0 && messages[0].role === "assistant") {
+    messages.shift();
+  }
+  return messages;
+}
+
+function buildSystem(
+  config: TenantAiConfig,
+  opts: {
+    chat: Record<string, unknown>;
+    personaOverride?: string | null;
+    stageId: string | null;
+    stages: FunnelStage[];
+    fieldNames: string[];
+    knowledge: string[];
+  },
+): AnthropicSystemBlock[] {
+  // Persona do canal (se houver) > persona do tenant > padrão do sistema.
+  const persona = opts.personaOverride?.trim() || config.systemPrompt?.trim() || DEFAULT_PERSONA;
+  // Grounding (regras fixas) + persona = prefixo estável (cache_control na persona);
+  // contexto e base de conhecimento vêm depois (voláteis, fora do cache).
+  const blocks: AnthropicSystemBlock[] = [
+    { type: "text", text: GROUNDING_RULES },
+    { type: "text", text: persona, cache_control: { type: "ephemeral" } },
+  ];
+
+  const context: string[] = [];
+  const name = String(opts.chat.display_name ?? "").trim();
+  if (name) context.push(`Nome do contato: ${name}.`);
+  if (opts.stageId) context.push(`Etapa atual no funil: ${opts.stageId}.`);
+  if (opts.stages.length > 0) {
+    context.push(
+      `Etapas do funil disponíveis (use o id com move_stage): ${
+        opts.stages.map((s) => `${s.id} (${s.title})`).join(", ")
+      }.`,
+    );
+  }
+  if (opts.fieldNames.length > 0) {
+    context.push(`Campos personalizados que você pode preencher com set_custom_field: ${opts.fieldNames.join(", ")}.`);
+  }
+  if (context.length > 0) {
+    blocks.push({ type: "text", text: `Contexto desta conversa: ${context.join(" ")}` });
+  }
+
+  if (opts.knowledge.length > 0) {
+    blocks.push({
+      type: "text",
+      text:
+        "Base de conhecimento da empresa (responda fatos SOMENTE com base nestes trechos):\n\n" +
+        opts.knowledge.map((k, i) => `[${i + 1}] ${k}`).join("\n\n"),
+    });
+  } else {
+    blocks.push({
+      type: "text",
+      text:
+        "Não há trechos relevantes na base de conhecimento para esta mensagem. " +
+        "Você pode cumprimentar e fazer perguntas, mas NÃO afirme fatos sobre produtos, preços, prazos ou políticas — " +
+        "se o cliente perguntar algo assim, diga que vai confirmar com a equipe ou faça handoff.",
+    });
+  }
+  return blocks;
+}
