@@ -56,10 +56,26 @@ Deno.serve(async (request) => {
     } catch {
       return jsonResponse({ error: "JSON inválido." }, 400);
     }
-    const title = String(body.title ?? "").trim();
-    const content = String(body.content ?? "").trim();
+    let title = String(body.title ?? "").trim();
+    let content = String(body.content ?? "").trim();
+    const url = String(body.url ?? "").trim();
+
+    // Importar de uma URL: baixa a página e extrai o texto.
+    if (url) {
+      if (!/^https?:\/\//i.test(url)) {
+        return jsonResponse({ error: "URL inválida (use http/https)." }, 400);
+      }
+      try {
+        const fetched = await fetchUrlText(url);
+        content = fetched.text;
+        if (!title) title = fetched.title || url;
+      } catch (err) {
+        return jsonResponse({ error: `Falha ao importar a URL: ${err instanceof Error ? err.message : err}` }, 502);
+      }
+    }
+
     if (!title || !content) {
-      return jsonResponse({ error: "title e content são obrigatórios." }, 400);
+      return jsonResponse({ error: "Informe título + conteúdo, ou uma URL." }, 400);
     }
 
     const chunks = chunkText(content).slice(0, MAX_CHUNKS);
@@ -130,4 +146,39 @@ function chunkText(text: string, maxLen = MAX_CHUNK_LEN): string[] {
   }
   if (current.trim()) chunks.push(current);
   return chunks;
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+/** Baixa uma página e extrai título + texto legível (strip de HTML). */
+async function fetchUrlText(url: string): Promise<{ title: string; text: string }> {
+  const res = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (WChat KB importer)" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const html = await res.text();
+
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch ? decodeEntities(titleMatch[1]).trim() : "";
+
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<\/(p|div|br|li|h[1-6]|tr|section|article)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+
+  const clean = decodeEntities(text)
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!clean) throw new Error("Não foi possível extrair texto da página.");
+  return { title, text: clean };
 }

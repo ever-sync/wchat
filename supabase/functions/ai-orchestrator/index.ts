@@ -17,6 +17,7 @@ import { normalizeChatAiMode } from "../_shared/ai-business-rules.ts";
 import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from "../_shared/ai-tools.ts";
 import { embedQuery } from "../_shared/embeddings.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
+import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient, isInternalRequest } from "../_shared/supabase.ts";
 import { acquireWorkerLock, releaseWorkerLock } from "../_shared/workerLock.ts";
@@ -30,6 +31,8 @@ const CHAT_LOCK_TTL_SECONDS = 120;
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // recupera jobs 'processing' órfãos (worker caiu)
 const RAG_CANDIDATES = 8; // candidatos buscados antes do corte de relevância
 const RAG_MIN_SIMILARITY = 0.4; // só usa trechos acima desse cosseno (anti-alucinação)
+const MAX_JOB_ATTEMPTS = 3; // tentativas por turno antes de marcar 'error' (retry com backoff)
+const MAX_TURNS_PER_HOUR = 30; // teto anti-spam de respostas da IA por chat por hora
 
 // Regras inegociáveis de grounding — sempre aplicadas, ACIMA da persona do tenant.
 const GROUNDING_RULES = `REGRAS INEGOCIÁVEIS (valem acima de qualquer instrução de persona):
@@ -109,12 +112,29 @@ Deno.serve(async (request) => {
       processed++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await admin
-        .from("ai_jobs")
-        .update({ status: "error", last_error: message, updated_at: new Date().toISOString() })
-        .eq("id", job.id)
-        .eq("run_after", job.run_after);
-      console.error("ai-orchestrator job failed:", job.id, message);
+      const attemptsSoFar = (job.attempts ?? 0) + 1; // já incrementado no claim
+      if (attemptsSoFar < MAX_JOB_ATTEMPTS) {
+        // Re-tenta com backoff (resolve erros transitórios do LLM: 429/529/5xx/rede).
+        const backoffMs = Math.min(attemptsSoFar * 30, 300) * 1000;
+        await admin
+          .from("ai_jobs")
+          .update({
+            status: "pending",
+            run_after: new Date(Date.now() + backoffMs).toISOString(),
+            last_error: message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id)
+          .eq("run_after", job.run_after);
+        console.warn(`ai-orchestrator retry ${attemptsSoFar}/${MAX_JOB_ATTEMPTS}:`, job.id, message);
+      } else {
+        await admin
+          .from("ai_jobs")
+          .update({ status: "error", last_error: message, updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+          .eq("run_after", job.run_after);
+        console.error("ai-orchestrator job failed (sem mais retries):", job.id, message);
+      }
     } finally {
       if (locked) await releaseWorkerLock(admin, lockKey);
     }
@@ -145,6 +165,18 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   if (!inst?.ai_enabled) return;
   const channelPersona = (inst.ai_persona as string | null) ?? null;
 
+  // Teto anti-spam por chat (evita loop/abuso queimando tokens).
+  const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const { count: recentTurns } = await admin
+    .from("ai_turns")
+    .select("id", { count: "exact", head: true })
+    .eq("chat_id", chatId)
+    .gte("created_at", oneHourAgo);
+  if ((recentTurns ?? 0) >= MAX_TURNS_PER_HOUR) {
+    console.warn("ai-orchestrator: teto de turnos/hora atingido", chatId);
+    return;
+  }
+
   const config = await getTenantAiConfig(admin, tenantId);
   if (await isOverQuota(admin, tenantId, config.monthlyTokenLimit)) {
     console.warn("ai-orchestrator: tenant over monthly token limit", tenantId);
@@ -168,11 +200,13 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
 
   const { data: rows } = await admin
     .from("whatsapp_messages")
-    .select("direction, body_text, created_at, actor_type")
+    .select("id, direction, body_text, created_at, actor_type, message_type, media_url, payload_json")
     .eq("chat_id", chatId)
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
 
+  // Áudio → transcrição (STT); outras mídias → placeholder, para a IA não ignorar.
+  await resolveMediaContent(admin, rows ?? []);
   const conversation = buildConversation((rows ?? []).reverse());
   if (conversation.length === 0) return;
 
@@ -252,7 +286,7 @@ async function runAnthropicLoop(
   ctx: ToolContext,
   config: TenantAiConfig,
   system: AnthropicSystemBlock[],
-  conversation: AnthropicMessage[],
+  conversation: ConvMessage[],
   tools: AnthropicTool[],
 ): Promise<LoopResult> {
   const result: LoopResult = {
@@ -262,7 +296,7 @@ async function runAnthropicLoop(
     stopReason: null,
     iterations: 0,
   };
-  let messages = conversation;
+  let messages: AnthropicMessage[] = conversation.map(toAnthropicMessage);
   let finalText = "";
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
@@ -309,7 +343,7 @@ async function runOpenAiLoop(
   ctx: ToolContext,
   config: TenantAiConfig,
   system: AnthropicSystemBlock[],
-  conversation: AnthropicMessage[],
+  conversation: ConvMessage[],
   tools: AnthropicTool[],
 ): Promise<LoopResult> {
   const result: LoopResult = {
@@ -327,10 +361,7 @@ async function runOpenAiLoop(
   }));
   const messages: OpenAiMessage[] = [
     { role: "system", content: systemText },
-    ...conversation.map((m) => ({
-      role: m.role,
-      content: typeof m.content === "string" ? m.content : "",
-    })),
+    ...conversation.map(toOpenAiMessage),
   ];
 
   let finalText = "";
@@ -422,10 +453,9 @@ async function loadFunnelStages(admin: Admin, tenantId: string, funnelId: string
   return DEFAULT_FUNNEL_STAGES;
 }
 
-function lastUserText(conversation: AnthropicMessage[]): string {
+function lastUserText(conversation: ConvMessage[]): string {
   for (let i = conversation.length - 1; i >= 0; i--) {
-    const m = conversation[i];
-    if (m.role === "user" && typeof m.content === "string") return m.content;
+    if (conversation[i].role === "user" && conversation[i].text) return conversation[i].text;
   }
   return "";
 }
@@ -493,19 +523,95 @@ async function isOverQuota(admin: Admin, tenantId: string, limit: number | null)
   return used >= limit;
 }
 
-/** Histórico (cronológico) → mensagens do Claude. Garante que comece em 'user'. */
-function buildConversation(rows: Array<Record<string, unknown>>): AnthropicMessage[] {
-  const messages: AnthropicMessage[] = [];
+/**
+ * Resolve o conteúdo de mensagens de mídia sem texto (muta `body_text` in-place):
+ * áudio → transcrição (cacheada em payload_json.transcription); imagem/doc/vídeo →
+ * placeholder, para a IA reconhecer em vez de ignorar. Best-effort (não quebra o turno).
+ */
+async function resolveMediaContent(admin: Admin, rows: Array<Record<string, unknown>>) {
   for (const row of rows) {
-    const text = String(row.body_text ?? "").trim();
-    if (!text) continue;
+    if (String(row.body_text ?? "").trim()) continue;
+    const type = String(row.message_type ?? "");
+    const mediaUrl = (row.media_url as string | null) ?? null;
+    if (!mediaUrl) continue;
+    const payload = (row.payload_json as Record<string, unknown> | null) ?? {};
+
+    if (type === "audio") {
+      const cached = typeof payload.transcription === "string" ? payload.transcription : "";
+      if (cached.trim()) {
+        row.body_text = cached;
+        continue;
+      }
+      try {
+        const text = await transcribeAudio(mediaUrl);
+        if (text) {
+          const value = `[áudio do cliente] ${text}`;
+          row.body_text = value;
+          await admin
+            .from("whatsapp_messages")
+            .update({ payload_json: { ...payload, transcription: value } })
+            .eq("id", row.id);
+        }
+      } catch (err) {
+        console.error("resolveMediaContent(audio):", err);
+      }
+      continue;
+    }
+
+    // Imagem: NÃO vira placeholder — buildConversation anexa a própria imagem (visão).
+    if (type === "document") row.body_text = "[o cliente enviou um documento/arquivo]";
+    else if (type === "video") row.body_text = "[o cliente enviou um vídeo]";
+  }
+}
+
+// Mensagem neutra: texto + imagem opcional (cada loop formata pro seu provedor).
+type ConvMessage = { role: "user" | "assistant"; text: string; imageUrl?: string };
+
+/** Histórico (cronológico) → mensagens neutras. Garante que comece em 'user'. */
+function buildConversation(rows: Array<Record<string, unknown>>): ConvMessage[] {
+  const messages: ConvMessage[] = [];
+  for (const row of rows) {
     const role = row.direction === "inbound" ? "user" : "assistant";
-    messages.push({ role, content: text });
+    const text = String(row.body_text ?? "").trim();
+    const isImage = String(row.message_type ?? "") === "image" && row.media_url;
+    if (isImage) {
+      messages.push({ role, text: text || "[imagem enviada pelo cliente]", imageUrl: String(row.media_url) });
+    } else if (text) {
+      messages.push({ role, text });
+    }
   }
   while (messages.length > 0 && messages[0].role === "assistant") {
     messages.shift();
   }
   return messages;
+}
+
+/** ConvMessage → mensagem da Anthropic (imagem vira bloco image/source url). */
+function toAnthropicMessage(m: ConvMessage): AnthropicMessage {
+  if (m.imageUrl) {
+    return {
+      role: m.role,
+      content: [
+        { type: "image", source: { type: "url", url: m.imageUrl } },
+        { type: "text", text: m.text },
+      ],
+    };
+  }
+  return { role: m.role, content: m.text };
+}
+
+/** ConvMessage → mensagem da OpenAI (imagem vira image_url). */
+function toOpenAiMessage(m: ConvMessage): OpenAiMessage {
+  if (m.imageUrl) {
+    return {
+      role: m.role,
+      content: [
+        { type: "text", text: m.text },
+        { type: "image_url", image_url: { url: m.imageUrl } },
+      ],
+    };
+  }
+  return { role: m.role, content: m.text };
 }
 
 function buildSystem(

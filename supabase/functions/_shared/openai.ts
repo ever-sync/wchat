@@ -16,7 +16,7 @@ export type OpenAiToolCall = {
 
 export type OpenAiMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  content?: string | unknown[] | null; // unknown[] para conteúdo multimodal (image_url)
   tool_calls?: OpenAiToolCall[];
   tool_call_id?: string;
 };

@@ -21,6 +21,7 @@ import {
   useAddKnowledgeSource,
   useAiChannels,
   useAiTurns,
+  useImportKnowledgeUrl,
   useAiUsageThisMonth,
   useDeleteKnowledgeSource,
   useKnowledgeSources,
@@ -271,6 +272,7 @@ function ConhecimentoTab() {
   const { data: sources = [], isLoading, isError, error } = useKnowledgeSources();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [url, setUrl] = useState("");
 
   const add = useAddKnowledgeSource({
     onSuccess: () => {
@@ -279,6 +281,13 @@ function ConhecimentoTab() {
       setContent("");
     },
     onError: (e) => toast({ title: "Não foi possível adicionar", description: e.message, variant: "destructive" }),
+  });
+  const importUrl = useImportKnowledgeUrl({
+    onSuccess: () => {
+      toast({ title: "Página importada para a base." });
+      setUrl("");
+    },
+    onError: (e) => toast({ title: "Não foi possível importar", description: e.message, variant: "destructive" }),
   });
   const del = useDeleteKnowledgeSource({
     onError: (e) => toast({ title: "Não foi possível remover", description: e.message, variant: "destructive" }),
@@ -319,6 +328,26 @@ function ConhecimentoTab() {
               disabled={!title.trim() || !content.trim() || add.isPending}
             >
               {add.isPending ? "Processando…" : "Adicionar à base"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Importar de uma página</CardTitle>
+          <CardDescription>Cole o link do seu site/FAQ — a IA extrai o texto da página automaticamente.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://seusite.com/faq"
+              className="flex-1"
+            />
+            <Button onClick={() => importUrl.mutate(url.trim())} disabled={!url.trim() || importUrl.isPending}>
+              {importUrl.isPending ? "Importando…" : "Importar"}
             </Button>
           </div>
         </CardContent>
@@ -478,26 +507,37 @@ function AtividadeTab() {
   }
 
   const stats = [
-    { label: "Turnos da IA", value: data.messages },
-    { label: "Tokens de entrada", value: data.inputTokens },
-    { label: "Tokens de saída", value: data.outputTokens },
-    { label: "Tokens de cache (lidos)", value: data.cacheReadTokens },
+    {
+      label: "Custo estimado (mês)",
+      value: data.costUsd.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: data.costUsd < 1 ? 4 : 2,
+      }),
+    },
+    { label: "Turnos da IA", value: nf(data.messages) },
+    { label: "Tokens de entrada", value: nf(data.inputTokens) },
+    { label: "Tokens de saída", value: nf(data.outputTokens) },
+    { label: "Tokens de cache (lidos)", value: nf(data.cacheReadTokens) },
   ];
 
   return (
     <div className="space-y-4">
       <div>
         <p className="mb-3 text-sm text-muted-foreground">Consumo no mês atual.</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {stats.map((stat) => (
             <Card key={stat.label}>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">{stat.label}</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{nf(stat.value)}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</p>
               </CardContent>
             </Card>
           ))}
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Custo estimado em US$ a partir dos tokens e do modelo de cada turno (preços de tabela; pode variar).
+        </p>
       </div>
       <TurnsList />
     </div>

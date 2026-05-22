@@ -123,6 +123,10 @@ export async function addKnowledgeSource(input: { title: string; content: string
   await invokeAuthedFunction("ai-knowledge", input, "POST");
 }
 
+export async function importKnowledgeUrl(url: string): Promise<void> {
+  await invokeAuthedFunction("ai-knowledge", { url }, "POST");
+}
+
 export async function deleteKnowledgeSource(id: string): Promise<void> {
   await invokeAuthedFunction(`ai-knowledge?source_id=${encodeURIComponent(id)}`, undefined, "DELETE");
 }
@@ -139,6 +143,18 @@ export function useAddKnowledgeSource(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: addKnowledgeSource,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: KNOWLEDGE_KEY });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useImportKnowledgeUrl(options?: UseMutationOptions<void, Error, string>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: importKnowledgeUrl,
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: KNOWLEDGE_KEY });
@@ -168,10 +184,25 @@ export type AiUsageSummary = {
   outputTokens: number;
   cacheReadTokens: number;
   messages: number;
+  costUsd: number;
 };
 
+// Preço em US$ por 1M de tokens (estimativas — ajuste conforme o provedor/modelo).
+type ModelPrice = { input: number; output: number; cacheRead: number; cacheWrite: number };
+const MODEL_PRICING: Record<string, ModelPrice> = {
+  "claude-opus-4-7": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "claude-opus-4-6": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  "claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+  "gpt-4.1": { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0 },
+  "gpt-4.1-mini": { input: 0.4, output: 1.6, cacheRead: 0.1, cacheWrite: 0 },
+  "gpt-4o": { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 },
+  "gpt-4o-mini": { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 },
+};
+const DEFAULT_PRICE: ModelPrice = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+
 export async function fetchAiUsageThisMonth(): Promise<AiUsageSummary> {
-  const empty: AiUsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, messages: 0 };
+  const empty: AiUsageSummary = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, messages: 0, costUsd: 0 };
   if (!isSupabaseConfigured) return empty;
   const supabase = requireSupabase();
   const tenantId = await getCurrentTenantId();
@@ -180,20 +211,25 @@ export async function fetchAiUsageThisMonth(): Promise<AiUsageSummary> {
   monthStart.setUTCHours(0, 0, 0, 0);
   const { data, error } = await supabase
     .from("ai_usage")
-    .select("input_tokens, output_tokens, cache_read_tokens")
+    .select("model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens")
     .eq("tenant_id", tenantId)
     .gte("created_at", monthStart.toISOString());
   if (error) throw new Error(error.message);
-  const rows = data ?? [];
-  return rows.reduce<AiUsageSummary>(
-    (acc, r) => ({
-      inputTokens: acc.inputTokens + (r.input_tokens ?? 0),
-      outputTokens: acc.outputTokens + (r.output_tokens ?? 0),
-      cacheReadTokens: acc.cacheReadTokens + (r.cache_read_tokens ?? 0),
-      messages: acc.messages + 1,
-    }),
-    empty,
-  );
+
+  const summary: AiUsageSummary = { ...empty };
+  for (const r of data ?? []) {
+    const inp = r.input_tokens ?? 0;
+    const out = r.output_tokens ?? 0;
+    const cr = r.cache_read_tokens ?? 0;
+    const cw = r.cache_creation_tokens ?? 0;
+    summary.inputTokens += inp;
+    summary.outputTokens += out;
+    summary.cacheReadTokens += cr;
+    summary.messages += 1;
+    const p = MODEL_PRICING[r.model] ?? DEFAULT_PRICE;
+    summary.costUsd += (inp * p.input + out * p.output + cr * p.cacheRead + cw * p.cacheWrite) / 1_000_000;
+  }
+  return summary;
 }
 
 export function useAiUsageThisMonth(
