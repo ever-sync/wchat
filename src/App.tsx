@@ -19,6 +19,7 @@ import RecuperarSenha from "./pages/RecuperarSenha";
 import RedefinirSenha from "./pages/RedefinirSenha";
 import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
+import EmbedForm from "./pages/EmbedForm";
 
 const Inbox = lazyWithReload(() => import("./pages/Inbox"));
 const Clientes = lazyWithReload(() => import("./pages/Clientes"));
@@ -83,6 +84,9 @@ const App = () => (
                   <Route path="/ativar-acesso" element={<AtivarAcesso />} />
                   <Route path="/redefinir-senha" element={<RedefinirSenha />} />
                   <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+
+                  {/* Formulário público embedável (sem auth) */}
+                  <Route path="/embed" element={<EmbedForm />} />
 
                   {/* Authenticated */}
                   <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
