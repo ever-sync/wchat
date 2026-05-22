@@ -140,9 +140,11 @@ export default function AgenteIA() {
   );
 }
 
+type ChatMsg = PlaygroundMessage & { knowledgeCount?: number };
+
 function TestarTab() {
   const { toast } = useToast();
-  const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const run = useRunPlayground({
     onError: (e) => toast({ title: "Falha ao testar", description: e.message, variant: "destructive" }),
@@ -151,12 +153,15 @@ function TestarTab() {
   async function send() {
     const text = input.trim();
     if (!text || run.isPending) return;
-    const next: PlaygroundMessage[] = [...messages, { role: "user", text }];
+    const next: ChatMsg[] = [...messages, { role: "user", text }];
     setMessages(next);
     setInput("");
     try {
-      const res = await run.mutateAsync(next);
-      setMessages([...next, { role: "assistant", text: res.reply || "(a IA não retornou texto)" }]);
+      const res = await run.mutateAsync(next.map(({ role, text }) => ({ role, text })));
+      setMessages([
+        ...next,
+        { role: "assistant", text: res.reply || "(a IA não retornou texto)", knowledgeCount: res.knowledge_count },
+      ]);
     } catch {
       // erro já tratado no onError
     }
@@ -185,7 +190,7 @@ function TestarTab() {
             <p className="m-auto text-sm text-muted-foreground">Escreva como se fosse o cliente para começar.</p>
           ) : (
             messages.map((m, i) => (
-              <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+              <div key={i} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
                 <div
                   className={cn(
                     "max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm",
@@ -196,6 +201,13 @@ function TestarTab() {
                 >
                   {m.text}
                 </div>
+                {m.role === "assistant" && m.knowledgeCount !== undefined ? (
+                  <span className="mt-0.5 px-1 text-[10px] text-muted-foreground">
+                    {m.knowledgeCount > 0
+                      ? `base: ${m.knowledgeCount} trecho${m.knowledgeCount > 1 ? "s" : ""}`
+                      : "sem base"}
+                  </span>
+                ) : null}
               </div>
             ))
           )}
