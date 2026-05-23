@@ -1,10 +1,18 @@
 import { useMemo } from "react";
 import {
   AlarmClock,
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
   CircleAlert,
   Clock,
+  Hourglass,
   Inbox,
+  type LucideIcon,
+  MessageSquare,
   RefreshCcw,
+  Reply,
+  Timer,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,29 +24,51 @@ import {
 } from "@/lib/api/attendance-dashboard";
 import { cn } from "@/lib/utils";
 
+type Accent = "primary" | "emerald" | "blue" | "violet" | "amber" | "rose";
+
+const ACCENTS: Record<Accent, string> = {
+  primary: "bg-primary/10 text-primary",
+  emerald: "bg-emerald-500/10 text-emerald-600",
+  blue: "bg-blue-500/10 text-blue-600",
+  violet: "bg-violet-500/10 text-violet-600",
+  amber: "bg-amber-500/10 text-amber-600",
+  rose: "bg-rose-500/10 text-rose-600",
+};
+
 function MetricTile({
   label,
   value,
   hint,
   variant = "default",
+  icon: Icon,
+  accent = "primary",
 }: {
   label: string;
   value: string | number;
   hint?: string;
   variant?: "default" | "warning" | "danger";
+  icon?: LucideIcon;
+  accent?: Accent;
 }) {
   return (
     <div
       className={cn(
-        "rounded-lg border px-4 py-3",
-        variant === "danger" && "border-destructive/40 bg-destructive/10",
-        variant === "warning" && "border-warning/40 bg-warning/10",
-        variant === "default" && "border-border/60 bg-card/80",
+        "group rounded-xl border bg-gradient-to-br p-4 transition-shadow hover:shadow-md",
+        variant === "danger" && "border-destructive/30 from-destructive/10 to-card",
+        variant === "warning" && "border-warning/30 from-warning/10 to-card",
+        variant === "default" && "border-border/60 from-muted/50 to-card",
       )}
     >
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        {Icon ? (
+          <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", ACCENTS[accent])}>
+            <Icon className="h-4 w-4" aria-hidden />
+          </div>
+        ) : null}
+      </div>
+      <p className="mt-2 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{value}</p>
+      {hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -141,23 +171,31 @@ export function PainelAoVivo() {
                 value={data.pool.waiting}
                 hint={data.pool.waiting > 0 ? `Mais antigo há ${formatWait(data.pool.oldestWaitMinutes)}` : "Fila vazia"}
                 variant={data.pool.waiting > 0 ? "warning" : "default"}
+                icon={Hourglass}
+                accent="amber"
               />
               <MetricTile
                 label="SLA estourado"
                 value={data.sla.breached}
                 hint="Sem 1ª resposta no prazo"
                 variant={data.sla.breached > 0 ? "danger" : "default"}
+                icon={AlertTriangle}
+                accent="rose"
               />
               <MetricTile
                 label="SLA em risco"
                 value={data.sla.atRisk}
                 hint="Vence em até 15 min"
                 variant={data.sla.atRisk > 0 ? "warning" : "default"}
+                icon={Timer}
+                accent="amber"
               />
               <MetricTile
                 label="Aguardando 1ª resposta"
                 value={data.sla.awaitingFirstResponse}
                 hint="Total em aberto"
+                icon={Clock}
+                accent="blue"
               />
             </div>
           </section>
@@ -169,14 +207,16 @@ export function PainelAoVivo() {
               Hoje
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <MetricTile label="Chats abertos" value={data.today.chatsOpened} />
-              <MetricTile label="1ª respostas" value={data.today.firstResponses} />
+              <MetricTile label="Chats abertos" value={data.today.chatsOpened} icon={MessageSquare} accent="blue" />
+              <MetricTile label="1ª respostas" value={data.today.firstResponses} icon={Reply} accent="emerald" />
               <MetricTile
                 label="Média 1ª resposta"
                 value={data.today.avgFirstResponseMinutes != null ? `${data.today.avgFirstResponseMinutes} min` : "—"}
+                icon={Timer}
+                accent="violet"
               />
-              <MetricTile label="Recebidas" value={data.today.messagesInbound} />
-              <MetricTile label="Enviadas" value={data.today.messagesOutbound} />
+              <MetricTile label="Recebidas" value={data.today.messagesInbound} icon={ArrowDownLeft} accent="blue" />
+              <MetricTile label="Enviadas" value={data.today.messagesOutbound} icon={ArrowUpRight} accent="emerald" />
             </div>
           </section>
 
