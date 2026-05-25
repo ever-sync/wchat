@@ -444,9 +444,26 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
   if (filters.search?.trim()) {
     const search = sanitizeCustomerSearchForPostgrestOrIlike(filters.search);
     if (search.length > 0) {
-      query = query.or(
-        `display_name.ilike.%${search}%,remote_phone_digits.ilike.%${search}%,customers.nome.ilike.%${search}%`,
-      );
+      // O PostgREST não permite referenciar uma tabela aninhada (customers.nome)
+      // dentro de um or() no nível do whatsapp_chats — isso retorna 400. Então
+      // buscamos primeiro os ids dos clientes que casam pelo nome e filtramos por
+      // customer_id (coluna do próprio chat), que é aceito no or().
+      const { data: matchedCustomers } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .ilike("nome", `%${search}%`)
+        .limit(1000);
+      const customerIds = (matchedCustomers ?? []).map((c) => c.id as string);
+
+      const orParts = [
+        `display_name.ilike.%${search}%`,
+        `remote_phone_digits.ilike.%${search}%`,
+      ];
+      if (customerIds.length > 0) {
+        orParts.push(`customer_id.in.(${customerIds.join(",")})`);
+      }
+      query = query.or(orParts.join(","));
     }
   }
 
