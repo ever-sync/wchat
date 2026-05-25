@@ -503,6 +503,40 @@ export function useReleaseCrmNegotiationToPool(
   });
 }
 
+/**
+ * Exclusão direta da negociação. RLS restringe a admin/operação no mesmo tenant
+ * (ver `crm_negotiations_same_tenant_delete`); o gate de UI é mais estrito (admin).
+ */
+export async function deleteCrmNegotiation(negotiationId: string): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase não configurado.");
+  }
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { error } = await supabase
+    .from("crm_negotiations")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("id", negotiationId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export function useDeleteCrmNegotiation(
+  options?: UseMutationOptions<void, Error, string>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCrmNegotiation,
+    ...options,
+    onSuccess: async (data, negotiationId, ctx) => {
+      await invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
+      await options?.onSuccess?.(data, negotiationId, ctx);
+    },
+  });
+}
+
 export function useUpdateCrmNegotiation(
   options?: UseMutationOptions<CrmNegotiationRecord, Error, { id: string; patch: CrmNegotiationPatch }>,
 ) {

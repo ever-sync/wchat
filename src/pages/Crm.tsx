@@ -36,6 +36,7 @@ import {
   Hand,
   MessageCircle,
   TrendingUp,
+  Trash2,
   User,
   Users,
   AlertTriangle,
@@ -44,6 +45,16 @@ import {
   X,
 } from "lucide-react";
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatBRL } from "@/lib/format";
 import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
@@ -79,6 +90,7 @@ import {
   useClaimCrmNegotiation,
   useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
+  useDeleteCrmNegotiation,
   useReleaseCrmNegotiationToPool,
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
@@ -369,7 +381,9 @@ export default function Crm() {
   const { data: taskTemplates = [] } = useCrmTaskTemplates();
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
+  const deleteCrmNegotiation = useDeleteCrmNegotiation();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
+  const canDeleteNegotiation = profile?.role === "admin";
 
   const openChatInbox = useCallback(
     (chatId: string) => {
@@ -444,6 +458,7 @@ export default function Crm() {
   const [createOpen, setCreateOpen] = useState(false);
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CrmNegotiation | null>(null);
   const [e2eAssigneeOverrides, setE2eAssigneeOverrides] = useState<Record<string, string>>({});
   const [pendingLostDrag, setPendingLostDrag] = useState<{
     negId: string;
@@ -812,6 +827,27 @@ export default function Crm() {
     },
     [canReleaseToPool, releaseCrmNegotiation, toast],
   );
+
+  const handleConfirmDeleteNegotiation = useCallback(async () => {
+    const card = deleteTarget;
+    setDeleteTarget(null);
+    if (!card || !canDeleteNegotiation || !isPersistedCrmNegotiationId(card.id)) {
+      return;
+    }
+    try {
+      await deleteCrmNegotiation.mutateAsync(card.id);
+      toast({
+        title: "Negociação excluída",
+        description: `"${card.title}" foi removida do CRM.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Não foi possível excluir",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }, [canDeleteNegotiation, deleteCrmNegotiation, deleteTarget, toast]);
 
   const negotiationsWithAlertsCount = alertCountsInView.any;
 
@@ -1869,8 +1905,10 @@ export default function Crm() {
                   isClaimPending={claimCrmNegotiation.isPending}
                   canReleaseToPool={canReleaseToPool}
                   isReleasePending={releaseCrmNegotiation.isPending}
+                  canDelete={canDeleteNegotiation}
                   onClaimNegotiation={handleClaimNegotiation}
                   onReleaseNegotiation={handleReleaseNegotiation}
+                  onDeleteNegotiation={setDeleteTarget}
                   onOpenNegotiation={openNegotiationCard}
                   onOpenCustomer={handleOpenCustomerCard}
                   onOpenChat={openChatInbox}
@@ -2107,6 +2145,32 @@ export default function Crm() {
         pending={updateCrmNegotiation.isPending}
         onConfirm={completeWinDrag}
       />
+      <AlertDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent className="border-[#cfd8dc]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir negociação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `"${deleteTarget.title}" será removida permanentemente do CRM, junto com tarefas, produtos e documentos vinculados. Esta ação não pode ser desfeita.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#cfd8dc]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#c62828] text-white hover:bg-[#b71c1c]"
+              onClick={() => void handleConfirmDeleteNegotiation()}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -2134,8 +2198,10 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   isClaimPending,
   canReleaseToPool,
   isReleasePending,
+  canDelete,
   onClaimNegotiation,
   onReleaseNegotiation,
+  onDeleteNegotiation,
   onOpenNegotiation,
   onOpenCustomer,
   onOpenChat,
@@ -2147,8 +2213,10 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   isClaimPending: boolean;
   canReleaseToPool: boolean;
   isReleasePending: boolean;
+  canDelete: boolean;
   onClaimNegotiation: (card: CrmNegotiation) => void;
   onReleaseNegotiation: (card: CrmNegotiation) => void;
+  onDeleteNegotiation: (card: CrmNegotiation) => void;
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
@@ -2171,6 +2239,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
     canClaim && isPersistedCrmNegotiationId(card.id) && isInPool;
   const showRelease =
     canReleaseToPool && isPersistedCrmNegotiationId(card.id) && !isInPool;
+  const showDelete = canDelete && isPersistedCrmNegotiationId(card.id);
   const assigneeBusy = isClaimPending || isReleasePending;
 
   const style = transform
@@ -2298,6 +2367,23 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
             Devolver ao pool
           </Button>
         ) : null}
+        {showDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 w-full gap-2 text-sm font-medium text-[#c62828] shadow-none hover:bg-[#fdecea] hover:text-[#b71c1c]"
+            disabled={assigneeBusy}
+            onPointerDown={(e) => e.stopPropagation()}
+            data-testid={`crm-delete-${card.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteNegotiation(card);
+            }}
+          >
+            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+            Excluir negociação
+          </Button>
+        ) : null}
       </div>
     </article>
   );
@@ -2310,8 +2396,10 @@ function KanbanColumn({
   isClaimPending,
   canReleaseToPool,
   isReleasePending,
+  canDelete,
   onClaimNegotiation,
   onReleaseNegotiation,
+  onDeleteNegotiation,
   onOpenNegotiation,
   onOpenCustomer,
   onOpenChat,
@@ -2325,8 +2413,10 @@ function KanbanColumn({
   isClaimPending: boolean;
   canReleaseToPool: boolean;
   isReleasePending: boolean;
+  canDelete: boolean;
   onClaimNegotiation: (card: CrmNegotiation) => void;
   onReleaseNegotiation: (card: CrmNegotiation) => void;
+  onDeleteNegotiation: (card: CrmNegotiation) => void;
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
@@ -2420,8 +2510,10 @@ function KanbanColumn({
                   isClaimPending={isClaimPending}
                   canReleaseToPool={canReleaseToPool}
                   isReleasePending={isReleasePending}
+                  canDelete={canDelete}
                   onClaimNegotiation={onClaimNegotiation}
                   onReleaseNegotiation={onReleaseNegotiation}
+                  onDeleteNegotiation={onDeleteNegotiation}
                   onOpenNegotiation={onOpenNegotiation}
                   onOpenCustomer={onOpenCustomer}
                   onOpenChat={onOpenChat}
