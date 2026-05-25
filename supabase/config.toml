@@ -6,11 +6,6 @@
 [functions.uazapi-webhook]
 verify_jwt = false
 
-# Backfill one-off de midia: autenticado por segredo proprio (x-backfill-secret),
-# nao por JWT de usuario.
-[functions.uazapi-media-backfill]
-verify_jwt = false
-
 # n8n envia com HMAC ou N8N_SERVICE_KEY — sem JWT de usuario
 [functions.n8n-reply]
 verify_jwt = false
