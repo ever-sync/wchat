@@ -31,6 +31,23 @@ npm run db:push
 npm run db:migration:list
 ```
 
+### (Opcional) retenção da auditoria (pg_cron)
+
+A função `purge_old_audit_logs` é criada pela migration, mas não fica agendada. Para limpar a trilha
+automaticamente (piso embutido de 30 dias — não dá pra zerar sem querer):
+
+```sql
+select cron.schedule(
+  'audit-logs-retention',
+  '29 3 * * *',                                -- diariamente às 03:29 UTC
+  'select public.purge_old_audit_logs(365);'   -- mantém 12 meses
+);
+```
+
+> Horário sem colisão com os outros crons de limpeza: `ai-logs-retention` (03:17) e
+> `webhook-deliveries-retention` (03:23). Para mudar a janela: `cron.unschedule('audit-logs-retention')`
+> e reagende com `purge_old_audit_logs(<dias>)`.
+
 ---
 
 ## 2. Edge function — dispatcher de webhooks
@@ -48,6 +65,10 @@ supabase functions deploy webhook-dispatcher
 
 ### Cron de drain (pg_cron, rodar 1x no SQL editor)
 
+`regexp_replace(..., '\s', '', 'g')` remove qualquer espaço/quebra de linha que entre junto ao colar
+o segredo — sem isso o header `x-cron-secret` racha (mesmo gotcha resolvido no cron do `ai-orchestrator`).
+Troque apenas `<CRON_SECRET>` pelo valor real.
+
 ```sql
 select cron.schedule(
   'webhook-dispatcher-drain',
@@ -55,16 +76,15 @@ select cron.schedule(
   $$
   select net.http_post(
     url     := 'https://oaqeabqfgbeprrgqdmsk.supabase.co/functions/v1/webhook-dispatcher',
-    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '<CRON_SECRET>'),
+    headers := jsonb_build_object(
+                 'Content-Type', 'application/json',
+                 'x-cron-secret', regexp_replace('<CRON_SECRET>', '\s', '', 'g')
+               ),
     body    := '{}'::jsonb
   );
   $$
 );
 ```
-
-> Troque `<CRON_SECRET>` pelo valor real. **Atenção ao gotcha conhecido:** se o valor colado vier
-> com `\n`, o header racha — limpe com `regexp_replace('<valor>', '\s', '', 'g')` (mesmo problema
-> resolvido no cron do `ai-orchestrator`).
 
 Conferir / remover depois, se precisar:
 ```sql
