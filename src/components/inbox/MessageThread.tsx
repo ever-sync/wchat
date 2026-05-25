@@ -175,7 +175,7 @@ export function MessageThread({
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-none bg-background bg-[length:360px_360px] px-3 py-2 scrollbar-hide md:px-12"
-        style={{ backgroundImage: WHATSAPP_CHAT_BG, backgroundRepeat: "repeat", backgroundBlendMode: "normal" }}
+        style={{ backgroundImage: chatBg, backgroundRepeat: "repeat", backgroundBlendMode: "normal" }}
       >
         {isLoadingOlder ? (
           <div className="flex justify-center py-2">
