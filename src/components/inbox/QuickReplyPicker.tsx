@@ -113,7 +113,7 @@ function QuickReplyItem({
       <div className="flex w-full items-center gap-2">
         <span className="truncate text-[14px] font-medium text-foreground">{reply.title}</span>
         {reply.shortcut ? (
-          <span className="ml-auto shrink-0 rounded-md bg-[#1a2b33] px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span className="ml-auto shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
             /{reply.shortcut}
           </span>
         ) : null}

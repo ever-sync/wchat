@@ -8,8 +8,9 @@ import {
   type ThreadFlattenItem,
 } from "@/lib/inboxMessageGroups";
 import type { ChatNote, WhatsappMessage } from "@/types/domain";
+import { useTheme } from "next-themes";
 import { MessageBubble } from "./MessageBubble";
-import { WHATSAPP_CHAT_BG } from "./whatsappChatBg";
+import { WHATSAPP_CHAT_BG, WHATSAPP_CHAT_BG_DARK } from "./whatsappChatBg";
 
 function NoteBubble({ note }: { note: ChatNote }) {
   const time = new Date(note.createdAt).toLocaleTimeString("pt-BR", {
@@ -18,15 +19,15 @@ function NoteBubble({ note }: { note: ChatNote }) {
   });
   return (
     <div className="flex justify-center px-4 py-1">
-      <div className="max-w-[75%] rounded-xl border border-[#574500] bg-[#2b2300] px-4 py-2.5 shadow-[0_1px_0.5px_rgba(0,0,0,0.4)]">
+      <div className="max-w-[75%] rounded-xl border border-[var(--inbox-gold-ink)] bg-[var(--inbox-gold-ink)] px-4 py-2.5 shadow-[0_1px_0.5px_rgba(0,0,0,0.4)]">
         <div className="mb-1.5 flex items-center gap-2">
-          <span className="rounded-full bg-[#574500] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#c9a020]">
+          <span className="rounded-full bg-[var(--inbox-gold-ink)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--inbox-gold)]">
             Nota interna
           </span>
-          <span className="text-[12px] text-[#8a6b1a]">{note.authorName}</span>
+          <span className="text-[12px] text-[var(--inbox-gold)]">{note.authorName}</span>
         </div>
-        <p className="whitespace-pre-wrap text-[14px] leading-[1.4] text-[#e8cb50]">{note.bodyText}</p>
-        <p className="mt-1.5 text-right text-[11px] text-[#8a6b1a]">{time}</p>
+        <p className="whitespace-pre-wrap text-[14px] leading-[1.4] text-[var(--inbox-gold-bg)]">{note.bodyText}</p>
+        <p className="mt-1.5 text-right text-[11px] text-[var(--inbox-gold)]">{time}</p>
       </div>
     </div>
   );
@@ -93,6 +94,14 @@ export function MessageThread({
   onJumpToLatest,
   onScrollStateChange,
 }: MessageThreadProps) {
+  // Fundo do chat por tema. resolvedTheme só existe após montar; até lá lemos a
+  // classe `dark` do <html> (já posta pelo script anti-flash) para não piscar.
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme
+    ? resolvedTheme === "dark"
+    : typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const chatBg = isDark ? WHATSAPP_CHAT_BG_DARK : WHATSAPP_CHAT_BG;
+
   const flat = useMemo(() => flattenMessageGroups(messageGroups), [messageGroups]);
 
   const estimateSize = useCallback(

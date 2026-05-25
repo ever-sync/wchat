@@ -160,6 +160,28 @@
     --crm-wa-teal: #128c7e;
     --crm-success-tint: #e8f5e9;
     --crm-info-tint: #d8ecf7;
+
+    /* Inbox/chat — paleta verde-acinzentada (estilo WhatsApp claro). */
+    --inbox-ink: #334047;
+    --inbox-ink-2: #4f5c56;
+    --inbox-muted: #6f7b76;
+    --inbox-muted-2: #96a29c;
+    --inbox-border: #dce4d6;
+    --inbox-surface: #f9fcf8;
+    --inbox-surface-2: #f0f2f5;
+    --inbox-chat-bg: #f9f6fd;
+    --inbox-green: #1f5e3f;
+    --inbox-green-soft: #8bcf9f;
+    --inbox-green-tint: #eef8f0;
+    --inbox-green-bright: #bff06e;
+    --inbox-gold: #c9a020;
+    --inbox-gold-ink: #574500;
+    --inbox-gold-bg: #f5d96a;
+    --inbox-orange: #e56b22;
+    --inbox-orange-tint: #fff1e5;
+    --inbox-orange-border: #ffd7a8;
+    --inbox-blue: #6eb3ff;
+    --inbox-blue-tint: #e8eef5;
   }
 
   .dark {
@@ -191,6 +213,28 @@
     --crm-wa-teal: #2dc4ac;
     --crm-success-tint: #18271b;
     --crm-info-tint: #182934;
+
+    /* Inbox/chat no escuro — paleta WhatsApp dark. */
+    --inbox-ink: #e9edef;
+    --inbox-ink-2: #c4ccc8;
+    --inbox-muted: #9aa6a1;
+    --inbox-muted-2: #7e8a85;
+    --inbox-border: #2a3942;
+    --inbox-surface: #202c33;
+    --inbox-surface-2: #2a3942;
+    --inbox-chat-bg: #0b141a;
+    --inbox-green: #4ad07f;
+    --inbox-green-soft: #2a7d52;
+    --inbox-green-tint: #14271b;
+    --inbox-green-bright: #aef06e;
+    --inbox-gold: #e6c34d;
+    --inbox-gold-ink: #3a2f0e; /* fundo do balão "Nota interna" — escuro nos dois modos */
+    --inbox-gold-bg: #f5d96a; /* texto do corpo da nota — dourado claro nos dois modos */
+    --inbox-orange: #ff8a4d;
+    --inbox-orange-tint: #33241a;
+    --inbox-orange-border: #55401f;
+    --inbox-blue: #6eb3ff;
+    --inbox-blue-tint: #1c2a38;
   }
 }
 

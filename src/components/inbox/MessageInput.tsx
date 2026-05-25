@@ -145,7 +145,7 @@ export function MessageInput({
           </p>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             {selectedAttachmentName ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe7d9] bg-[#f4fbf2] px-3 py-1 text-xs font-semibold text-[#55705f]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-1 text-xs font-semibold text-[var(--inbox-ink-2)]">
                 <span>{previewTitle ?? "Arquivo"}</span>
                 <span className="max-w-[220px] truncate font-medium">{selectedAttachmentName}</span>
               </div>
@@ -155,7 +155,7 @@ export function MessageInput({
                 type="button"
                 disabled={attachmentUploading}
                 onClick={onClearAttachment}
-                className="inline-flex items-center gap-1 rounded-full border border-[#e2e8de] bg-white px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[#f3f6f1] disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--inbox-border)] bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[var(--inbox-surface)] disabled:pointer-events-none disabled:opacity-50"
                 title="Remover anexo"
               >
                 <X className="h-3.5 w-3.5" />
@@ -164,28 +164,28 @@ export function MessageInput({
             ) : null}
           </div>
           {attachmentUploading && attachmentProgress !== null ? (
-            <div className="mb-2 w-full max-w-[360px] rounded-2xl border border-[#dfe7d9] bg-[#f4fbf2] px-3 py-2">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-[#55705f]">
+            <div className="mb-2 w-full max-w-[360px] rounded-2xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2">
+              <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--inbox-ink-2)]">
                 <span>Subindo arquivo...</span>
                 <span className="tabular-nums">{Math.round(attachmentProgress * 100)}%</span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#dfe7d9]">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--inbox-border)]">
                 <div
-                  className="h-full rounded-full bg-[#4E1BB1] transition-[width] duration-150"
+                  className="h-full rounded-full bg-[var(--crm-brand)] transition-[width] duration-150"
                   style={{ width: `${Math.max(0, Math.min(1, attachmentProgress)) * 100}%` }}
                 />
               </div>
             </div>
           ) : null}
           {previewKind && mediaUrl.trim() ? (
-            <div className="mb-3 overflow-hidden rounded-[22px] border border-[#e2e8de] bg-[#f8faf7] p-2 shadow-[0_10px_24px_rgba(37,63,51,0.04)]">
+            <div className="mb-3 overflow-hidden rounded-[22px] border border-[var(--inbox-border)] bg-[var(--inbox-surface)] p-2 shadow-[0_10px_24px_rgba(37,63,51,0.04)]">
               <div className="mb-2 flex items-center justify-between gap-2 px-1 pt-0.5">
                 <div className="min-w-0">
                   <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {previewTitle ?? "Anexo"}
                   </p>
                   {selectedAttachmentName ? (
-                    <p className="truncate text-xs text-[#445159]">{selectedAttachmentName}</p>
+                    <p className="truncate text-xs text-[var(--inbox-ink-2)]">{selectedAttachmentName}</p>
                   ) : null}
                 </div>
               </div>
@@ -207,8 +207,8 @@ export function MessageInput({
                 <audio src={mediaUrl} controls className="h-10 w-full max-w-md" />
               ) : null}
               {previewKind === "document" ? (
-                <div className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm text-[#445159]">
-                  <FileText className="h-8 w-8 shrink-0 text-[#4E1BB1]" />
+                <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2 text-sm text-[var(--inbox-ink-2)]">
+                  <FileText className="h-8 w-8 shrink-0 text-[var(--crm-brand)]" />
                   <span className="min-w-0 truncate">{selectedAttachmentName ?? "Documento"}</span>
                 </div>
               ) : null}
@@ -246,19 +246,19 @@ export function MessageInput({
             value={payloadText}
             onChange={(event) => onPayloadTextChange(event.target.value)}
             placeholder='Payload extra em JSON. Ex.: {"buttons":[...]}'
-            className="min-h-[100px] rounded-[24px] border-[#e2e8de] bg-white font-mono text-xs shadow-[0_8px_18px_rgba(37,63,51,0.04)]"
+            className="min-h-[100px] rounded-[24px] border-[var(--inbox-border)] bg-card font-mono text-xs shadow-[0_8px_18px_rgba(37,63,51,0.04)]"
           />
         </div>
       ) : null}
 
       {showEmojiPicker ? (
-        <div className="mb-3 flex flex-wrap gap-2 rounded-[24px] border border-[#e2e8de] bg-white p-3 shadow-[0_12px_24px_rgba(37,63,51,0.08)]">
+        <div className="mb-3 flex flex-wrap gap-2 rounded-[24px] border border-[var(--inbox-border)] bg-card p-3 shadow-[0_12px_24px_rgba(37,63,51,0.08)]">
           {QUICK_EMOJIS.map((emoji) => (
             <button
               key={emoji}
               type="button"
               onClick={() => onAppendEmoji(emoji)}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl text-lg transition-colors hover:bg-[#f3f6f1]"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl text-lg transition-colors hover:bg-[var(--inbox-surface)]"
             >
               {emoji}
             </button>
@@ -267,17 +267,17 @@ export function MessageInput({
       ) : null}
 
       {noteMode ? (
-        <div className="mb-2 flex items-center justify-between rounded-lg border border-[#574500] bg-[#2b2300] px-3 py-1.5">
+        <div className="mb-2 flex items-center justify-between rounded-lg border border-[var(--inbox-gold-ink)] bg-[var(--inbox-gold-ink)] px-3 py-1.5">
           <div className="flex items-center gap-2">
-            <PenLine className="h-3.5 w-3.5 text-[#c9a020]" />
-            <span className="text-xs font-medium text-[#c9a020]">
+            <PenLine className="h-3.5 w-3.5 text-[var(--inbox-gold)]" />
+            <span className="text-xs font-medium text-[var(--inbox-gold)]">
               Nota interna — visível só para a equipe
             </span>
           </div>
           <button
             type="button"
             onClick={() => onNoteModeChange?.(false)}
-            className="ml-2 text-[#8a6b1a] transition-colors hover:text-[#c9a020]"
+            className="ml-2 text-[var(--inbox-gold)] transition-colors hover:text-[var(--inbox-gold)]"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -332,7 +332,7 @@ export function MessageInput({
               type="button"
               disabled={composerActionsDisabled}
               onClick={() => onNoteModeChange(!noteMode)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${noteMode ? "bg-[#4a3500] text-[#f5d96a] hover:bg-[#5c4400]" : "text-muted-foreground hover:bg-wchat-200 hover:text-foreground"}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${noteMode ? "bg-[var(--inbox-gold-ink)] text-[var(--inbox-gold-bg)] hover:bg-[var(--inbox-gold-ink)]" : "text-muted-foreground hover:bg-wchat-200 hover:text-foreground"}`}
               title={noteMode ? "Sair do modo nota" : "Escrever nota interna"}
             >
               <PenLine className="h-4 w-4" />

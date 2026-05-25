@@ -1,10 +1,11 @@
-/** Padrão de fundo do chat wChat (tema claro), em SVG tile. */
-export const WHATSAPP_CHAT_BG =
-  'url(\'data:image/svg+xml;charset=utf8,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360">
-  <rect width="360" height="360" fill="#F9F6FD"/>
-  <g fill="none" stroke="#4E1BB1" stroke-opacity="0.06" stroke-width="1.2">
+/** Gera o padrão de fundo do chat (SVG tile) com cor de fundo e do doodle. */
+function buildChatBg(fill: string, stroke: string, strokeOpacity: number): string {
+  return (
+    "url('data:image/svg+xml;charset=utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360">
+  <rect width="360" height="360" fill="${fill}"/>
+  <g fill="none" stroke="${stroke}" stroke-opacity="${strokeOpacity}" stroke-width="1.2">
     <circle cx="40" cy="36" r="16"/><circle cx="200" cy="48" r="10"/><circle cx="312" cy="112" r="14"/>
     <circle cx="88" cy="156" r="18"/><circle cx="272" cy="208" r="12"/><circle cx="160" cy="296" r="20"/>
     <path d="M220 280l16-8 8 20"/><path d="M48 220c12-24 34-38 62-42"/><path d="M296 76l22 12-14 22"/>
@@ -19,8 +20,13 @@ export const WHATSAPP_CHAT_BG =
     <circle cx="108" cy="332" r="7"/><circle cx="224" cy="164" r="8"/><circle cx="304" cy="336" r="8"/>
   </g>
 </svg>`,
-  ) +
-  "')";
+    ) +
+    "')"
+  );
+}
 
-/** @deprecated Use WHATSAPP_CHAT_BG */
-export const WHATSAPP_DARK_CHAT_BG = WHATSAPP_CHAT_BG;
+/** Fundo do chat — tema claro (purple-white + doodle roxo). */
+export const WHATSAPP_CHAT_BG = buildChatBg("#F9F6FD", "#4E1BB1", 0.06);
+
+/** Fundo do chat — tema escuro (estilo WhatsApp dark + doodle claro sutil). */
+export const WHATSAPP_CHAT_BG_DARK = buildChatBg("#0B141A", "#FFFFFF", 0.04);

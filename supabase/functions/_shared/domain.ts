@@ -1746,6 +1746,112 @@ async function mirrorIncomingMediaToStorage(
   };
 }
 
+/**
+ * Backfill: reprocessa midias antigas que ficaram com URL encriptada do WhatsApp
+ * (`mmg.whatsapp.net`) — tipicamente audio/foto gravado no celular do atendente
+ * antes do fix de espelhamento. Descriptografa, copia pro Storage e atualiza a
+ * linha. Idempotente (linhas ja espelhadas nao casam o filtro) e reexecutavel:
+ * mensagens cuja URL encriptada ja expirou simplesmente contam como `failed`.
+ */
+export async function backfillEncryptedMediaForInstance(
+  admin: AdminClient,
+  instance: InstanceRecord,
+  options: { limit?: number } = {},
+): Promise<{ scanned: number; mirrored: number; failed: number }> {
+  const limit = Math.min(Math.max(options.limit ?? 200, 1), 1000);
+  const { data: rows, error } = await admin
+    .from("whatsapp_messages")
+    .select("id, message_type, media_url, uazapi_message_id, raw_event, payload_json")
+    .eq("instance_id", instance.id)
+    .in("message_type", ["audio", "document", "media", "image", "video"])
+    .ilike("media_url", "%mmg.whatsapp.net%")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  let scanned = 0;
+  let mirrored = 0;
+  let failed = 0;
+
+  for (const row of rows ?? []) {
+    const mediaUrl = (row.media_url as string | null) ?? null;
+    if (!isEncryptedWhatsappUrl(mediaUrl)) {
+      continue;
+    }
+    scanned += 1;
+
+    const rawEvent = (row.raw_event ?? {}) as Record<string, unknown>;
+    const messageBlock = getMessageLikeBlock(rawEvent);
+    const v2Content =
+      messageBlock.content && typeof messageBlock.content === "object"
+        ? (messageBlock.content as Record<string, unknown>)
+        : null;
+    const normalizedMediaMeta = extractNormalizedMediaMeta(rawEvent);
+    const mediaKey =
+      (v2Content?.mediaKey as string | undefined) ??
+      (messageBlock.mediaKey as string | undefined) ??
+      null;
+    const messageTypeHint =
+      (messageBlock.messageType as string | undefined) ??
+      (messageBlock.mediaType as string | undefined) ??
+      null;
+    const mediaTypeHint = (messageBlock.mediaType as string | undefined) ?? null;
+    const mimeFromMeta =
+      (normalizedMediaMeta.mimeType as string | null) ??
+      (v2Content?.mimetype as string | undefined) ??
+      null;
+    const fileNameFromMeta =
+      (normalizedMediaMeta.fileName as string | null) ??
+      (v2Content?.fileName as string | undefined) ??
+      null;
+    const kind = inferMediaKindFromHints(mimeFromMeta, messageTypeHint, mediaTypeHint);
+    const messageId =
+      extractMessageId(rawEvent) ?? (row.uazapi_message_id as string | null);
+
+    const result = await mirrorIncomingMediaToStorage(admin, instance, {
+      messageId,
+      mediaUrl,
+      mediaKey,
+      mediaKind: kind,
+      mimeType: mimeFromMeta,
+      fileName: fileNameFromMeta,
+    });
+
+    if (!result) {
+      failed += 1;
+      continue;
+    }
+
+    const nextPayload: Record<string, unknown> = {
+      ...((row.payload_json ?? {}) as Record<string, unknown>),
+      mirroredMediaUrl: result.publicUrl,
+      mirroredFromUrl: mediaUrl,
+    };
+    if (result.mimeType && !nextPayload.mimeType) {
+      nextPayload.mimeType = result.mimeType;
+    }
+    if (result.fileName && !nextPayload.fileName) {
+      nextPayload.fileName = result.fileName;
+    }
+
+    const { error: updateError } = await admin
+      .from("whatsapp_messages")
+      .update({ media_url: result.publicUrl, payload_json: nextPayload })
+      .eq("id", row.id);
+
+    if (updateError) {
+      failed += 1;
+      continue;
+    }
+    mirrored += 1;
+  }
+
+  return { scanned, mirrored, failed };
+}
+
 export async function processMessagePayload(
   admin: AdminClient,
   instance: InstanceRecord,

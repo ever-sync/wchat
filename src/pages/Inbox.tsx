@@ -2316,7 +2316,7 @@ export default function Inbox() {
                         releaseCrmNegotiation.isPending ||
                         !canEditCrm
                       }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#c4b5fd] bg-[#F3EBFC] text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)] transition-colors hover:bg-[var(--crm-brand-tint-hover)]"
                       aria-label="Assumir negócio"
                     >
                       <Briefcase className="h-4 w-4" />
@@ -2350,7 +2350,7 @@ export default function Inbox() {
                         claimChatMutation.isPending ||
                         !canEditCrm
                       }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#c4b5fd] bg-[#F3EBFC] text-[#4E1BB1] transition-colors hover:bg-[#ebe0fc]"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)] transition-colors hover:bg-[var(--crm-brand-tint-hover)]"
                       aria-label="Devolver negócio"
                     >
                       <Users className="h-4 w-4" />
@@ -3025,17 +3025,17 @@ export default function Inbox() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl rounded-2xl border-[#dce4d6] p-0">
+        <DialogContent className="max-w-2xl rounded-2xl border-[var(--inbox-border)] p-0">
           <DialogHeader
             className={cn(
-              "border-b border-[#F9F6FD] pb-4 pl-6 pt-5",
+              "border-b border-[var(--inbox-chat-bg)] pb-4 pl-6 pt-5",
               dialogCloseInset.headerEnd,
             )}
           >
-            <DialogTitle className="text-xl font-semibold text-[#334047]">
+            <DialogTitle className="text-xl font-semibold text-[var(--inbox-ink)]">
               Registrar venda ou devolucao
             </DialogTitle>
-            <DialogDescription className="text-sm text-[#6f7b76]">
+            <DialogDescription className="text-sm text-[var(--inbox-muted)]">
               Etapa {saleStep} de 3 · cliente {activeChat?.displayName ?? "nao selecionado"}
             </DialogDescription>
           </DialogHeader>
@@ -3043,12 +3043,12 @@ export default function Inbox() {
           <div className="grid gap-4 px-6 py-5">
             {saleStep === 1 ? (
               <div className="grid gap-3">
-                <Label className="text-sm text-[#5f6c66]">Escolha o tipo de registro</Label>
+                <Label className="text-sm text-[var(--inbox-muted)]">Escolha o tipo de registro</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => setSaleFlowType("venda")}
-                    className={`rounded-2xl border px-4 py-3 text-left ${saleFlowType === "venda" ? "border-[#8bcf9f] bg-[#eef8f0] text-[#1f5e3f]" : "border-[#dce4d6] bg-white text-[#4f5c56]"}`}
+                    className={`rounded-2xl border px-4 py-3 text-left ${saleFlowType === "venda" ? "border-[var(--inbox-green-soft)] bg-[var(--inbox-green-tint)] text-[var(--inbox-green)]" : "border-[var(--inbox-border)] bg-card text-[var(--inbox-ink-2)]"}`}
                   >
                     <p className="text-sm font-semibold">Venda</p>
                     <p className="mt-1 text-xs">Registrar nova venda para este cliente.</p>
@@ -3056,7 +3056,7 @@ export default function Inbox() {
                   <button
                     type="button"
                     onClick={() => setSaleFlowType("devolucao")}
-                    className={`rounded-2xl border px-4 py-3 text-left ${saleFlowType === "devolucao" ? "border-[#8bcf9f] bg-[#eef8f0] text-[#1f5e3f]" : "border-[#dce4d6] bg-white text-[#4f5c56]"}`}
+                    className={`rounded-2xl border px-4 py-3 text-left ${saleFlowType === "devolucao" ? "border-[var(--inbox-green-soft)] bg-[var(--inbox-green-tint)] text-[var(--inbox-green)]" : "border-[var(--inbox-border)] bg-card text-[var(--inbox-ink-2)]"}`}
                   >
                     <p className="text-sm font-semibold">Devolucao</p>
                     <p className="mt-1 text-xs">Registrar devolucao de venda e destino do valor.</p>
@@ -3070,7 +3070,7 @@ export default function Inbox() {
                 <div className="grid gap-2">
                   <Label htmlFor="sale-seller">Usuario que vendeu</Label>
                   <Select value={saleSeller} onValueChange={setSaleSeller}>
-                    <SelectTrigger id="sale-seller" className="h-11 rounded-xl border-[#dce4d6]">
+                    <SelectTrigger id="sale-seller" className="h-11 rounded-xl border-[var(--inbox-border)]">
                       <SelectValue placeholder="Selecione o usuario" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3083,12 +3083,12 @@ export default function Inbox() {
 
                 <div className="grid gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label className="text-sm text-[#5f6c66]">Produtos da venda</Label>
+                    <Label className="text-sm text-[var(--inbox-muted)]">Produtos da venda</Label>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1 rounded-xl border-[#dce4d6]"
+                      className="h-9 gap-1 rounded-xl border-[var(--inbox-border)]"
                       onClick={() =>
                         setSaleCartLines((prev) => [...prev, createEmptySaleCartLine()])
                       }
@@ -3110,10 +3110,10 @@ export default function Inbox() {
                     {saleCartLines.map((line, index) => (
                       <div
                         key={line.key}
-                        className="rounded-xl border border-[#dce4d6] bg-[#f9fcf8] p-4"
+                        className="rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] p-4"
                       >
                         <div className="mb-3 flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-[#6f7b76]">
+                          <span className="text-xs font-medium text-[var(--inbox-muted)]">
                             Item {index + 1}
                           </span>
                           {saleCartLines.length > 1 ? (
@@ -3122,7 +3122,7 @@ export default function Inbox() {
                               onClick={() =>
                                 setSaleCartLines((prev) => prev.filter((_l, i) => i !== index))
                               }
-                              className="rounded-lg p-1.5 text-[#6f7b76] hover:bg-[#F9F6FD] hover:text-red-600"
+                              className="rounded-lg p-1.5 text-[var(--inbox-muted)] hover:bg-[var(--inbox-chat-bg)] hover:text-red-600"
                               aria-label="Remover linha"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -3143,7 +3143,7 @@ export default function Inbox() {
                             >
                               <SelectTrigger
                                 id={`sale-product-${line.key}`}
-                                className="h-11 rounded-xl border-[#dce4d6] bg-white"
+                                className="h-11 rounded-xl border-[var(--inbox-border)] bg-card"
                               >
                                 <SelectValue placeholder="Selecione o produto" />
                               </SelectTrigger>
@@ -3171,7 +3171,7 @@ export default function Inbox() {
                               }
                               placeholder="1"
                               inputMode="numeric"
-                              className="h-11 rounded-xl border-[#dce4d6] bg-white"
+                              className="h-11 rounded-xl border-[var(--inbox-border)] bg-card"
                             />
                           </div>
                         </div>
@@ -3189,8 +3189,8 @@ export default function Inbox() {
                               );
                             }
                             return (
-                              <p className="mt-3 text-xs text-[#6f7b76]">
-                                Estoque: <span className="font-medium text-[#334047]">{p.qtdEstoque}</span>{" "}
+                              <p className="mt-3 text-xs text-[var(--inbox-muted)]">
+                                Estoque: <span className="font-medium text-[var(--inbox-ink)]">{p.qtdEstoque}</span>{" "}
                                 {p.unidade}
                                 {p.qtdEstoque > 0 && p.qtdEstoque < 5 ? (
                                   <span className="text-amber-700"> · estoque baixo</span>
@@ -3200,7 +3200,7 @@ export default function Inbox() {
                           })()
                         ) : null}
 
-                        <div className="mt-4 rounded-lg border border-[#F9F6FD] bg-white/60 p-3">
+                        <div className="mt-4 rounded-lg border border-[var(--inbox-chat-bg)] bg-card/60 p-3">
                           <div className="flex items-center gap-2">
                             <Checkbox
                               id={`sale-other-${line.key}`}
@@ -3237,7 +3237,7 @@ export default function Inbox() {
                                   )
                                 }
                                 placeholder="Ex.: 189,90"
-                                className="h-10 rounded-xl border-[#dce4d6]"
+                                className="h-10 rounded-xl border-[var(--inbox-border)]"
                               />
                             </div>
                           ) : null}
@@ -3268,7 +3268,7 @@ export default function Inbox() {
                       }
                     }}
                   >
-                    <SelectTrigger className="h-11 rounded-xl border-[#dce4d6]">
+                    <SelectTrigger className="h-11 rounded-xl border-[var(--inbox-border)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -3281,7 +3281,7 @@ export default function Inbox() {
                 {returnSource === "existente" ? (
                   <div className="grid gap-2">
                     <Label htmlFor="return-existing-sale">Selecionar venda existente</Label>
-                    <p className="text-xs text-[#6f7b76]">
+                    <p className="text-xs text-[var(--inbox-muted)]">
                       Ate {SALE_RETURN_HISTORY_LIMIT} vendas mais recentes do cliente. Filtre por produto,
                       data, pagamento ou observacao.
                     </p>
@@ -3290,7 +3290,7 @@ export default function Inbox() {
                       value={returnExistingSalesSearch}
                       onChange={(event) => setReturnExistingSalesSearch(event.target.value.slice(0, 120))}
                       placeholder="Filtrar vendas..."
-                      className="h-10 rounded-xl border-[#dce4d6]"
+                      className="h-10 rounded-xl border-[var(--inbox-border)]"
                       disabled={customerSales.length === 0}
                     />
                     <Select
@@ -3302,7 +3302,7 @@ export default function Inbox() {
                         setReturnSaleItemId(first?.id ?? "");
                       }}
                     >
-                      <SelectTrigger id="return-existing-sale" className="h-11 rounded-xl border-[#dce4d6]">
+                      <SelectTrigger id="return-existing-sale" className="h-11 rounded-xl border-[var(--inbox-border)]">
                         <SelectValue placeholder="Escolha a venda" />
                       </SelectTrigger>
                       <SelectContent>
@@ -3322,7 +3322,7 @@ export default function Inbox() {
                       </SelectContent>
                     </Select>
                     {customerSales.length === 0 ? (
-                      <p className="text-xs text-[#6f7b76]">
+                      <p className="text-xs text-[var(--inbox-muted)]">
                         Nao encontramos vendas para este cliente. Use a opcao &quot;Outra venda&quot; ou verifique o
                         cadastro.
                       </p>
@@ -3331,7 +3331,7 @@ export default function Inbox() {
                       <div className="grid gap-2">
                         <Label htmlFor="return-sale-item">Item a devolver nesta venda</Label>
                         <Select value={returnSaleItemId} onValueChange={setReturnSaleItemId}>
-                          <SelectTrigger id="return-sale-item" className="h-11 rounded-xl border-[#dce4d6]">
+                          <SelectTrigger id="return-sale-item" className="h-11 rounded-xl border-[var(--inbox-border)]">
                             <SelectValue placeholder="Escolha o item" />
                           </SelectTrigger>
                           <SelectContent>
@@ -3357,9 +3357,9 @@ export default function Inbox() {
                         const alreadyReturned = returnedQtyBySaleItemId.get(line.id) ?? 0;
                         const remaining = Math.max(0, line.quantity - alreadyReturned);
                         return (
-                          <p className="text-xs text-[#6f7b76]">
+                          <p className="text-xs text-[var(--inbox-muted)]">
                             Item:{" "}
-                            <span className="font-medium text-[#334047]">{line.productName}</span>
+                            <span className="font-medium text-[var(--inbox-ink)]">{line.productName}</span>
                             {" · "}
                             {formatMoney(line.unitPrice)} unit. · Vendido{" "}
                             {line.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} · Devolvido{" "}
@@ -3374,7 +3374,7 @@ export default function Inbox() {
                   <div className="grid gap-2">
                     <Label htmlFor="return-product">Produto da outra venda</Label>
                     <Select value={returnProductId} onValueChange={setReturnProductId}>
-                      <SelectTrigger id="return-product" className="h-11 rounded-xl border-[#dce4d6]">
+                      <SelectTrigger id="return-product" className="h-11 rounded-xl border-[var(--inbox-border)]">
                         <SelectValue placeholder="Selecione o produto" />
                       </SelectTrigger>
                       <SelectContent>
@@ -3395,11 +3395,11 @@ export default function Inbox() {
                       value={returnQuantityStr}
                       onChange={(event) => setReturnQuantityStr(event.target.value.slice(0, 24))}
                       placeholder="Ex.: 1"
-                      className="h-10 rounded-xl border-[#dce4d6]"
+                      className="h-10 rounded-xl border-[var(--inbox-border)]"
                       inputMode="decimal"
                     />
                     {returnSource === "existente" && selectedReturnSaleItem ? (
-                      <p className="text-xs text-[#6f7b76]">
+                      <p className="text-xs text-[var(--inbox-muted)]">
                         Vendido:{" "}
                         {selectedReturnSaleItem.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} · Ja
                         devolvido:{" "}
@@ -3410,12 +3410,12 @@ export default function Inbox() {
                         {(selectedReturnRemainingQty ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 })}.
                       </p>
                     ) : (
-                      <p className="text-xs text-[#6f7b76]">Unidades devolvidas neste registro.</p>
+                      <p className="text-xs text-[var(--inbox-muted)]">Unidades devolvidas neste registro.</p>
                     )}
                   </div>
                 )}
 
-                <div className="rounded-xl border border-[#dce4d6] bg-[#f9fcf8] p-4">
+                <div className="rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] p-4">
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id="return-other-value"
@@ -3434,11 +3434,11 @@ export default function Inbox() {
                         value={returnCustomPrice}
                         onChange={(event) => setReturnCustomPrice(event.target.value)}
                         placeholder="Ex.: 149,90"
-                        className="h-10 rounded-xl border-[#dce4d6]"
+                        className="h-10 rounded-xl border-[var(--inbox-border)]"
                       />
                     </div>
                   ) : (
-                    <p className="mt-3 text-xs text-[#6f7b76]">Sem marcacao, sera considerado o valor de cadastro do produto.</p>
+                    <p className="mt-3 text-xs text-[var(--inbox-muted)]">Sem marcacao, sera considerado o valor de cadastro do produto.</p>
                   )}
                 </div>
               </div>
@@ -3450,7 +3450,7 @@ export default function Inbox() {
                   <div className="grid gap-2">
                     <Label>Destino da devolucao</Label>
                     <Select value={returnResolution} onValueChange={(value) => setReturnResolution(value as "troca" | "credito")}>
-                      <SelectTrigger className="h-11 rounded-xl border-[#dce4d6]">
+                      <SelectTrigger className="h-11 rounded-xl border-[var(--inbox-border)]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3465,9 +3465,9 @@ export default function Inbox() {
                         value={returnNotes}
                         onChange={(event) => setReturnNotes(event.target.value.slice(0, 2000))}
                         placeholder="Ex.: motivo, estado do produto, acordo com o cliente..."
-                        className="min-h-[88px] rounded-xl border-[#dce4d6] text-sm"
+                        className="min-h-[88px] rounded-xl border-[var(--inbox-border)] text-sm"
                       />
-                      <p className="text-xs text-[#6f7b76]">{returnNotes.length}/2000 caracteres</p>
+                      <p className="text-xs text-[var(--inbox-muted)]">{returnNotes.length}/2000 caracteres</p>
                     </div>
                   </div>
                 ) : (
@@ -3485,7 +3485,7 @@ export default function Inbox() {
                           }
                         }}
                       >
-                        <SelectTrigger id="sale-payment" className="h-11 rounded-xl border-[#dce4d6]">
+                        <SelectTrigger id="sale-payment" className="h-11 rounded-xl border-[var(--inbox-border)]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -3499,13 +3499,13 @@ export default function Inbox() {
                     </div>
 
                     {salePaymentMethod === "credito_loja" ? (
-                      <p className="text-xs text-[#6f7b76]">
+                      <p className="text-xs text-[var(--inbox-muted)]">
                         O valor total da venda sera quitado com o saldo de credito do cliente (devolucoes em credito).
                         {activeChat?.customerId ? (
                           <>
                             {" "}
                             Saldo atual:{" "}
-                            <span className="font-medium text-[#334047]">
+                            <span className="font-medium text-[var(--inbox-ink)]">
                               {formatMoney(customerCreditSummary?.totalCredit ?? 0)}
                             </span>
                             .
@@ -3515,7 +3515,7 @@ export default function Inbox() {
                         )}
                       </p>
                     ) : (
-                      <div className="rounded-xl border border-[#dce4d6] bg-[#f9fcf8] p-4">
+                      <div className="rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] p-4">
                         <div className="flex items-center gap-2">
                           <Checkbox
                             id="sale-use-credit"
@@ -3533,9 +3533,9 @@ export default function Inbox() {
                           </Label>
                         </div>
                         {!activeChat?.customerId ? (
-                          <p className="mt-2 text-xs text-[#6f7b76]">Disponivel quando o chat tiver cliente vinculado.</p>
+                          <p className="mt-2 text-xs text-[var(--inbox-muted)]">Disponivel quando o chat tiver cliente vinculado.</p>
                         ) : (customerCreditSummary?.totalCredit ?? 0) <= 0 ? (
-                          <p className="mt-2 text-xs text-[#6f7b76]">Este cliente nao possui saldo de credito.</p>
+                          <p className="mt-2 text-xs text-[var(--inbox-muted)]">Este cliente nao possui saldo de credito.</p>
                         ) : null}
                         {saleUseCredit ? (
                           <div className="mt-3 grid gap-2">
@@ -3545,9 +3545,9 @@ export default function Inbox() {
                               value={saleCreditInput}
                               onChange={(event) => setSaleCreditInput(event.target.value)}
                               placeholder={`Max. ${formatMoney(Math.min(customerCreditSummary?.totalCredit ?? 0, salePreviewTotal))}`}
-                              className="h-10 rounded-xl border-[#dce4d6]"
+                              className="h-10 rounded-xl border-[var(--inbox-border)]"
                             />
-                            <p className="text-xs text-[#6f7b76]">
+                            <p className="text-xs text-[var(--inbox-muted)]">
                               Saldo: <span className="font-medium">{formatMoney(customerCreditSummary?.totalCredit ?? 0)}</span>
                               {" · "}
                               Total da venda: <span className="font-medium">{formatMoney(salePreviewTotal)}</span>
@@ -3563,22 +3563,22 @@ export default function Inbox() {
                         value={saleNotes}
                         onChange={(event) => setSaleNotes(event.target.value.slice(0, 2000))}
                         placeholder="Ex.: parcelado, combinado de entrega, dados para NF..."
-                        className="min-h-[88px] rounded-xl border-[#dce4d6] text-sm"
+                        className="min-h-[88px] rounded-xl border-[var(--inbox-border)] text-sm"
                       />
-                      <p className="text-xs text-[#6f7b76]">{saleNotes.length}/2000 caracteres</p>
+                      <p className="text-xs text-[var(--inbox-muted)]">{saleNotes.length}/2000 caracteres</p>
                     </div>
                   </div>
                 )}
 
-                <div className="rounded-xl border border-[#dce4d6] bg-white p-4 text-sm text-[#4f5c56]">
-                  <p className="font-semibold text-[#334047]">Resumo</p>
+                <div className="rounded-xl border border-[var(--inbox-border)] bg-card p-4 text-sm text-[var(--inbox-ink-2)]">
+                  <p className="font-semibold text-[var(--inbox-ink)]">Resumo</p>
                   <p className="mt-2">Tipo: <span className="font-medium">{saleFlowType || "-"}</span></p>
                   {saleFlowType === "venda" ? (
                     <>
                       <p>Usuario: <span className="font-medium">{sellerOptions.find((seller) => seller.id === saleSeller)?.name ?? "-"}</span></p>
                       <div className="mt-2 space-y-1">
-                        <p className="font-medium text-[#334047]">Itens</p>
-                        <ul className="list-inside list-disc space-y-0.5 pl-0.5 text-[#4f5c56]">
+                        <p className="font-medium text-[var(--inbox-ink)]">Itens</p>
+                        <ul className="list-inside list-disc space-y-0.5 pl-0.5 text-[var(--inbox-ink-2)]">
                           {saleCartLines
                             .filter((line) => line.productId.trim())
                             .map((line) => {
@@ -3678,18 +3678,18 @@ export default function Inbox() {
             ) : null}
           </div>
 
-          <DialogFooter className="border-t border-[#F9F6FD] px-6 py-4">
+          <DialogFooter className="border-t border-[var(--inbox-chat-bg)] px-6 py-4">
             <div className="flex w-full items-center justify-between gap-3">
               <Button variant="outline" className="rounded-xl" onClick={handleSaleStepBack} disabled={saleStep === 1}>
                 Voltar
               </Button>
               {saleStep < 3 ? (
-                <Button className="rounded-xl bg-[#4E1BB1] hover:bg-[#4015A5]" onClick={handleSaleStepNext}>
+                <Button className="rounded-xl bg-[var(--crm-brand)] hover:bg-[var(--crm-brand-strong)]" onClick={handleSaleStepNext}>
                   Continuar
                 </Button>
               ) : (
                 <Button
-                  className="rounded-xl bg-[#4E1BB1] hover:bg-[#4015A5]"
+                  className="rounded-xl bg-[var(--crm-brand)] hover:bg-[var(--crm-brand-strong)]"
                   onClick={() => {
                     void handleConfirmSaleFlow();
                   }}

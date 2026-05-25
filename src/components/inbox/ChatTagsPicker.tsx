@@ -108,8 +108,8 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
   };
 
   return (
-    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Etiquetas</p>
+    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Etiquetas</p>
       <div className="mt-2 flex min-h-[36px] flex-wrap gap-2">
         {tags.map((t) => (
           <span
@@ -131,22 +131,22 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
           </span>
         ))}
         {tags.length === 0 ? (
-          <span className="text-sm text-[#8a9690]">Nenhuma etiqueta.</span>
+          <span className="text-sm text-[var(--inbox-muted-2)]">Nenhuma etiqueta.</span>
         ) : null}
       </div>
 
       <div className="mt-3 space-y-3">
         <div className="space-y-2">
-          <Label className="text-xs text-[#6f7b76]">Adicionar etiqueta já usada na base</Label>
+          <Label className="text-xs text-[var(--inbox-muted)]">Adicionar etiqueta já usada na base</Label>
           {catalogLoading ? (
-            <p className="text-xs text-[#8a9690]">Carregando catálogo…</p>
+            <p className="text-xs text-[var(--inbox-muted-2)]">Carregando catálogo…</p>
           ) : addable.length === 0 ? (
-            <p className="text-xs text-[#8a9690]">
+            <p className="text-xs text-[var(--inbox-muted-2)]">
               Nenhuma outra etiqueta disponível além das já aplicadas.
             </p>
           ) : (
             <Select disabled={isBusy} onValueChange={(tagId) => void applyExisting(tagId)}>
-              <SelectTrigger className="h-9 rounded-xl border-[#dfe6d8] bg-white">
+              <SelectTrigger className="h-9 rounded-xl border-[var(--inbox-border)] bg-card">
                 <SelectValue placeholder="Escolher etiqueta…" />
               </SelectTrigger>
               <SelectContent>
@@ -166,14 +166,14 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
           )}
         </div>
 
-        <div className="space-y-2 border-t border-[#e8eee8] pt-3">
-          <Label className="text-xs text-[#6f7b76]">Criar etiqueta nova</Label>
+        <div className="space-y-2 border-t border-[var(--inbox-border)] pt-3">
+          <Label className="text-xs text-[var(--inbox-muted)]">Criar etiqueta nova</Label>
           <div className="flex gap-2">
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nome da etiqueta"
-              className="h-9 flex-1 rounded-xl border-[#dfe6d8] bg-white"
+              className="h-9 flex-1 rounded-xl border-[var(--inbox-border)] bg-card"
               disabled={isBusy}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -203,7 +203,7 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
                 aria-label={`Cor ${color}`}
                 className={cn(
                   "h-7 w-7 rounded-full border-2 transition-transform hover:scale-105",
-                  newColor === color ? "border-[#4E1BB1] ring-2 ring-[#4E1BB1]/30" : "border-white shadow-sm",
+                  newColor === color ? "border-[var(--crm-brand)] ring-2 ring-[var(--crm-brand)]/30" : "border-card shadow-sm",
                 )}
                 style={{ backgroundColor: color }}
                 onClick={() => setNewColor(color)}

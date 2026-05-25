@@ -13,10 +13,10 @@ function getInitials(name: string) {
 
 function getConversationTone(name: string) {
   const tones = [
-    "from-[#fff1e5] to-[#ffd7a8] text-[#e56b22]",
-    "from-[#e9f8dd] to-[#bff06e] text-[#2f806b]",
-    "from-[#e3f4ef] to-[#b7d8cc] text-[#226854]",
-    "from-[#e8eef5] to-[#cad9e7] text-[#4E1BB1]",
+    "from-[var(--inbox-orange-tint)] to-[var(--inbox-orange-border)] text-[var(--inbox-orange)]",
+    "from-[var(--inbox-green-tint)] to-[var(--inbox-green-bright)] text-[var(--inbox-green)]",
+    "from-[var(--inbox-green-tint)] to-[var(--inbox-green-soft)] text-[var(--inbox-green)]",
+    "from-[var(--inbox-blue-tint)] to-[var(--inbox-blue-tint)] text-[var(--crm-brand)]",
   ];
   let hash = 0;
 
@@ -41,7 +41,7 @@ export function ConversationAvatar({
   return (
     <Avatar
       className={cn(
-        "border border-white/90 shadow-[0_10px_24px_rgba(37,63,51,0.10)]",
+        "border border-card/90 shadow-[0_10px_24px_rgba(37,63,51,0.10)]",
         size === "xs" ? "h-9 w-9" : size === "sm" ? "h-11 w-11" : "h-12 w-12",
       )}
     >

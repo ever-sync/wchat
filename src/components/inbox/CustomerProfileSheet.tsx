@@ -190,8 +190,8 @@ function ProfileTagsPicker({
   };
 
   return (
-    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Tags</p>
+    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Tags</p>
       <div className="mt-2 flex min-h-[36px] flex-wrap gap-2">
         {tags.map((t) => (
           <span
@@ -210,12 +210,12 @@ function ProfileTagsPicker({
             </button>
           </span>
         ))}
-        {tags.length === 0 ? <span className="text-sm text-[#8a9690]">Nenhuma tag.</span> : null}
+        {tags.length === 0 ? <span className="text-sm text-[var(--inbox-muted-2)]">Nenhuma tag.</span> : null}
       </div>
       <div className="mt-3 space-y-2">
-        <Label className="text-xs text-[#6f7b76]">Adicionar tag já usada na base</Label>
+        <Label className="text-xs text-[var(--inbox-muted)]">Adicionar tag já usada na base</Label>
         {addable.length === 0 ? (
-          <p className="text-xs text-[#8a9690]">Nenhuma outra tag conhecida além das já aplicadas.</p>
+          <p className="text-xs text-[var(--inbox-muted-2)]">Nenhuma outra tag conhecida além das já aplicadas.</p>
         ) : (
           <Select
             disabled={isBusy}
@@ -226,7 +226,7 @@ function ProfileTagsPicker({
               void commit([...tags, v]);
             }}
           >
-            <SelectTrigger className="h-9 rounded-xl border-[#dfe6d8] bg-white">
+            <SelectTrigger className="h-9 rounded-xl border-[var(--inbox-border)] bg-card">
               <SelectValue placeholder="Escolher tag…" />
             </SelectTrigger>
             <SelectContent>
@@ -243,7 +243,7 @@ function ProfileTagsPicker({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ou criar tag nova (Enter)"
-            className="h-9 flex-1 rounded-xl border-[#dfe6d8] bg-white"
+            className="h-9 flex-1 rounded-xl border-[var(--inbox-border)] bg-card"
             disabled={isBusy}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -393,12 +393,12 @@ function EditableCustomerFactRow({
   };
 
   return (
-    <div className="rounded-xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">{label}</p>
+    <div className="rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]">{label}</p>
       <div
         className={
           showEditButton && !editing
-            ? "mt-1.5 flex min-w-0 cursor-pointer items-start gap-2 rounded-lg py-0.5 transition-colors hover:bg-white/80"
+            ? "mt-1.5 flex min-w-0 cursor-pointer items-start gap-2 rounded-lg py-0.5 transition-colors hover:bg-card/80"
             : "mt-1.5 flex min-w-0 items-center gap-1.5"
         }
         onClick={showEditButton && !editing ? startEditing : undefined}
@@ -419,7 +419,7 @@ function EditableCustomerFactRow({
               onChange={(e) => setDraft(e.target.value)}
               type={inputType}
               placeholder={placeholder}
-              className="h-9 min-w-0 flex-1 rounded-lg border-[#dfe6d8] bg-white text-sm"
+              className="h-9 min-w-0 flex-1 rounded-lg border-[var(--inbox-border)] bg-card text-sm"
               disabled={isBusy}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -464,7 +464,7 @@ function EditableCustomerFactRow({
           </>
         ) : (
           <>
-            <p className="min-w-0 flex-1 break-words text-sm font-medium leading-snug text-[#334047]">
+            <p className="min-w-0 flex-1 break-words text-sm font-medium leading-snug text-[var(--inbox-ink)]">
               {display}
             </p>
             {showEditButton ? (
@@ -472,7 +472,7 @@ function EditableCustomerFactRow({
                 type="button"
                 size="icon"
                 variant="outline"
-                className="h-8 w-8 shrink-0 rounded-lg border-[#dfe6d8] bg-white text-primary shadow-sm hover:border-primary/40 hover:bg-primary/5"
+                className="h-8 w-8 shrink-0 rounded-lg border-[var(--inbox-border)] bg-card text-primary shadow-sm hover:border-primary/40 hover:bg-primary/5"
                 disabled={isBusy}
                 aria-label={`Editar ${label.toLowerCase()}`}
                 onClick={(e) => {
@@ -492,11 +492,11 @@ function EditableCustomerFactRow({
 
 function QuickFactRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2.5 text-sm">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2.5 text-sm">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]">
         {label}
       </span>
-      <span className="min-w-0 break-words text-right font-medium leading-snug text-[#334047]">{value}</span>
+      <span className="min-w-0 break-words text-right font-medium leading-snug text-[var(--inbox-ink)]">{value}</span>
     </div>
   );
 }
@@ -522,8 +522,8 @@ function CustomerQuickFacts({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Identificação</p>
+      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Identificação</p>
         <div className="mt-3 grid gap-2">
           <EditableCustomerFactRow
             label="Nome"
@@ -551,8 +551,8 @@ function CustomerQuickFacts({
       </div>
 
       {chat || linkedNegotiationAssigneeLabel != null ? (
-        <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Atendimento</p>
+        <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Atendimento</p>
           <div className="mt-3 grid gap-2">
             {chat ? <QuickFactRow label="Atendente (conversa)" value={chatAttendantLabel(chat)} /> : null}
             {linkedNegotiationAssigneeLabel != null ? (
@@ -562,8 +562,8 @@ function CustomerQuickFacts({
         </div>
       ) : null}
 
-      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Histórico</p>
+      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Histórico</p>
         <div className="mt-3 grid gap-2">
           <QuickFactRow label="Cadastro" value={formatDate(customer.cadastradoEm)} />
           {chat ? <QuickFactRow label="Mensagens (esta conversa)" value={String(messageCount)} /> : null}
@@ -575,7 +575,7 @@ function CustomerQuickFacts({
 }
 
 const PROFILE_TAB_TRIGGER_CLASS =
-  "rounded-xl px-3 py-1.5 text-xs font-semibold text-[#6f7b76] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
+  "rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--inbox-muted)] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
 
 function ProfileNegotiationsPanel({
   negotiations,
@@ -593,12 +593,12 @@ function ProfileNegotiationsPanel({
   resolveAttendantName: (id: string) => string | null;
 }) {
   return (
-    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Negociações</p>
+    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Negociações</p>
       {negLoading ? (
-        <p className="mt-2 text-sm text-[#6f7b76]">Carregando…</p>
+        <p className="mt-2 text-sm text-[var(--inbox-muted)]">Carregando…</p>
       ) : negotiations.length === 0 ? (
-        <p className="mt-2 text-sm text-[#6f7b76]">Nenhuma negociação vinculada.</p>
+        <p className="mt-2 text-sm text-[var(--inbox-muted)]">Nenhuma negociação vinculada.</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {negotiationsForDisplay.slice(0, 5).map((n) => {
@@ -608,18 +608,18 @@ function ProfileNegotiationsPanel({
             return (
               <li
                 key={n.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#e8eee8] bg-[#fbfcf9] px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2 text-sm"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium text-[#334047]">{n.title.trim() || "Sem título"}</p>
+                    <p className="truncate font-medium text-[var(--inbox-ink)]">{n.title.trim() || "Sem título"}</p>
                     {isPrimaryChatDeal ? (
                       <Badge className="shrink-0 border border-violet-200 bg-violet-50 text-[10px] font-medium text-violet-900">
                         Esta conversa
                       </Badge>
                     ) : null}
                   </div>
-                  <p className="text-xs text-[#6f7b76]">
+                  <p className="text-xs text-[var(--inbox-muted)]">
                     {funnelListNameIn(effectiveCrmFunnels, n.funnelId)} ·{" "}
                     {funnelStageTitleIn(effectiveCrmFunnels, n.funnelId, n.stageId)} ·{" "}
                     {negotiationStatusLabelPt(n.status)}
@@ -648,8 +648,8 @@ function ChatOnlyConversationSummary({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Conversa</p>
+      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Conversa</p>
         <div className="mt-3 space-y-2">
           <QuickFactRow label="Atendente" value={chatAttendantLabel(chat)} />
           <QuickFactRow label="Telefone" value={infoValue(chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "")} />
@@ -829,13 +829,13 @@ export function CustomerProfileSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[92vw] overflow-y-auto border-l border-[#dde5d7] bg-[linear-gradient(180deg,#fbfcf9_0%,#f4f7f5_100%)] p-0 sm:max-w-[520px]"
+        className="w-[92vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,#fbfcf9_0%,#f4f7f5_100%)] p-0 sm:max-w-[520px]"
       >
         <div className="flex min-h-full flex-col">
-          <SheetHeader className="space-y-0 border-b border-[#e8eee8] bg-white/60 px-5 pb-5 pt-5 backdrop-blur-sm">
-            <div className="rounded-[20px] border border-[#e1e8dc] bg-white p-4 shadow-sm">
+          <SheetHeader className="space-y-0 border-b border-[var(--inbox-border)] bg-card/60 px-5 pb-5 pt-5 backdrop-blur-sm">
+            <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card p-4 shadow-sm">
               <div className="flex items-start gap-3.5">
-                <Avatar className="h-16 w-16 shrink-0 border-[3px] border-white shadow-[0_10px_24px_rgba(84,95,101,0.1)]">
+                <Avatar className="h-16 w-16 shrink-0 border-[3px] border-card shadow-[0_10px_24px_rgba(84,95,101,0.1)]">
                   <AvatarImage
                     src={
                       chat?.avatarUrl && isInlineMediaUrlAllowed(chat.avatarUrl)
@@ -852,10 +852,10 @@ export function CustomerProfileSheet({
 
                 <div className="min-w-0 flex-1 space-y-2">
                   <div>
-                    <SheetTitle className="line-clamp-2 text-lg font-semibold leading-snug tracking-tight text-[#334047]">
+                    <SheetTitle className="line-clamp-2 text-lg font-semibold leading-snug tracking-tight text-[var(--inbox-ink)]">
                       {displayName}
                     </SheetTitle>
-                    <SheetDescription className="mt-1 flex items-center gap-1.5 text-sm text-[#6a7671]">
+                    <SheetDescription className="mt-1 flex items-center gap-1.5 text-sm text-[var(--inbox-muted)]">
                       <Phone className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
                       <span className="truncate">{profileHeaderPhone(customer, chat)}</span>
                     </SheetDescription>
@@ -865,7 +865,7 @@ export function CustomerProfileSheet({
                     <div>
                       <Label
                         htmlFor="inbox-profile-resolution"
-                        className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-[#96a29c]"
+                        className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]"
                       >
                         Status da conversa
                       </Label>
@@ -889,7 +889,7 @@ export function CustomerProfileSheet({
                       >
                         <SelectTrigger
                           id="inbox-profile-resolution"
-                          className="h-9 w-full rounded-xl border border-[#dfe6d8] bg-[#fbfcf9] text-sm text-[#334047]"
+                          className="h-9 w-full rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] text-sm text-[var(--inbox-ink)]"
                         >
                           <SelectValue />
                         </SelectTrigger>
@@ -945,8 +945,8 @@ export function CustomerProfileSheet({
             ) : null}
             {chat && !chat.customerId ? (
               <div className="mb-5 rounded-[28px] border border-amber-200/80 bg-amber-50/50 p-4 shadow-[0_16px_28px_rgba(84,95,101,0.06)]">
-                <p className="text-sm font-semibold text-[#334047]">Conversa sem cliente vinculado</p>
-                <p className="mt-1 text-xs leading-relaxed text-[#5f6d66]">
+                <p className="text-sm font-semibold text-[var(--inbox-ink)]">Conversa sem cliente vinculado</p>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--inbox-muted)]">
                   Busque o cadastro pelo nome, telefone ou documento e vincule para ver CRM, credito e campos completos no perfil.
                 </p>
                 {!isSupabaseConfigured ? (
@@ -957,20 +957,20 @@ export function CustomerProfileSheet({
                       value={linkSearch}
                       onChange={(e) => setLinkSearch(e.target.value)}
                       placeholder="Digite pelo menos 2 caracteres..."
-                      className="mt-3 h-10 rounded-xl border-[#e1e8dc] bg-white"
+                      className="mt-3 h-10 rounded-xl border-[var(--inbox-border)] bg-card"
                       autoComplete="off"
                     />
                     {linkSearch.trim().length < 2 ? (
-                      <p className="mt-2 text-xs text-[#6f7b76]">Continue digitando para buscar cadastros.</p>
+                      <p className="mt-2 text-xs text-[var(--inbox-muted)]">Continue digitando para buscar cadastros.</p>
                     ) : customersForLink.length === 0 ? (
-                      <p className="mt-2 text-xs text-[#6f7b76]">Nenhum cliente encontrado.</p>
+                      <p className="mt-2 text-xs text-[var(--inbox-muted)]">Nenhum cliente encontrado.</p>
                     ) : (
-                      <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[#e1e8dc] bg-white p-2">
+                      <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--inbox-border)] bg-card p-2">
                         {customersForLink.slice(0, 8).map((c) => (
                           <li key={c.id}>
                             <button
                               type="button"
-                              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm text-[#334047] hover:bg-[#f4f7f5] disabled:opacity-50"
+                              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm text-[var(--inbox-ink)] hover:bg-[var(--inbox-surface)] disabled:opacity-50"
                               disabled={linkChat.isPending || crmActionsLocked}
                               onClick={() => {
                                 if (crmActionsLocked) {
@@ -1001,7 +1001,7 @@ export function CustomerProfileSheet({
                               }}
                             >
                               <span className="min-w-0 truncate font-medium">{c.nome}</span>
-                              <span className="shrink-0 text-xs text-[#6f7b76]">
+                              <span className="shrink-0 text-xs text-[var(--inbox-muted)]">
                                 {c.codigo?.trim() || c.telefone || c.id.slice(0, 8)}
                               </span>
                             </button>
@@ -1046,7 +1046,7 @@ export function CustomerProfileSheet({
 
             {chat ? (
               <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4">
-                <TabsList className="h-auto w-full flex-wrap justify-start gap-0.5 rounded-2xl border border-[#e1e8dc] bg-white/90 p-1 shadow-sm">
+                <TabsList className="h-auto w-full flex-wrap justify-start gap-0.5 rounded-2xl border border-[var(--inbox-border)] bg-card/90 p-1 shadow-sm">
                   <TabsTrigger value="resumo" className={PROFILE_TAB_TRIGGER_CLASS}>
                     Resumo
                   </TabsTrigger>
@@ -1139,14 +1139,14 @@ export function CustomerProfileSheet({
                       disabled={crmActionsLocked}
                     />
                   ) : (
-                    <p className="text-sm text-[#6f7b76]">Etiquetas disponíveis com Supabase configurado.</p>
+                    <p className="text-sm text-[var(--inbox-muted)]">Etiquetas disponíveis com Supabase configurado.</p>
                   )}
                 </TabsContent>
 
                 {showProdutosTab ? (
                   <TabsContent value="produtos" className="mt-0 focus-visible:outline-none">
-                    <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
+                    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">
                         Produtos
                       </p>
                       <div className="mt-3">
@@ -1157,7 +1157,7 @@ export function CustomerProfileSheet({
                             negotiationTotalValue={linkedNegotiation?.totalValue}
                           />
                         ) : (
-                          <p className="text-sm text-[#6f7b76]">
+                          <p className="text-sm text-[var(--inbox-muted)]">
                             Crie ou vincule uma negociação a esta conversa para adicionar produtos ao lead.
                           </p>
                         )}
@@ -1173,14 +1173,14 @@ export function CustomerProfileSheet({
                         negotiationId={documentsNegotiationId}
                         enabled={open}
                         readOnly={crmActionsLocked}
-                        className="border-[#e1e8dc]"
+                        className="border-[var(--inbox-border)]"
                       />
                     ) : (
-                      <div className="rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">
+                      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">
                           Arquivos
                         </p>
-                        <p className="mt-2 text-sm text-[#6f7b76]">
+                        <p className="mt-2 text-sm text-[var(--inbox-muted)]">
                           Crie ou vincule uma negociação a esta conversa para anexar documentos ao lead.
                         </p>
                       </div>

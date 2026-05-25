@@ -356,7 +356,7 @@ function MessageBubbleImpl({
                           className={cn(
                             "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-60",
                             isOutbound
-                              ? "bg-red-50 text-red-950 hover:bg-white"
+                              ? "bg-red-50 text-red-950 hover:bg-card"
                               : "bg-red-600 text-white hover:bg-red-700",
                           )}
                           title="Tentar enviar de novo"
@@ -374,7 +374,7 @@ function MessageBubbleImpl({
                             "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-60",
                             isOutbound
                               ? "border-red-300/40 bg-transparent text-red-50 hover:bg-red-900/20"
-                              : "border-red-200 bg-white text-red-700 hover:bg-red-50",
+                              : "border-red-200 bg-card text-red-700 hover:bg-red-50",
                           )}
                           title="Descartar esta mensagem"
                         >
