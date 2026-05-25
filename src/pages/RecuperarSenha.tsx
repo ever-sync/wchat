@@ -44,25 +44,25 @@ export default function RecuperarSenha() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F6FD] p-2 md:p-4">
-      <div className="mx-auto flex min-h-[calc(100vh-1rem)] max-w-[520px] items-center justify-center rounded-[28px] border border-[#d9e0d3] bg-white px-6 py-10 shadow-[0_20px_70px_rgba(84,95,101,0.08)] sm:px-10 md:min-h-[calc(100vh-2rem)]">
+    <div className="min-h-screen bg-[var(--crm-surface)] p-2 md:p-4">
+      <div className="mx-auto flex min-h-[calc(100vh-1rem)] max-w-[520px] items-center justify-center rounded-[28px] border border-[var(--crm-border-2)] bg-card px-6 py-10 shadow-[0_20px_70px_rgba(84,95,101,0.08)] sm:px-10 md:min-h-[calc(100vh-2rem)]">
         <div className="w-full max-w-[430px]">
           <div className="mb-8 text-center">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#dce3d6] bg-[#f3f7ef] px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-[#4E1BB1]">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--crm-brand)]">
               <Mail className="h-3.5 w-3.5" />
               Recuperacao
             </p>
-            <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[#514E5F]">
+            <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--crm-ink-2)]">
               Recuperar senha
             </h1>
-            <p className="mt-3 text-[18px] text-[#7d8784]">
+            <p className="mt-3 text-[18px] text-[var(--crm-ink-3)]">
               Digite seu e-mail para receber o link de redefinicao.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2.5">
-              <label className="block text-[15px] font-medium text-[#514E5F]">
+              <label className="block text-[15px] font-medium text-[var(--crm-ink-2)]">
                 E-mail
               </label>
               <Input
@@ -70,22 +70,22 @@ export default function RecuperarSenha() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Digite seu e-mail"
-                className="h-[50px] rounded-[12px] border-[#dbe2d5] bg-[#fbfcf9] px-4 text-[15px] text-[#514E5F] shadow-none placeholder:text-[#a4aeab] focus-visible:ring-1 focus-visible:ring-[#4E1BB1]"
+                className="h-[50px] rounded-[12px] border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-4 text-[15px] text-[var(--crm-ink-2)] shadow-none placeholder:text-[var(--crm-ink-3)] focus-visible:ring-1 focus-visible:ring-[var(--crm-brand)]"
               />
             </div>
 
             <Button
               type="submit"
               disabled={loading || !email.trim()}
-              className="h-[52px] w-full rounded-[12px] bg-[#4E1BB1] text-[17px] font-medium text-[#e9edef] shadow-[0_14px_30px_rgba(13,59,102,0.35)] hover:bg-[#4015A5]"
+              className="h-[52px] w-full rounded-[12px] bg-[var(--crm-brand)] text-[17px] font-medium text-[var(--crm-surface-2)] shadow-[0_14px_30px_rgba(13,59,102,0.35)] hover:bg-[var(--crm-brand-strong)]"
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Enviar link
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-[15px] text-[#74807d]">
-            <Link to="/login" className="inline-flex items-center gap-2 font-medium text-[#4E1BB1] underline underline-offset-4">
+          <p className="mt-8 text-center text-[15px] text-[var(--crm-ink-3)]">
+            <Link to="/login" className="inline-flex items-center gap-2 font-medium text-[var(--crm-brand)] underline underline-offset-4">
               <ArrowLeft className="h-4 w-4" />
               Voltar para o login
             </Link>

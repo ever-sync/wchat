@@ -416,8 +416,8 @@ export function ClientePerfilContent({
   if (isLoading) {
     return (
       <div
-        className="flex min-h-[50vh] flex-1 items-center justify-center text-sm text-[#78909c]"
-        style={{ backgroundColor: "#f0f2f5" }}
+        className="flex min-h-[50vh] flex-1 items-center justify-center text-sm text-[var(--crm-ink-3)]"
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
         Carregando cliente...
       </div>
@@ -428,10 +428,10 @@ export function ClientePerfilContent({
     return (
       <div
         className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 text-center"
-        style={{ backgroundColor: "#f0f2f5" }}
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
-        <p className="text-sm text-[#78909c]">{error?.message || "Cliente nao encontrado."}</p>
-        <Button variant="outline" className="border-[#cfd8dc]" onClick={onBack}>
+        <p className="text-sm text-[var(--crm-ink-3)]">{error?.message || "Cliente nao encontrado."}</p>
+        <Button variant="outline" className="border-[var(--crm-border-2)]" onClick={onBack}>
           Voltar para clientes
         </Button>
       </div>
@@ -885,10 +885,10 @@ export default function ClientePerfil() {
     return (
       <div
         className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 text-center"
-        style={{ backgroundColor: "#f0f2f5" }}
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
-        <p className="text-sm text-[#78909c]">Cliente não informado.</p>
-        <Button variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/clientes")}>
+        <p className="text-sm text-[var(--crm-ink-3)]">Cliente não informado.</p>
+        <Button variant="outline" className="border-[var(--crm-border-2)]" onClick={() => navigate("/clientes")}>
           Voltar para clientes
         </Button>
       </div>

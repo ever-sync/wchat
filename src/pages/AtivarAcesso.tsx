@@ -144,34 +144,34 @@ export default function AtivarAcesso() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F6FD] p-2 md:p-4">
-      <div className="mx-auto flex min-h-[calc(100vh-1rem)] max-w-[1520px] rounded-[28px] border border-[#d9e0d3] bg-white p-[10px] shadow-[0_20px_70px_rgba(84,95,101,0.08)] md:min-h-[calc(100vh-2rem)]">
+    <div className="min-h-screen bg-[var(--crm-surface)] p-2 md:p-4">
+      <div className="mx-auto flex min-h-[calc(100vh-1rem)] max-w-[1520px] rounded-[28px] border border-[var(--crm-border-2)] bg-card p-[10px] shadow-[0_20px_70px_rgba(84,95,101,0.08)] md:min-h-[calc(100vh-2rem)]">
         <div className="flex w-full items-center justify-center px-6 py-8 sm:px-10 lg:w-[49%] lg:px-16">
           <div className="w-full max-w-[430px]">
             <div className="mb-8 text-center lg:text-left">
-              <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#dce3d6] bg-[#f3f7ef] px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-[#4E1BB1]">
+              <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-[var(--crm-brand)]">
                 <KeyRound className="h-3.5 w-3.5" />
                 Primeiro acesso
               </p>
-              <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[#514E5F]">
+              <h1 className="text-[40px] font-semibold tracking-[-0.03em] text-[var(--crm-ink-2)]">
                 Ativar acesso
               </h1>
-              <p className="mt-3 text-[18px] text-[#7d8784]">
+              <p className="mt-3 text-[18px] text-[var(--crm-ink-3)]">
                 Defina sua senha para entrar como colaborador no tenant convidado.
               </p>
             </div>
 
             {loading ? (
-              <div className="rounded-[18px] border border-[#dce3d6] bg-[#fbfcf9] px-5 py-10 text-center text-sm text-[#7d8784]">
-                <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-[#4E1BB1]" />
+              <div className="rounded-[18px] border border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-5 py-10 text-center text-sm text-[var(--crm-ink-3)]">
+                <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-[var(--crm-brand)]" />
                 Validando seu convite...
               </div>
             ) : !sessionReady ? (
-              <div className="space-y-4 rounded-[18px] border border-[#e2d8c7] bg-[#fbfaf6] p-5">
-                <p className="text-sm text-[#7d8784]">
+              <div className="space-y-4 rounded-[18px] border border-[var(--crm-surface-2)] bg-[var(--crm-surface)] p-5">
+                <p className="text-sm text-[var(--crm-ink-3)]">
                   Este link nao criou uma sessao valida no navegador. Abra novamente o convite recebido por e-mail.
                 </p>
-                <Button asChild className="w-full bg-[#4E1BB1] text-[#e9edef] hover:bg-[#4015A5]">
+                <Button asChild className="w-full bg-[var(--crm-brand)] text-[var(--crm-surface-2)] hover:bg-[var(--crm-brand-strong)]">
                   <Link to="/login">Voltar para o login</Link>
                 </Button>
               </div>
@@ -183,7 +183,7 @@ export default function AtivarAcesso() {
                     value={nome}
                     onChange={(event) => setNome(event.target.value)}
                     placeholder="Seu nome"
-                    className="h-[50px] rounded-[12px] border-[#dbe2d5] bg-[#fbfcf9] px-4 text-[15px] text-[#514E5F] shadow-none placeholder:text-[#a4aeab] focus-visible:ring-1 focus-visible:ring-[#4E1BB1]"
+                    className="h-[50px] rounded-[12px] border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-4 text-[15px] text-[var(--crm-ink-2)] shadow-none placeholder:text-[var(--crm-ink-3)] focus-visible:ring-1 focus-visible:ring-[var(--crm-brand)]"
                   />
                 </div>
 
@@ -192,7 +192,7 @@ export default function AtivarAcesso() {
                   <Input
                     value={email}
                     disabled
-                    className="h-[50px] rounded-[12px] border-[#dbe2d5] bg-[#f4f6f2] px-4 text-[15px] text-[#7d8784] shadow-none"
+                    className="h-[50px] rounded-[12px] border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-4 text-[15px] text-[var(--crm-ink-3)] shadow-none"
                   />
                 </div>
 
@@ -204,12 +204,12 @@ export default function AtivarAcesso() {
                       value={senha}
                       onChange={(event) => setSenha(event.target.value)}
                       placeholder="Crie uma senha"
-                      className="h-[50px] rounded-[12px] border-[#dbe2d5] bg-[#fbfcf9] px-4 pr-12 text-[15px] text-[#514E5F] shadow-none placeholder:text-[#a4aeab] focus-visible:ring-1 focus-visible:ring-[#4E1BB1]"
+                      className="h-[50px] rounded-[12px] border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-4 pr-12 text-[15px] text-[var(--crm-ink-2)] shadow-none placeholder:text-[var(--crm-ink-3)] focus-visible:ring-1 focus-visible:ring-[var(--crm-brand)]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8d9794] transition-colors hover:text-[#514E5F]"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--crm-ink-3)] transition-colors hover:text-[var(--crm-ink-2)]"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -223,14 +223,14 @@ export default function AtivarAcesso() {
                     value={confirmarSenha}
                     onChange={(event) => setConfirmarSenha(event.target.value)}
                     placeholder="Repita a senha"
-                    className="h-[50px] rounded-[12px] border-[#dbe2d5] bg-[#fbfcf9] px-4 text-[15px] text-[#514E5F] shadow-none placeholder:text-[#a4aeab] focus-visible:ring-1 focus-visible:ring-[#4E1BB1]"
+                    className="h-[50px] rounded-[12px] border-[var(--crm-border-2)] bg-[var(--crm-surface)] px-4 text-[15px] text-[var(--crm-ink-2)] shadow-none placeholder:text-[var(--crm-ink-3)] focus-visible:ring-1 focus-visible:ring-[var(--crm-brand)]"
                   />
                 </div>
 
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="h-[52px] w-full rounded-[12px] bg-[#4E1BB1] text-[17px] font-medium text-[#e9edef] shadow-[0_14px_30px_rgba(13,59,102,0.35)] hover:bg-[#4015A5]"
+                  className="h-[52px] w-full rounded-[12px] bg-[var(--crm-brand)] text-[17px] font-medium text-[var(--crm-surface-2)] shadow-[0_14px_30px_rgba(13,59,102,0.35)] hover:bg-[var(--crm-brand-strong)]"
                 >
                   {saving ? "Ativando..." : "Ativar acesso"}
                 </Button>
@@ -254,5 +254,5 @@ export default function AtivarAcesso() {
 }
 
 function LabelText({ children }: { children: string }) {
-  return <label className="block text-[15px] font-medium text-[#514E5F]">{children}</label>;
+  return <label className="block text-[15px] font-medium text-[var(--crm-ink-2)]">{children}</label>;
 }
