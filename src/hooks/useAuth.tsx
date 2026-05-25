@@ -9,6 +9,7 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { E2E_MOCK_PROFILE_ID, getE2eMockRole, isE2eMockAuth } from "@/lib/e2e";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { recordAuditEventSafe } from "@/lib/api/audit-logs";
 import { useAppStore } from "@/store/useAppStore";
 import type { AppUserProfile, AuthCredentials, SignUpPayload, UserRole } from "@/types/domain";
 
@@ -46,7 +47,11 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   isSupabaseConfigured: boolean;
-  signIn: (credentials: AuthCredentials) => Promise<{ error: string | null }>;
+  signIn: (
+    credentials: AuthCredentials,
+  ) => Promise<{ error: string | null; mfaRequired?: boolean; factorId?: string }>;
+  verifyMfa: (factorId: string, code: string) => Promise<{ error: string | null }>;
+  signInWithGoogle: () => Promise<{ error: string | null }>;
   signUp: (payload: SignUpPayload) => Promise<{ error: string | null; requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
 };
@@ -83,10 +88,35 @@ async function resolveValidSession(nextSession: Session | null) {
   return nextSession;
 }
 
+/** Sessão existe mas falta o 2º fator (TOTP): aal1 com aal2 exigido. Best-effort. */
+async function isMfaVerificationPending(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error || !data) return false;
+    return data.currentLevel === "aal1" && data.nextLevel === "aal2";
+  } catch {
+    return false;
+  }
+}
+
+async function getVerifiedTotpFactorId(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (error || !data) return null;
+    const totp = (data.totp ?? []).find((f) => f.status === "verified") ?? data.totp?.[0];
+    return totp?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<AppUserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mfaPending, setMfaPending] = useState(false);
 
   useEffect(() => {
     if (isE2eMockAuth) {
@@ -171,6 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(validSession);
         await hydrateProfile(validSession?.user ?? null);
+        const pending = validSession ? await isMfaVerificationPending() : false;
+        if (isMounted) setMfaPending(pending);
         setIsLoading(false);
       });
 
@@ -181,6 +213,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!isMounted) return;
           setSession(validSession);
           await hydrateProfile(validSession?.user ?? null);
+          const pending = validSession ? await isMfaVerificationPending() : false;
+          if (isMounted) setMfaPending(pending);
           setIsLoading(false);
         });
       });
@@ -203,7 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       profile,
       session,
-      isAuthenticated: Boolean(profile),
+      isAuthenticated: Boolean(profile) && !mfaPending,
       isLoading,
       isSupabaseConfigured,
       signIn: async ({ email, password }) => {
@@ -231,7 +265,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
+        // 2FA: se a conta tem TOTP, a sessão fica em aal1 até verificar o código.
+        if (await isMfaVerificationPending()) {
+          setMfaPending(true);
+          const factorId = await getVerifiedTotpFactorId();
+          return { error: null, mfaRequired: true, factorId: factorId ?? undefined };
+        }
+
+        setMfaPending(false);
+        recordAuditEventSafe({ action: "login", entityType: "session", summary: "Login no painel" });
+
         return { error: null };
+      },
+      verifyMfa: async (factorId, code) => {
+        if (!supabase) {
+          return { error: "Supabase não configurado." };
+        }
+        try {
+          const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+          if (error) {
+            return { error: error.message };
+          }
+          setMfaPending(false);
+          recordAuditEventSafe({
+            action: "login",
+            entityType: "session",
+            summary: "Login no painel (2FA)",
+          });
+          return { error: null };
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : "Falha ao verificar o código." };
+        }
+      },
+      signInWithGoogle: async () => {
+        if (!supabase) {
+          return { error: "Supabase não configurado." };
+        }
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: `${window.location.origin}/inbox` },
+        });
+        return { error: error?.message ?? null };
       },
       signUp: async ({ nome, email, telefone, empresa, cnpj, password, plano }) => {
         if (!supabase) {
@@ -269,9 +343,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         useAppStore.getState().clearNotifications();
         setSession(null);
         setProfile(null);
+        setMfaPending(false);
       },
     }),
-    [isLoading, profile, session],
+    [isLoading, profile, session, mfaPending],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

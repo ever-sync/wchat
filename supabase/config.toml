@@ -39,6 +39,10 @@ verify_jwt = false
 [functions.marketing-email-dispatch]
 verify_jwt = false
 
+# Dispatcher de webhooks de saída: cron (x-cron-secret) drena tudo; app (JWT) testa/processa o próprio tenant.
+[functions.webhook-dispatcher]
+verify_jwt = false
+
 # Orquestrador de IA: drenado por cron (x-cron-secret); valida internamente.
 [functions.ai-orchestrator]
 verify_jwt = false

@@ -24,6 +24,11 @@ export type CrmStageDef = {
    * entra nesta etapa. Usado em conjunto com o campo obrigatório `next_task_at`.
    */
   taskTemplateId?: string | null;
+  /**
+   * Probabilidade de fechamento (0–100) das negociações nesta etapa.
+   * Usada no forecast: valor ponderado = total_value × (probability / 100).
+   */
+  probability?: number | null;
 };
 
 export type CrmFunnel = {
@@ -150,6 +155,13 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
       const isLostStage =
         rawLost === true || rawLost === "true" || rawLost === 1 || rawLost === "1";
       const taskTemplateId = String(sr.taskTemplateId ?? "").trim() || undefined;
+      let probability: number | undefined;
+      if (sr.probability != null && sr.probability !== "") {
+        const p = Number(sr.probability);
+        if (Number.isFinite(p)) {
+          probability = Math.min(100, Math.max(0, Math.round(p)));
+        }
+      }
       stages.push({
         id: sid,
         title,
@@ -157,6 +169,7 @@ export function parseTenantCrmFunnelsJson(raw: unknown): CrmFunnel[] | null {
         ...(isSaleStage ? { isSaleStage: true } : {}),
         ...(isLostStage ? { isLostStage: true } : {}),
         ...(taskTemplateId ? { taskTemplateId } : {}),
+        ...(probability != null ? { probability } : {}),
       });
     }
     if (stages.length === 0) {

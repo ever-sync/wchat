@@ -58,6 +58,10 @@ import {
   useUpsertTenantCrmFunnelConfig,
 } from "@/lib/api/crm-funnel-config";
 import { PlatformLogSection } from "@/components/settings/PlatformLogSection";
+import { AuditLogSection } from "@/components/settings/AuditLogSection";
+import { WebhooksSettingsSection } from "@/components/settings/WebhooksSettingsSection";
+import { TeamsSettingsSection } from "@/components/settings/TeamsSettingsSection";
+import { TwoFactorSettingsCard } from "@/components/settings/TwoFactorSettingsCard";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import {
   useConnectWhatsappInstance,
@@ -133,6 +137,7 @@ const SETTINGS_TAB_VALUES = [
   "funis",
   "configuracao-chat",
   "log",
+  "auditoria",
 ] as const;
 type SettingsTab = (typeof SETTINGS_TAB_VALUES)[number];
 
@@ -193,6 +198,7 @@ export default function Configuracoes() {
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(true);
   const canUseAuthenticatedActions = !diagnosticsLoading && sessionStatus === "valid";
   const canViewCollaborators = can("colaboradores", "view");
+  const isAdmin = profile?.role === "admin";
   const canEditConfiguracoes = can("configuracoes", "edit");
   const canDeleteConfiguracoes = can("configuracoes", "delete");
   const canEditCollaborators = can("colaboradores", "edit");
@@ -604,6 +610,9 @@ export default function Configuracoes() {
           <TabsTrigger value="funis"><BarChart3 className="mr-2 h-4 w-4" />Funis CRM</TabsTrigger>
           <TabsTrigger value="configuracao-chat"><MessageSquare className="mr-2 h-4 w-4" />Configuracao do chat</TabsTrigger>
           <TabsTrigger value="log"><BookOpen className="mr-2 h-4 w-4" />Log da plataforma</TabsTrigger>
+          {isAdmin ? (
+            <TabsTrigger value="auditoria"><ShieldCheck className="mr-2 h-4 w-4" />Auditoria</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="perfil" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -735,6 +744,10 @@ export default function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="xl:col-span-2">
+            <TwoFactorSettingsCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="integracoes" className="space-y-6">
@@ -1202,6 +1215,10 @@ export default function Configuracoes() {
           />
           </>
               ) : null}
+
+              {integrationsSection === "webhooks" ? (
+                <WebhooksSettingsSection canEdit={canEditConfiguracoes} />
+              ) : null}
             </div>
           </div>
         </TabsContent>
@@ -1219,6 +1236,10 @@ export default function Configuracoes() {
                     canEdit={myProfile?.role === "admin"}
                     disabled={!canUseAuthenticatedActions}
                   />
+                ) : null}
+
+                {collaboratorsSection === "times" ? (
+                  <TeamsSettingsSection canEdit={canEditCollaborators} />
                 ) : null}
 
                 {collaboratorsSection === "fila" ? (
@@ -1903,6 +1924,12 @@ export default function Configuracoes() {
         <TabsContent value="log" className="space-y-6">
           <PlatformLogSection />
         </TabsContent>
+
+        {isAdmin ? (
+          <TabsContent value="auditoria" className="space-y-6">
+            <AuditLogSection />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       {/* Dialog criar / editar resposta rápida */}

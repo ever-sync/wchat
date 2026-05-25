@@ -1,7 +1,7 @@
-import { ListOrdered, ShieldCheck, Users } from "lucide-react";
+import { ListOrdered, Network, ShieldCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type CollaboratorsSettingsSection = "usuarios" | "permissoes" | "fila";
+export type CollaboratorsSettingsSection = "usuarios" | "times" | "permissoes" | "fila";
 
 const SECTIONS: {
   id: CollaboratorsSettingsSection;
@@ -9,6 +9,7 @@ const SECTIONS: {
   icon: typeof Users;
 }[] = [
   { id: "usuarios", label: "Usuarios", icon: Users },
+  { id: "times", label: "Times", icon: Network },
   { id: "permissoes", label: "Permissoes", icon: ShieldCheck },
   { id: "fila", label: "Fila de atendimento", icon: ListOrdered },
 ];
@@ -16,7 +17,7 @@ const SECTIONS: {
 export function parseCollaboratorsSectionParam(
   value: string | null,
 ): CollaboratorsSettingsSection {
-  if (value === "permissoes" || value === "fila" || value === "usuarios") {
+  if (value === "permissoes" || value === "fila" || value === "usuarios" || value === "times") {
     return value;
   }
   return "usuarios";

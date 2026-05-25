@@ -56,11 +56,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { PainelAoVivo } from "./Painel";
+import { ForecastReport } from "@/components/reports/ForecastReport";
 
 type TabKey =
   | "painel"
   | "atendimento"
   | "funil"
+  | "forecast"
   | "parados"
   | "sla"
   | "crm-vendedores"
@@ -809,6 +811,7 @@ export default function Relatorios() {
           </TabsTrigger>
           <TabsTrigger value="atendimento" className="rounded-lg px-3 data-[state=active]:shadow-sm">Atendimento</TabsTrigger>
           <TabsTrigger value="funil" className="rounded-lg px-3 data-[state=active]:shadow-sm">Funil CRM</TabsTrigger>
+          <TabsTrigger value="forecast" className="rounded-lg px-3 data-[state=active]:shadow-sm">Previsão</TabsTrigger>
           <TabsTrigger value="parados" className="rounded-lg px-3 data-[state=active]:shadow-sm">Parados</TabsTrigger>
           <TabsTrigger value="sla" className="rounded-lg px-3 data-[state=active]:shadow-sm">SLA comercial</TabsTrigger>
           <TabsTrigger value="crm-vendedores" className="rounded-lg px-3 data-[state=active]:shadow-sm">Performance CRM</TabsTrigger>
@@ -1050,6 +1053,17 @@ export default function Relatorios() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="forecast" className="mt-0 space-y-4">
+          <ForecastReport
+            funnels={funnels}
+            funnelId={funnelId}
+            enabled={tab === "forecast"}
+            funnelSelect={
+              <CrmFunnelSelect funnels={funnels} funnelId={funnelId} onFunnelIdChange={setFunnelId} />
+            }
+          />
         </TabsContent>
 
         <TabsContent value="parados" className="mt-0 space-y-4">

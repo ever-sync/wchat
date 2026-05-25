@@ -9,6 +9,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/useAppStore";
 import { isRecaptchaEnabled, verifyRecaptchaToken } from "@/lib/recaptcha";
 
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" />
+    </svg>
+  );
+}
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -18,9 +29,50 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const recaptchaRequired = isRecaptchaEnabled();
+  const [mfaStep, setMfaStep] = useState<{ factorId: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn } = useAuth();
+  const { signIn, verifyMfa, signInWithGoogle } = useAuth();
+
+  const finishLogin = () => {
+    if (rememberDevice) {
+      localStorage.setItem("wchat-remember-device", "1");
+    } else {
+      localStorage.removeItem("wchat-remember-device");
+    }
+    useAppStore.getState().addNotification({
+      tipo: "sucesso",
+      titulo: "Login realizado",
+      descricao: "Sua sessão foi iniciada com sucesso.",
+    });
+    navigate("/inbox");
+  };
+
+  const handleVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaStep) return;
+    setLoading(true);
+    const { error } = await verifyMfa(mfaStep.factorId, mfaCode.trim());
+    setLoading(false);
+    if (error) {
+      toast({ title: "Código inválido", description: error, variant: "destructive" });
+      return;
+    }
+    setMfaStep(null);
+    setMfaCode("");
+    finishLogin();
+  };
+
+  const handleGoogle = async () => {
+    setLoading(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      setLoading(false);
+      toast({ title: "Não foi possível entrar com o Google", description: error, variant: "destructive" });
+    }
+    // Sucesso => redireciona para o Google (a página será trocada).
+  };
 
   useEffect(() => {
     document.documentElement.classList.add("login-screen");
@@ -56,7 +108,7 @@ export default function Login() {
       }
     }
 
-    const { error } = await signIn({ email, password: senha });
+    const { error, mfaRequired, factorId } = await signIn({ email, password: senha });
     setLoading(false);
 
     if (error) {
@@ -75,18 +127,20 @@ export default function Login() {
       return;
     }
 
-    if (rememberDevice) {
-      localStorage.setItem("wchat-remember-device", "1");
-    } else {
-      localStorage.removeItem("wchat-remember-device");
+    if (mfaRequired) {
+      if (!factorId) {
+        toast({
+          title: "Verificação em duas etapas",
+          description: "Não foi possível iniciar a verificação. Tente entrar novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setMfaStep({ factorId });
+      return;
     }
 
-    useAppStore.getState().addNotification({
-      tipo: "sucesso",
-      titulo: "Login realizado",
-      descricao: "Sua sessão foi iniciada com sucesso.",
-    });
-    navigate("/inbox");
+    finishLogin();
   };
 
   const inputClass =
@@ -130,6 +184,41 @@ export default function Login() {
                   Entre para gerenciar suas conversas no WhatsApp.
                 </p>
 
+                {mfaStep ? (
+                  <form onSubmit={handleVerifyMfa} className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Verificação em duas etapas. Digite o código de 6 dígitos do seu aplicativo autenticador.
+                    </p>
+                    <input
+                      autoFocus
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                      placeholder="000000"
+                      className={`${inputClass} text-center tracking-[0.4em]`}
+                    />
+                    <button
+                      type="submit"
+                      disabled={loading || mfaCode.length < 6}
+                      className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground transition-colors hover:bg-wchat-700 disabled:opacity-60 sm:h-12 sm:text-[15px]"
+                    >
+                      {loading ? "Verificando..." : "Confirmar código"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMfaStep(null);
+                        setMfaCode("");
+                      }}
+                      className="w-full text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      Voltar
+                    </button>
+                  </form>
+                ) : (
+                <>
                 <form onSubmit={handleLogin} className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
                   <div className="space-y-1.5">
                     <label htmlFor="email" className="block text-[13px] font-medium text-foreground">
@@ -204,6 +293,23 @@ export default function Login() {
                     {loading ? "Entrando..." : "Avançar"}
                   </button>
                 </form>
+
+                <div className="my-4 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">ou</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleGoogle()}
+                  disabled={loading}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-sm font-medium text-foreground transition-colors hover:bg-secondary/60 disabled:opacity-60 sm:h-12"
+                >
+                  <GoogleIcon className="h-4 w-4" />
+                  Entrar com Google
+                </button>
+                </>
+                )}
               </div>
             </div>
 

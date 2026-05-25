@@ -109,6 +109,24 @@ function setStageTaskTemplate(
   });
 }
 
+function setStageProbability(
+  funnels: CrmFunnel[],
+  funnelId: string,
+  stageId: string,
+  probability: number | null,
+): CrmFunnel[] {
+  return funnels.map((funnel) => {
+    if (funnel.id !== funnelId) return funnel;
+    return {
+      ...funnel,
+      stages: funnel.stages.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        return { ...stage, probability: probability == null ? undefined : probability };
+      }),
+    };
+  });
+}
+
 type MigratePrompt =
   | {
       kind: "funnel";
@@ -575,6 +593,34 @@ export function CrmFunnelConfigEditor({
                             </p>
                           </div>
                         ) : null}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium">Probabilidade de fechamento (%)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          inputMode="numeric"
+                          className="h-9 w-32"
+                          disabled={disabled}
+                          placeholder="—"
+                          value={stage.probability == null ? "" : String(stage.probability)}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            if (raw === "") {
+                              onChange(setStageProbability(funnels, activeFunnel.id, stage.id, null));
+                              return;
+                            }
+                            const n = Number(raw);
+                            if (!Number.isFinite(n)) return;
+                            const clamped = Math.min(100, Math.max(0, Math.round(n)));
+                            onChange(setStageProbability(funnels, activeFunnel.id, stage.id, clamped));
+                          }}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Usada na previsão de vendas: valor ponderado = valor × probabilidade.
+                        </p>
                       </div>
 
                       <div className="space-y-2">
