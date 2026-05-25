@@ -84,10 +84,10 @@ function ProductRow({
   };
 
   return (
-    <li className="rounded-xl border border-[#e8eee8] bg-white p-3 shadow-sm">
+    <li className="rounded-xl border border-[var(--crm-surface)] bg-card p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#334047]">{item.productName}</p>
+          <p className="truncate text-sm font-medium text-[var(--crm-ink)]">{item.productName}</p>
           {priceMismatch ? (
             <p className="mt-0.5 text-[11px] text-amber-700">
               Preço de tabela: {formatMoney(item.listPrice)}
@@ -99,7 +99,7 @@ function ProductRow({
             type="button"
             onClick={onRemove}
             disabled={removing}
-            className="shrink-0 rounded-md p-1 text-[#9aa6a0] transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            className="shrink-0 rounded-md p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
             title="Remover produto"
             aria-label="Remover produto"
           >
@@ -109,18 +109,18 @@ function ProductRow({
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#96a29c]">Qtd</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">Qtd</span>
           <Input
             value={qtyStr}
             disabled={readOnly}
             inputMode="decimal"
             onChange={(e) => setQtyStr(e.target.value)}
             onBlur={commitQty}
-            className="h-9 w-20 rounded-lg border-[#dfe6d8] bg-white text-sm"
+            className="h-9 w-20 rounded-lg border-[var(--crm-border-2)] bg-card text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#96a29c]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
             Preço unit.
           </span>
           <Input
@@ -130,14 +130,14 @@ function ProductRow({
             onChange={(e) => setPriceStr(maskCurrencyInputChange(e.target.value))}
             onBlur={commitPrice}
             placeholder="R$ 0,00"
-            className="h-9 w-32 rounded-lg border-[#dfe6d8] bg-white text-sm"
+            className="h-9 w-32 rounded-lg border-[var(--crm-border-2)] bg-card text-sm"
           />
         </label>
         <div className="ml-auto text-right">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#96a29c]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
             Subtotal
           </span>
-          <p className="text-sm font-semibold text-[#334047]">{formatMoney(lineTotal)}</p>
+          <p className="text-sm font-semibold text-[var(--crm-ink)]">{formatMoney(lineTotal)}</p>
         </div>
       </div>
     </li>
@@ -226,7 +226,7 @@ export function NegotiationProductsEditor({
 
   if (!isSupabaseConfigured) {
     return (
-      <p className="text-sm text-[#78909c]">
+      <p className="text-sm text-[var(--crm-ink-3)]">
         Configure o Supabase para gerenciar os produtos do lead.
       </p>
     );
@@ -238,7 +238,7 @@ export function NegotiationProductsEditor({
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[200px] flex-1">
             <Select value={pickProductId} onValueChange={setPickProductId}>
-              <SelectTrigger className="h-10 rounded-xl border-[#dfe6d8] bg-white">
+              <SelectTrigger className="h-10 rounded-xl border-[var(--crm-border-2)] bg-card">
                 <SelectValue placeholder="Selecionar produto…" />
               </SelectTrigger>
               <SelectContent>
@@ -271,12 +271,12 @@ export function NegotiationProductsEditor({
       ) : null}
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#78909c]">
+        <div className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--crm-ink-3)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando produtos…
         </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-[#78909c]">
+        <p className="text-sm text-[var(--crm-ink-3)]">
           Nenhum produto adicionado ainda.
           {!readOnly ? " Selecione um produto acima para começar." : ""}
         </p>
@@ -298,9 +298,9 @@ export function NegotiationProductsEditor({
               />
             ))}
           </ul>
-          <div className="flex items-center justify-between border-t border-[#e8eee8] pt-3">
-            <span className="text-sm font-medium text-[#6f7b76]">Total</span>
-            <span className="text-base font-semibold text-[#334047]">{formatMoney(total)}</span>
+          <div className="flex items-center justify-between border-t border-[var(--crm-surface)] pt-3">
+            <span className="text-sm font-medium text-[var(--crm-ink-3)]">Total</span>
+            <span className="text-base font-semibold text-[var(--crm-ink)]">{formatMoney(total)}</span>
           </div>
         </>
       )}

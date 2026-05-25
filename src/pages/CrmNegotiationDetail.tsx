@@ -1034,7 +1034,7 @@ function CrmNegotiationDetailContent({
       />
 
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent className="border-[#cfd8dc] sm:max-w-md">
+        <DialogContent className="border-[var(--crm-border-2)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Nova tarefa</DialogTitle>
             <DialogDescription>
@@ -1070,7 +1070,7 @@ function CrmNegotiationDetailContent({
                     }
                   }}
                 >
-                  <SelectTrigger id="crm-task-template" className="border-[#ced4da]">
+                  <SelectTrigger id="crm-task-template" className="border-[var(--crm-border-2)]">
                     <SelectValue placeholder="Escolher um modelo" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1091,7 +1091,7 @@ function CrmNegotiationDetailContent({
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="Ex.: Ligar para confirmar proposta"
-                className="border-[#ced4da]"
+                className="border-[var(--crm-border-2)]"
               />
             </div>
             <div className="space-y-1">
@@ -1101,7 +1101,7 @@ function CrmNegotiationDetailContent({
                 type="datetime-local"
                 value={taskDueLocal}
                 onChange={(e) => setTaskDueLocal(e.target.value)}
-                className="border-[#ced4da]"
+                className="border-[var(--crm-border-2)]"
               />
             </div>
             <div className="space-y-1">
@@ -1111,7 +1111,7 @@ function CrmNegotiationDetailContent({
                 value={taskNotes}
                 onChange={(e) => setTaskNotes(e.target.value)}
                 rows={3}
-                className="resize-none border-[#ced4da]"
+                className="resize-none border-[var(--crm-border-2)]"
               />
             </div>
             <div className="space-y-1">
@@ -1120,7 +1120,7 @@ function CrmNegotiationDetailContent({
                 value={taskAssigneeId.trim() ? taskAssigneeId : CRM_TASK_FORM_ASSIGNEE_NONE}
                 onValueChange={(v) => setTaskAssigneeId(v === CRM_TASK_FORM_ASSIGNEE_NONE ? "" : v)}
               >
-                <SelectTrigger id="crm-task-assignee" className="border-[#ced4da]">
+                <SelectTrigger id="crm-task-assignee" className="border-[var(--crm-border-2)]">
                   <SelectValue placeholder="Sem responsável" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1134,14 +1134,14 @@ function CrmNegotiationDetailContent({
               </Select>
             </div>
             {negotiation.customerId ? (
-              <div className="flex items-start gap-3 rounded-md border border-[#e0e0e0] bg-[#fafafa] p-3">
+              <div className="flex items-start gap-3 rounded-md border border-[var(--crm-border)] bg-[var(--crm-surface)] p-3">
                 <Checkbox
                   id="crm-task-client-only"
                   checked={taskClientOnly}
                   onCheckedChange={(c) => setTaskClientOnly(c === true)}
-                  className="mt-0.5 border-[#90a4ae]"
+                  className="mt-0.5 border-[var(--crm-ink-3)]"
                 />
-                <label htmlFor="crm-task-client-only" className="cursor-pointer text-sm leading-snug text-[#495057]">
+                <label htmlFor="crm-task-client-only" className="cursor-pointer text-sm leading-snug text-[var(--crm-ink-2)]">
                   Somente cliente (sem vínculo com esta negociação). O prazo entra no rollup de todas as negociações
                   deste cadastro.
                 </label>
@@ -1154,7 +1154,7 @@ function CrmNegotiationDetailContent({
             </Button>
             <Button
               type="button"
-              className="bg-[#4E1BB1] hover:bg-[#3C1494]"
+              className="bg-[var(--crm-brand)] hover:bg-[var(--crm-brand-strong)]"
               disabled={createCrmTask.isPending}
               onClick={() => {
                 void (async () => {
@@ -1197,7 +1197,7 @@ function CrmNegotiationDetailContent({
       </Dialog>
 
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="border-[#cfd8dc] sm:max-w-md">
+        <DialogContent className="border-[var(--crm-border-2)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Criar e vincular cliente</DialogTitle>
             <DialogDescription>
@@ -1213,7 +1213,7 @@ function CrmNegotiationDetailContent({
                 value={linkPhone}
                 onChange={(e) => setLinkPhone(e.target.value)}
                 placeholder="5511999990000"
-                className="border-[#ced4da]"
+                className="border-[var(--crm-border-2)]"
               />
             </div>
             <div className="space-y-1">
@@ -1224,7 +1224,7 @@ function CrmNegotiationDetailContent({
                 value={linkEmail}
                 onChange={(e) => setLinkEmail(e.target.value)}
                 placeholder="contato@empresa.com"
-                className="border-[#ced4da]"
+                className="border-[var(--crm-border-2)]"
               />
             </div>
           </div>
@@ -1234,7 +1234,7 @@ function CrmNegotiationDetailContent({
             </Button>
             <Button
               type="button"
-              className="bg-[#4E1BB1] hover:bg-[#3C1494]"
+              className="bg-[var(--crm-brand)] hover:bg-[var(--crm-brand-strong)]"
               disabled={createCustomer.isPending || updateNegotiation.isPending}
               onClick={() => {
                 if (!canManageCrm) {
@@ -1448,10 +1448,10 @@ export default function CrmNegotiationDetail() {
     return (
       <div
         className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 p-6 text-center"
-        style={{ backgroundColor: "#f0f2f5" }}
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
-        <p className="text-sm text-[#78909c]">Negociação não encontrada.</p>
-        <Button type="button" variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/crm")}>
+        <p className="text-sm text-[var(--crm-ink-3)]">Negociação não encontrada.</p>
+        <Button type="button" variant="outline" className="border-[var(--crm-border-2)]" onClick={() => navigate("/crm")}>
           Voltar ao CRM
         </Button>
       </div>
@@ -1461,8 +1461,8 @@ export default function CrmNegotiationDetail() {
   if (persisted && dbLoading) {
     return (
       <div
-        className="flex min-h-[50vh] flex-1 items-center justify-center text-sm text-[#78909c]"
-        style={{ backgroundColor: "#f0f2f5" }}
+        className="flex min-h-[50vh] flex-1 items-center justify-center text-sm text-[var(--crm-ink-3)]"
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
         Carregando negociação…
       </div>
@@ -1473,10 +1473,10 @@ export default function CrmNegotiationDetail() {
     return (
       <div
         className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 p-6 text-center"
-        style={{ backgroundColor: "#f0f2f5" }}
+        style={{ backgroundColor: "var(--crm-surface-2)" }}
       >
-        <p className="text-sm text-[#78909c]">Negociação não encontrada.</p>
-        <Button type="button" variant="outline" className="border-[#cfd8dc]" onClick={() => navigate("/crm")}>
+        <p className="text-sm text-[var(--crm-ink-3)]">Negociação não encontrada.</p>
+        <Button type="button" variant="outline" className="border-[var(--crm-border-2)]" onClick={() => navigate("/crm")}>
           Voltar ao CRM
         </Button>
       </div>

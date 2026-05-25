@@ -160,6 +160,7 @@
     --crm-wa-teal: #128c7e;
     --crm-success-tint: #e8f5e9;
     --crm-info-tint: #d8ecf7;
+    --crm-info: #1565c0;
 
     /* Inbox/chat — paleta verde-acinzentada (estilo WhatsApp claro). */
     --inbox-ink: #334047;
@@ -213,6 +214,7 @@
     --crm-wa-teal: #2dc4ac;
     --crm-success-tint: #18271b;
     --crm-info-tint: #182934;
+    --crm-info: #6eb3ff;
 
     /* Inbox/chat no escuro — paleta WhatsApp dark. */
     --inbox-ink: #e9edef;

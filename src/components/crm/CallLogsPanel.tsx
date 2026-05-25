@@ -50,14 +50,14 @@ function CallRow({ call }: { call: CallLog }) {
   const duration = formatDuration(call.durationSeconds);
   const inProgress = !["completed", "no_answer", "busy", "failed", "canceled"].includes(call.status);
   return (
-    <li className="flex items-start gap-3 rounded-xl border border-[#e8eee8] bg-white px-3 py-2">
+    <li className="flex items-start gap-3 rounded-xl border border-[var(--crm-surface)] bg-card px-3 py-2">
       <meta.Icon className={cn("mt-0.5 h-4 w-4 shrink-0", meta.className, inProgress && "animate-pulse")} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2">
           <span className={cn("text-sm font-medium", meta.className)}>{meta.label}</span>
-          {duration ? <span className="text-xs text-[#6f7b76]">· {duration}</span> : null}
+          {duration ? <span className="text-xs text-[var(--crm-ink-3)]">· {duration}</span> : null}
         </div>
-        <p className="text-[11px] text-[#96a29c]">
+        <p className="text-[11px] text-[var(--crm-ink-3)]">
           {formatDateTime(call.startedAt ?? call.createdAt)}
           {call.toNumber ? ` · ${call.toNumber}` : ""}
         </p>
@@ -89,18 +89,18 @@ export function CallLogsPanel({
   return (
     <div
       className={cn(
-        "rounded-[20px] border border-[#e1e8dc] bg-white/90 p-4 shadow-sm",
+        "rounded-[20px] border border-[var(--crm-border-2)] bg-card/90 p-4 shadow-sm",
         className,
       )}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#96a29c]">Ligações</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--crm-ink-3)]">Ligações</p>
       {isLoading ? (
-        <div className="mt-3 flex items-center gap-2 text-sm text-[#78909c]">
+        <div className="mt-3 flex items-center gap-2 text-sm text-[var(--crm-ink-3)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando…
         </div>
       ) : calls.length === 0 ? (
-        <p className="mt-2 text-sm text-[#6f7b76]">Nenhuma ligação registrada para este lead.</p>
+        <p className="mt-2 text-sm text-[var(--crm-ink-3)]">Nenhuma ligação registrada para este lead.</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {calls.map((call) => (

@@ -154,19 +154,19 @@ export function CrmNegotiationDocumentsSection({
   return (
     <section
       className={cn(
-        "overflow-hidden border border-[#e8eaed] bg-white",
+        "overflow-hidden border border-[var(--crm-surface-2)] bg-card",
         !enabled && "opacity-60",
         className,
       )}
       style={{ borderRadius: RD_RADIUS, boxShadow: RD_CARD_SHADOW }}
       aria-busy={isLoading || busy}
     >
-      <div className="flex items-center justify-between border-b border-[#eceff1] px-4 py-3">
-        <h2 className="text-sm font-semibold text-[#37474f]">Documentos do lead</h2>
-        <FileText className="h-4 w-4 text-[#90a4ae]" aria-hidden />
+      <div className="flex items-center justify-between border-b border-[var(--crm-surface)] px-4 py-3">
+        <h2 className="text-sm font-semibold text-[var(--crm-ink)]">Documentos do lead</h2>
+        <FileText className="h-4 w-4 text-[var(--crm-ink-3)]" aria-hidden />
       </div>
       <div className="space-y-4 px-4 py-4 md:px-6">
-        <p className="text-xs text-[#78909c]">
+        <p className="text-xs text-[var(--crm-ink-3)]">
           {readOnly
             ? "Assuma o negócio para anexar ou excluir documentos deste lead."
             : "Dê um nome ao documento e selecione o arquivo. Os anexos ficam no seu espaço seguro e vinculados a esta negociação."}
@@ -181,7 +181,7 @@ export function CrmNegotiationDocumentsSection({
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Ex.: Proposta comercial"
-              className="border-[#ced4da]"
+              className="border-[var(--crm-border-2)]"
               disabled={!enabled || busy}
             />
           </div>
@@ -196,7 +196,7 @@ export function CrmNegotiationDocumentsSection({
             <Button
               type="button"
               variant="outline"
-              className="border-[#cfd8dc] text-[#37474f]"
+              className="border-[var(--crm-border-2)] text-[var(--crm-ink)]"
               style={{ borderRadius: RD_RADIUS }}
               disabled={!enabled || busy}
               onClick={onPickFile}
@@ -207,7 +207,7 @@ export function CrmNegotiationDocumentsSection({
           </div>
         </div>
         {pickedFile ? (
-          <p className="text-xs text-[#546e7a]">
+          <p className="text-xs text-[var(--crm-ink-2)]">
             Arquivo: <span className="break-all font-medium">{pickedFile.name}</span>
           </p>
         ) : null}
@@ -227,22 +227,22 @@ export function CrmNegotiationDocumentsSection({
 
         {isLoading ? (
           <div className="space-y-2">
-            <div className="h-12 animate-pulse rounded-lg bg-[#eceff1]" />
-            <div className="h-12 animate-pulse rounded-lg bg-[#eceff1]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--crm-surface)]" />
+            <div className="h-12 animate-pulse rounded-lg bg-[var(--crm-surface)]" />
           </div>
         ) : docs.length === 0 ? (
-          <p className="py-4 text-center text-sm text-[#78909c]">Nenhum documento anexado ainda.</p>
+          <p className="py-4 text-center text-sm text-[var(--crm-ink-3)]">Nenhum documento anexado ainda.</p>
         ) : (
-          <ul className="space-y-2 border-t border-[#eceff1] pt-4">
+          <ul className="space-y-2 border-t border-[var(--crm-surface)] pt-4">
             {docs.map((d) => (
               <li
                 key={d.id}
-                className="flex items-start gap-2 rounded-lg border border-[#eceff1] bg-[#fafbfb] px-3 py-2.5"
+                className="flex items-start gap-2 rounded-lg border border-[var(--crm-surface)] bg-[var(--crm-surface)] px-3 py-2.5"
               >
-                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#90a4ae]" aria-hidden />
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--crm-ink-3)]" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-[#37474f]">{d.displayName}</p>
-                  <p className="mt-0.5 text-xs text-[#78909c]">
+                  <p className="text-sm font-medium text-[var(--crm-ink)]">{d.displayName}</p>
+                  <p className="mt-0.5 text-xs text-[var(--crm-ink-3)]">
                     {d.fileName} · {formatDocSize(d.fileSize)}
                     {d.createdAt ? ` · ${formatDocDate(d.createdAt)}` : ""}
                   </p>
@@ -252,7 +252,7 @@ export function CrmNegotiationDocumentsSection({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-[#90a4ae] hover:bg-[#eceff1]"
+                    className="h-8 w-8 text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface)]"
                     disabled={busy}
                     aria-label={`Baixar ${d.displayName}`}
                     onClick={() => openDownload(d)}
@@ -264,7 +264,7 @@ export function CrmNegotiationDocumentsSection({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-[#90a4ae] hover:bg-[#ffebee] hover:text-[#c62828]"
+                      className="h-8 w-8 text-[var(--crm-ink-3)] hover:bg-[var(--crm-danger-tint)] hover:text-[var(--crm-danger)]"
                       disabled={busy}
                       aria-label={`Excluir ${d.displayName}`}
                       onClick={() => setDeleteTarget(d)}
@@ -285,7 +285,7 @@ export function CrmNegotiationDocumentsSection({
           if (!open) setDeleteTarget(null);
         }}
       >
-        <AlertDialogContent className="border-[#cfd8dc]">
+        <AlertDialogContent className="border-[var(--crm-border-2)]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir documento?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -295,9 +295,9 @@ export function CrmNegotiationDocumentsSection({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#cfd8dc]">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="border-[var(--crm-border-2)]">Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#c62828] text-white hover:bg-[#b71c1c]"
+              className="bg-[var(--crm-danger)] text-white hover:bg-[var(--crm-danger-strong)]"
               onClick={() => {
                 const t = deleteTarget;
                 setDeleteTarget(null);
