@@ -154,6 +154,7 @@
     --crm-danger-border: #f5c2c7;
     --crm-orange: #e65100;
     --crm-amber: #ffc107;
+    --crm-amber-ink: #92400e;
     --crm-amber-tint: #fff8e1;
     --crm-amber-border: #ffe082;
     --crm-amber-tint-hover: #ffecb3;
@@ -209,6 +210,7 @@
     --crm-danger-border: #5a2e30;
     --crm-orange: #ff8a4d;
     --crm-amber: #ffca28;
+    --crm-amber-ink: #fbbf24;
     --crm-amber-tint: #322b16;
     --crm-amber-border: #574a22;
     --crm-amber-tint-hover: #423917;

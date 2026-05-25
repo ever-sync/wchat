@@ -196,12 +196,12 @@ function ProfileTagsPicker({
         {tags.map((t) => (
           <span
             key={t}
-            className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-900"
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-medium text-[var(--crm-brand)]"
           >
             {t}
             <button
               type="button"
-              className="rounded-full p-0.5 hover:bg-violet-200/80"
+              className="rounded-full p-0.5 hover:bg-[var(--crm-brand-tint)]"
               aria-label={`Remover tag ${t}`}
               disabled={isBusy}
               onClick={() => void commit(tags.filter((x) => x !== t))}
@@ -614,7 +614,7 @@ function ProfileNegotiationsPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-medium text-[var(--inbox-ink)]">{n.title.trim() || "Sem título"}</p>
                     {isPrimaryChatDeal ? (
-                      <Badge className="shrink-0 border border-violet-200 bg-violet-50 text-[10px] font-medium text-violet-900">
+                      <Badge className="shrink-0 border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[10px] font-medium text-[var(--crm-brand)]">
                         Esta conversa
                       </Badge>
                     ) : null}
@@ -845,7 +845,7 @@ export function CustomerProfileSheet({
                     alt={displayName}
                     className="object-cover"
                   />
-                  <AvatarFallback className="bg-gradient-to-br from-sky-100 via-sky-50 to-sky-200 text-xl font-bold text-sky-800">
+                  <AvatarFallback className="bg-gradient-to-br from-[var(--crm-info-tint)] via-sky-50 to-[var(--crm-info-tint)] text-xl font-bold text-[var(--crm-info)]">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
@@ -910,7 +910,7 @@ export function CustomerProfileSheet({
                         asChild
                         variant="secondary"
                         size="sm"
-                        className="h-9 rounded-xl bg-violet-50 px-2.5 text-xs font-semibold text-violet-950 hover:bg-violet-100"
+                        className="h-9 rounded-xl bg-[var(--crm-brand-tint)] px-2.5 text-xs font-semibold text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
                       >
                         <Link to={`/clientes/${customer.id}`} className="inline-flex items-center justify-center gap-1.5">
                           <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -922,7 +922,7 @@ export function CustomerProfileSheet({
                           asChild
                           variant="secondary"
                           size="sm"
-                          className="h-9 rounded-xl bg-violet-50 px-2.5 text-xs font-semibold text-violet-950 hover:bg-violet-100"
+                          className="h-9 rounded-xl bg-[var(--crm-brand-tint)] px-2.5 text-xs font-semibold text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
                         >
                           <Link to="/crm" className="inline-flex items-center justify-center gap-1.5">
                             <Kanban className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -939,18 +939,18 @@ export function CustomerProfileSheet({
 
           <div className="px-6 py-5">
             {crmActionsLocked ? (
-              <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p className="mb-5 rounded-xl border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-3 text-sm text-[var(--crm-amber-ink)]">
                 {negotiationAssigneeBlockedMessage()}
               </p>
             ) : null}
             {chat && !chat.customerId ? (
-              <div className="mb-5 rounded-[28px] border border-amber-200/80 bg-amber-50/50 p-4 shadow-[0_16px_28px_rgba(84,95,101,0.06)]">
+              <div className="mb-5 rounded-[28px] border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] p-4 shadow-[0_16px_28px_rgba(84,95,101,0.06)]">
                 <p className="text-sm font-semibold text-[var(--inbox-ink)]">Conversa sem cliente vinculado</p>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--inbox-muted)]">
                   Busque o cadastro pelo nome, telefone ou documento e vincule para ver CRM, credito e campos completos no perfil.
                 </p>
                 {!isSupabaseConfigured ? (
-                  <p className="mt-2 text-xs text-amber-900">Configure o Supabase para vincular conversas a clientes.</p>
+                  <p className="mt-2 text-xs text-[var(--crm-amber-ink)]">Configure o Supabase para vincular conversas a clientes.</p>
                 ) : (
                   <>
                     <Input

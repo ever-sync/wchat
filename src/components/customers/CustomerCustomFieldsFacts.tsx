@@ -162,7 +162,7 @@ export function CustomerCustomFieldsFacts({
 
       <div className="mt-3">
         {readOnly && editBlockedMessage ? (
-          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-950">
+          <p className="mb-3 rounded-lg border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-3 py-2 text-xs leading-relaxed text-[var(--crm-amber-ink)]">
             {editBlockedMessage}
           </p>
         ) : null}

@@ -310,10 +310,10 @@ export function ConversationList({
             type="button"
             data-testid="inbox-manager-queue"
             onClick={onOpenUnassignedQueue}
-            className="mt-2 flex w-full items-center justify-between rounded-lg border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-left text-xs font-medium text-amber-950 transition-colors hover:bg-amber-100/80"
+            className="mt-2 flex w-full items-center justify-between rounded-lg border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-2.5 py-2 text-left text-xs font-medium text-[var(--crm-amber-ink)] transition-colors hover:bg-[var(--crm-amber-tint)]"
           >
             <span>Fila: {managerUnassignedCount} sem responsável</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">Ver</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-amber-ink)]">Ver</span>
           </button>
         ) : null}
 

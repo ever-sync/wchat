@@ -2430,7 +2430,7 @@ export default function Inbox() {
                         void clearSnoozeMutation.mutateAsync(activeChat.id);
                       }}
                       disabled={clearSnoozeMutation.isPending || !canActOnChat || !canEditInbox}
-                      className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-amber-800 transition-colors hover:bg-amber-100"
+                      className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[var(--crm-amber-ink)] transition-colors hover:bg-[var(--crm-amber-tint)]"
                       aria-label="Remover adiamento"
                     >
                       <AlarmClock className="h-4 w-4" />
@@ -2597,7 +2597,7 @@ export default function Inbox() {
                   {blockedRequestedChatId ? (
                     <p
                       data-testid="inbox-chat-blocked"
-                      className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                      className="mb-4 rounded-xl border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-3 text-sm text-[var(--crm-amber-ink)]"
                       role="status"
                     >
                       {chatAssignedToOtherAttendantMessage()}
@@ -3099,7 +3099,7 @@ export default function Inbox() {
                   </div>
 
                   {saleCartDuplicateProductLines ? (
-                    <p className="rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950">
+                    <p className="rounded-lg border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-3 py-2 text-xs leading-snug text-[var(--crm-amber-ink)]">
                       O mesmo produto aparece em mais de uma linha. As quantidades{" "}
                       <span className="font-semibold">somam</span> na conferencia de estoque e no
                       total da venda.
@@ -3193,7 +3193,7 @@ export default function Inbox() {
                                 Estoque: <span className="font-medium text-[var(--inbox-ink)]">{p.qtdEstoque}</span>{" "}
                                 {p.unidade}
                                 {p.qtdEstoque > 0 && p.qtdEstoque < 5 ? (
-                                  <span className="text-amber-700"> · estoque baixo</span>
+                                  <span className="text-[var(--crm-amber-ink)]"> · estoque baixo</span>
                                 ) : null}
                               </p>
                             );

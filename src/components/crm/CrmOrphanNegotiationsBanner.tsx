@@ -49,16 +49,16 @@ export function CrmOrphanNegotiationsBanner({
     <>
       <div
         className={cn(
-          "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3",
+          "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-3",
           className,
         )}
         role="status"
       >
-        <div className="flex min-w-0 items-start gap-2 text-sm text-amber-950">
+        <div className="flex min-w-0 items-start gap-2 text-sm text-[var(--crm-amber-ink)]">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <div>
             <p className="font-medium">Negociações órfãs</p>
-            <p className="text-xs text-amber-900/90">
+            <p className="text-xs text-[var(--crm-amber-ink)]">
               {orphans.length} negociação{orphans.length === 1 ? "" : "ões"} com funil ou etapa fora
               da configuração atual
               {sample.length > 0 ? ` (ex.: ${sample.join("; ")})` : ""}.
@@ -69,7 +69,7 @@ export function CrmOrphanNegotiationsBanner({
           type="button"
           size="sm"
           variant="outline"
-          className="shrink-0 border-amber-400 bg-white hover:bg-amber-100"
+          className="shrink-0 border-[var(--crm-amber-border)] bg-white hover:bg-[var(--crm-amber-tint)]"
           disabled={migrating}
           onClick={() => setDialogOpen(true)}
         >

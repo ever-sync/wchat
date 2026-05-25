@@ -659,7 +659,7 @@ export function CrmFunnelConfigEditor({
           </div>
 
           {pendingMigrationCount > 0 ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="rounded-md border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-3 py-2 text-xs text-[var(--crm-amber-ink)]">
               {pendingMigrationCount} migração{pendingMigrationCount === 1 ? "" : "ões"} pendente
               {pendingMigrationCount === 1 ? "" : "s"} — salve os funis para aplicar no banco.
             </p>

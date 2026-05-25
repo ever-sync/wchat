@@ -1043,7 +1043,7 @@ export function ClienteRdPerfilView({
       </header>
 
       {negotiationReadOnly ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950 md:px-6">
+        <div className="border-b border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-2.5 text-sm text-[var(--crm-amber-ink)] md:px-6">
           {negotiationAssigneeBlockedMessage()}
         </div>
       ) : null}

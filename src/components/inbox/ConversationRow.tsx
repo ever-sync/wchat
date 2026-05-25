@@ -178,7 +178,7 @@ export const ConversationRow = memo(function ConversationRow({
               {snoozed ? (
                 <span
                   title={`Adiada até ${format(new Date(chat.snoozeUntil!), "dd/MM HH:mm", { locale: ptBR })}`}
-                  className="inline-flex h-5 items-center rounded-full bg-amber-100 px-1.5 text-[9px] font-semibold text-amber-800"
+                  className="inline-flex h-5 items-center rounded-full bg-[var(--crm-amber-tint)] px-1.5 text-[9px] font-semibold text-[var(--crm-amber-ink)]"
                 >
                   <AlarmClock className="mr-0.5 h-3 w-3" />
                 </span>
@@ -186,14 +186,14 @@ export const ConversationRow = memo(function ConversationRow({
               {slaBreached ? (
                 <span
                   title="SLA de primeira resposta estourado"
-                  className="inline-flex h-5 items-center rounded-full bg-red-100 px-1.5 text-[9px] font-semibold text-red-700"
+                  className="inline-flex h-5 items-center rounded-full bg-[var(--crm-danger-tint)] px-1.5 text-[9px] font-semibold text-[var(--crm-danger-strong)]"
                 >
                   SLA
                 </span>
               ) : slaMinutes != null && slaMinutes <= 5 && slaMinutes > 0 ? (
                 <span
                   title={`${slaMinutes} min para 1ª resposta`}
-                  className="inline-flex h-5 items-center rounded-full bg-orange-100 px-1.5 text-[9px] font-semibold text-orange-800"
+                  className="inline-flex h-5 items-center rounded-full bg-[var(--crm-amber-tint)] px-1.5 text-[9px] font-semibold text-[var(--crm-amber-ink)]"
                 >
                   <Clock className="h-3 w-3" />
                 </span>

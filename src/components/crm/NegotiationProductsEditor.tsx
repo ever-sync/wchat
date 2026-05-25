@@ -89,7 +89,7 @@ function ProductRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[var(--crm-ink)]">{item.productName}</p>
           {priceMismatch ? (
-            <p className="mt-0.5 text-[11px] text-amber-700">
+            <p className="mt-0.5 text-[11px] text-[var(--crm-amber-ink)]">
               Preço de tabela: {formatMoney(item.listPrice)}
             </p>
           ) : null}
@@ -99,7 +99,7 @@ function ProductRow({
             type="button"
             onClick={onRemove}
             disabled={removing}
-            className="shrink-0 rounded-md p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            className="shrink-0 rounded-md p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-[var(--crm-danger-tint)] hover:text-red-600 disabled:opacity-50"
             title="Remover produto"
             aria-label="Remover produto"
           >

@@ -302,7 +302,7 @@ export function CustomerLeadSheet({
           </SheetHeader>
 
           {disabled ? (
-            <div className="mx-6 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="mx-6 mt-4 rounded-xl border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-3 text-sm text-[var(--crm-amber-ink)]">
               {negotiationAssigneeBlockedMessage()}
             </div>
           ) : null}

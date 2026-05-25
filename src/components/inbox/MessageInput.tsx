@@ -286,7 +286,7 @@ export function MessageInput({
 
       <div className={cn(
         "flex min-h-[52px] items-end gap-1.5 rounded-[28px] px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-2",
-        noteMode ? "bg-amber-50 ring-1 ring-amber-200" : "bg-card ring-1 ring-border",
+        noteMode ? "bg-[var(--crm-amber-tint)] ring-1 ring-[var(--crm-amber-border)]" : "bg-card ring-1 ring-border",
       )}>
         <input
           ref={attachmentInputRef}
