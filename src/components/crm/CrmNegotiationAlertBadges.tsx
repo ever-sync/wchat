@@ -32,8 +32,8 @@ export function CrmNegotiationAlertBadges({
             className={cn(
               "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-tight",
               alert.severity === "danger"
-                ? "border-[#f5c2c7] bg-[#fdecea] text-[#b71c1c]"
-                : "border-[#ffe082] bg-[#fff8e1] text-[#e65100]",
+                ? "border-[var(--crm-danger-border)] bg-[var(--crm-danger-tint)] text-[var(--crm-danger-strong)]"
+                : "border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] text-[var(--crm-orange)]",
               compact && "px-1 py-px text-[9px]",
             )}
             title={alert.label}

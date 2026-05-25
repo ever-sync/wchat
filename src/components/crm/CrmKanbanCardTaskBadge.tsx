@@ -49,16 +49,16 @@ export function CrmKanbanCardTaskBadge({ card }: CrmKanbanCardTaskBadgeProps) {
       {counts.overdue > 0 ? (
         <span className="inline-flex items-center gap-0.5" title="Tarefas atrasadas">
           <span
-            className={cn("h-2 w-2 shrink-0 rounded-full bg-[#c62828] animate-pulse")}
+            className={cn("h-2 w-2 shrink-0 rounded-full bg-[var(--crm-danger)] animate-pulse")}
             aria-hidden
           />
-          <span className="tabular-nums font-semibold text-[#c62828]">{counts.overdue}</span>
+          <span className="tabular-nums font-semibold text-[var(--crm-danger)]">{counts.overdue}</span>
         </span>
       ) : null}
       {counts.pending > 0 ? (
         <span className="inline-flex items-center gap-0.5" title="Tarefas pendentes">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-[#ffc107]" aria-hidden />
-          <span className="tabular-nums font-medium text-[#b8860b]">{counts.pending}</span>
+          <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--crm-amber)]" aria-hidden />
+          <span className="tabular-nums font-medium text-[var(--inbox-gold)]">{counts.pending}</span>
         </span>
       ) : null}
     </span>

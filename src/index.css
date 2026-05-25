@@ -151,6 +151,7 @@
     --crm-danger: #c62828;
     --crm-danger-strong: #b71c1c;
     --crm-danger-tint: #fdecea;
+    --crm-danger-border: #f5c2c7;
     --crm-orange: #e65100;
     --crm-amber: #ffc107;
     --crm-amber-tint: #fff8e1;
@@ -205,6 +206,7 @@
     --crm-danger: #f1727a;
     --crm-danger-strong: #e15a60;
     --crm-danger-tint: #36211f;
+    --crm-danger-border: #5a2e30;
     --crm-orange: #ff8a4d;
     --crm-amber: #ffca28;
     --crm-amber-tint: #322b16;
