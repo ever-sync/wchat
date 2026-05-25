@@ -1784,8 +1784,11 @@ export async function processMessagePayload(
   /* Se recebemos midia encriptada do WhatsApp (uazapi v2 entrega URL crua
    * em `content.URL`), descriptografamos localmente (preferencia) ou via
    * uazapi (fallback) e copiamos para o Storage publico, para que o Inbox
-   * consiga exibir inline. */
-  if (direction === "inbound" && isEncryptedWhatsappUrl(mediaUrl)) {
+   * consiga exibir inline. Vale tanto para inbound quanto para outbound: um
+   * audio/foto gravado no celular do atendente chega como `fromMe` com a mesma
+   * URL encriptada e, sem espelhar, o balao so mostra "[Audio — ...]". Midia
+   * enviada pela plataforma ja chega com URL publica, entao nao cai aqui. */
+  if (isEncryptedWhatsappUrl(mediaUrl)) {
     const messageBlock = getMessageLikeBlock(payload);
     const v2Content =
       messageBlock.content && typeof messageBlock.content === "object"
