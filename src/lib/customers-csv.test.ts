@@ -9,7 +9,7 @@ describe("parseCustomersCsv", () => {
 
     expect(result.errors).toHaveLength(0);
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].nome).toBe("WhatsApp (11) 98765-4321");
+    expect(result.rows[0].nome).toBe("+55 (11) 98765-4321");
   });
 
   it("ignora telefones duplicados mesmo quando o DDI muda", () => {

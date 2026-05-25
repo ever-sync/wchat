@@ -48,7 +48,7 @@ export function CustomerImportDialog({
             <span className="block">
               <span className="font-medium text-foreground">Telefone obrigatório</span> (formato com DDI ou local).{" "}
               <span className="font-medium text-foreground">Nome opcional</span>
-              — se estiver vazio, o sistema cria um nome exibível a partir do número (ex.: WhatsApp (11) 98765-4321).
+              — se estiver vazio, o sistema cria um nome exibível a partir do número (ex.: +55 (11) 98765-4321).
             </span>
             {fileName ? <span className="block">Arquivo: {fileName}</span> : null}
           </DialogDescription>

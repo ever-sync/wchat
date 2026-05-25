@@ -38,7 +38,7 @@ export function fallbackCustomerDisplayName(telefone: string, explicitNome?: str
     const ddd = digits.slice(0, 2);
     const prefix = digits.length === 11 ? digits.slice(2, 7) : digits.slice(2, 6);
     const suffix = digits.length === 11 ? digits.slice(7, 11) : digits.slice(6, 10);
-    return `WhatsApp ${ddd ? `(${ddd}) ` : ""}${prefix}-${suffix}`;
+    return `+55 ${ddd ? `(${ddd}) ` : ""}${prefix}-${suffix}`;
   }
 
   return "Contato WhatsApp";
