@@ -64,6 +64,67 @@
     --sidebar-border: 270 28% 88%;
     --sidebar-ring: var(--wchat-purple-600);
   }
+
+  .dark {
+    /* Paleta wChat reinterpretada para fundo escuro. Mantém o roxo da marca.
+       --wchat-white continua branco (é usado como texto sobre cor, ex.
+       primary-foreground); as superfícies escuras vêm das vars semânticas. */
+    --wchat-purple-900: 270 35% 92%; /* texto forte / headings → claro */
+    --wchat-purple-800: 264 30% 82%;
+    --wchat-purple-700: 262 58% 54%; /* bg-wchat-700 segue roxo, visível no escuro */
+    --wchat-purple-600: 262 66% 60%;
+    --wchat-purple-500: 262 62% 62%;
+    --wchat-purple-400: 262 48% 56%;
+    --wchat-purple-200: 264 14% 24%; /* bg-wchat-200 = divisórias */
+    --wchat-purple-100: 264 17% 19%; /* bg-wchat-100 = hover/superfície sutil */
+    --wchat-purple-50: 264 20% 15%; /* bg-wchat-50 = superfície */
+    --wchat-text: 270 15% 90%;
+    --wchat-text-muted: 265 9% 62%;
+    --wchat-white: 0 0% 100%;
+
+    --background: 264 24% 9%;
+    --foreground: var(--wchat-text);
+
+    --card: 264 22% 13%;
+    --card-foreground: var(--wchat-text);
+
+    --popover: 264 22% 13%;
+    --popover-foreground: var(--wchat-text);
+
+    --primary: 262 72% 64%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 264 17% 19%;
+    --secondary-foreground: var(--wchat-text);
+
+    --muted: 264 16% 17%;
+    --muted-foreground: var(--wchat-text-muted);
+
+    --accent: 262 60% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 262 66% 60%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 58%;
+    --warning-foreground: 264 24% 9%;
+
+    --border: 264 14% 22%;
+    --input: 264 14% 22%;
+    --ring: 262 72% 64%;
+
+    --sidebar-background: 264 24% 11%;
+    --sidebar-foreground: var(--wchat-text);
+    --sidebar-primary: 262 72% 64%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 264 17% 19%;
+    --sidebar-accent-foreground: var(--wchat-text);
+    --sidebar-border: 264 14% 22%;
+    --sidebar-ring: 262 72% 64%;
+  }
 }
 
 @layer base {

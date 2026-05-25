@@ -6,11 +6,15 @@ import {
   LogOut,
   Megaphone,
   MessageCircle,
+  Moon,
   Package,
   Settings2,
+  Sun,
   UserCog,
   Users2,
 } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -135,6 +139,11 @@ export function AppSidebar() {
   const { signOut, profile } = useAuth();
   const { can, isLoading: permissionsLoading } = useRolePermissions();
   const { toast } = useToast();
+  const { resolvedTheme, setTheme } = useTheme();
+  // next-themes só conhece o tema após montar; evita renderizar o ícone errado.
+  const [themeMounted, setThemeMounted] = useState(false);
+  useEffect(() => setThemeMounted(true), []);
+  const isDark = themeMounted && resolvedTheme === "dark";
   const setAvailability = useSetMyAvailability({
     onError: (error) => {
       toast({
@@ -263,6 +272,23 @@ export function AppSidebar() {
             </NavLink>
           </SidebarTooltip>
         ) : null}
+
+        <SidebarTooltip label={isDark ? "Modo claro" : "Modo escuro"}>
+          <button
+            type="button"
+            title={isDark ? "Modo claro" : "Modo escuro"}
+            aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
+            aria-pressed={isDark}
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-wchat-100 hover:text-primary"
+          >
+            {isDark ? (
+              <Sun className="h-[20px] w-[20px]" aria-hidden />
+            ) : (
+              <Moon className="h-[20px] w-[20px]" aria-hidden />
+            )}
+          </button>
+        </SidebarTooltip>
 
         <SidebarTooltip label="Sair">
           <button
