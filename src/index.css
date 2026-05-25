@@ -128,6 +128,73 @@
 }
 
 @layer base {
+  /* Tokens das telas de CRM/cliente. Antes eram cores hex fixas espalhadas no
+     JSX (não adaptavam ao tema). Aqui o valor CLARO é o hex original (claro fica
+     idêntico) e o ESCURO é a contraparte para o dark mode. Uso: text-[var(--crm-ink)]. */
+  :root {
+    --crm-brand: #4e1bb1;
+    --crm-brand-2: #5b2fd4;
+    --crm-brand-strong: #3c1494;
+    --crm-brand-tint: #f3ebfc;
+    --crm-brand-tint-hover: #e9d5ff;
+    --crm-brand-border: #c4b5fd;
+
+    --crm-ink: #212529;
+    --crm-ink-2: #495057;
+    --crm-ink-3: #868e96;
+
+    --crm-surface: #f8f9fa;
+    --crm-surface-2: #e9ecef;
+    --crm-border: #dee2e6;
+    --crm-border-2: #ced4da;
+
+    --crm-danger: #c62828;
+    --crm-danger-strong: #b71c1c;
+    --crm-danger-tint: #fdecea;
+    --crm-orange: #e65100;
+    --crm-amber: #ffc107;
+    --crm-amber-tint: #fff8e1;
+    --crm-amber-border: #ffe082;
+    --crm-amber-tint-hover: #ffecb3;
+    --crm-wa-green: #25d366;
+    --crm-wa-teal: #128c7e;
+    --crm-success-tint: #e8f5e9;
+    --crm-info-tint: #d8ecf7;
+  }
+
+  .dark {
+    --crm-brand: #a78bfa;
+    --crm-brand-2: #b49dfb;
+    --crm-brand-strong: #8b6df0;
+    --crm-brand-tint: #241b3a;
+    --crm-brand-tint-hover: #2f2548;
+    --crm-brand-border: #4b3e72;
+
+    --crm-ink: #ececf2;
+    --crm-ink-2: #c3c3ce;
+    --crm-ink-3: #8a8a97;
+
+    --crm-surface: #1e1e27;
+    --crm-surface-2: #292933;
+    --crm-border: #30303c;
+    --crm-border-2: #3a3a47;
+
+    --crm-danger: #f1727a;
+    --crm-danger-strong: #e15a60;
+    --crm-danger-tint: #36211f;
+    --crm-orange: #ff8a4d;
+    --crm-amber: #ffca28;
+    --crm-amber-tint: #322b16;
+    --crm-amber-border: #574a22;
+    --crm-amber-tint-hover: #423917;
+    --crm-wa-green: #25d366;
+    --crm-wa-teal: #2dc4ac;
+    --crm-success-tint: #18271b;
+    --crm-info-tint: #182934;
+  }
+}
+
+@layer base {
   * {
     @apply border-border;
   }

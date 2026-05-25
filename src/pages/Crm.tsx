@@ -1201,16 +1201,16 @@ export default function Crm() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F8F9FA] text-[#212529]">
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#dee2e6] bg-white px-4 py-3 md:gap-3 md:px-6">
-        <div className="mr-auto inline-flex overflow-hidden rounded-md border border-[#ced4da] bg-white shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--crm-surface)] text-[var(--crm-ink)]">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[var(--crm-border)] bg-card px-4 py-3 md:gap-3 md:px-6">
+        <div className="mr-auto inline-flex overflow-hidden rounded-md border border-[var(--crm-border-2)] bg-card shadow-sm">
           <button
             type="button"
             aria-pressed={view === "board"}
             onClick={() => setView("board")}
             className={cn(
               "flex h-9 w-10 items-center justify-center transition-colors",
-              view === "board" ? "bg-[#4E1BB1] text-white" : "bg-[#F3EBFC] text-[#5B2FD4]",
+              view === "board" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
             )}
           >
             <BarChart3 className="h-4 w-4" aria-hidden />
@@ -1221,7 +1221,7 @@ export default function Crm() {
             onClick={() => setView("list")}
             className={cn(
               "flex h-9 w-10 items-center justify-center transition-colors",
-              view === "list" ? "bg-[#4E1BB1] text-white" : "bg-[#F3EBFC] text-[#5B2FD4]",
+              view === "list" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
             )}
           >
             <List className="h-4 w-4" aria-hidden />
@@ -1231,7 +1231,7 @@ export default function Crm() {
         <Button
           type="button"
           variant="outline"
-          className="h-9 gap-2 border-[#ced4da] bg-white text-sm font-medium text-[#4E1BB1] hover:bg-[#f1f3f5]"
+          className="h-9 gap-2 border-[var(--crm-border-2)] bg-card text-sm font-medium text-[var(--crm-brand)] hover:bg-[var(--crm-surface)]"
           onClick={() => {
             setSortId("priority");
             toast({
@@ -1240,7 +1240,7 @@ export default function Crm() {
             });
           }}
         >
-          <Sparkles className="h-4 w-4 text-[#5B2FD4]" aria-hidden />
+          <Sparkles className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
           Priorizar negociações
         </Button>
 
@@ -1251,7 +1251,7 @@ export default function Crm() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-[#495057] hover:bg-[#e9ecef]"
+                className="h-9 w-9 text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface-2)]"
                 aria-label="Mais opções"
               >
                 <MoreVertical className="h-[18px] w-[18px]" aria-hidden />
@@ -1269,7 +1269,7 @@ export default function Crm() {
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 text-[#495057] hover:bg-[#e9ecef]"
+            className="h-9 w-9 text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface-2)]"
             aria-label="Filtro por data"
             onClick={() => setFiltersPopoverOpen(true)}
           >
@@ -1279,7 +1279,7 @@ export default function Crm() {
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 text-[#495057] hover:bg-[#e9ecef]"
+            className="h-9 w-9 text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface-2)]"
             aria-label="Ordenar por maior valor"
             onClick={() => {
               setSortId("value_desc");
@@ -1295,7 +1295,7 @@ export default function Crm() {
 
         <Button
           type="button"
-          className="h-9 gap-1.5 rounded-md bg-[#4E1BB1] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#3C1494]"
+          className="h-9 gap-1.5 rounded-md bg-[var(--crm-brand)] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[var(--crm-brand-strong)]"
           disabled={!canEditCrm}
           onClick={() => {
             if (!canEditCrm) {
@@ -1332,20 +1332,20 @@ export default function Crm() {
         canEdit={canEditCrm}
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[#e9ecef] bg-[#F8F9FA] px-4 py-2.5 md:gap-3 md:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--crm-surface-2)] bg-[var(--crm-surface)] px-4 py-2.5 md:gap-3 md:px-6">
         <Popover open={funnelOpen} onOpenChange={setFunnelOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-[#dee2e6] bg-white px-3 text-left text-sm font-medium text-[#495057] shadow-sm transition-colors hover:bg-[#f8f9fa]"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--crm-border)] bg-card px-3 text-left text-sm font-medium text-[var(--crm-ink-2)] shadow-sm transition-colors hover:bg-[var(--crm-surface)]"
             >
-              <AlignJustify className="h-4 w-4 text-[#5B2FD4]" aria-hidden />
+              <AlignJustify className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
               <span className="max-w-[200px] truncate">{funnelTriggerLabel}</span>
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 border-[#dee2e6] bg-white p-0 text-[#212529] shadow-lg">
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#868e96]">
+          <PopoverContent align="start" className="w-80 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
               Funil de vendas
             </div>
             <Separator />
@@ -1360,7 +1360,7 @@ export default function Crm() {
                     }}
                     className={cn(
                       "flex w-full px-3 py-2 text-left text-sm font-semibold",
-                      f.id === funnelId ? "bg-[#F3EBFC] text-[#4E1BB1]" : "text-[#4E1BB1] hover:bg-[#f1f3f5]",
+                      f.id === funnelId ? "bg-[var(--crm-brand-tint)] text-[var(--crm-brand)]" : "text-[var(--crm-brand)] hover:bg-[var(--crm-surface)]",
                     )}
                   >
                     {f.listName}
@@ -1376,13 +1376,13 @@ export default function Crm() {
                   setFunnelId(funnels[0]?.id ?? DEFAULT_CRM_FUNNELS[0].id);
                   setFunnelOpen(false);
                 }}
-                className="px-3 py-2 text-left text-sm font-medium text-[#5B2FD4] hover:bg-[#f8f9fa]"
+                className="px-3 py-2 text-left text-sm font-medium text-[var(--crm-brand-2)] hover:bg-[var(--crm-surface)]"
               >
                 Primeiro funil
               </button>
               <Link
                 to="/configuracoes?aba=funis"
-                className="px-3 py-2 text-sm font-medium text-[#5B2FD4] hover:bg-[#f8f9fa]"
+                className="px-3 py-2 text-sm font-medium text-[var(--crm-brand-2)] hover:bg-[var(--crm-surface)]"
                 onClick={() => setFunnelOpen(false)}
               >
                 Configurar funis
@@ -1396,30 +1396,30 @@ export default function Crm() {
             <button
               type="button"
               className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-left text-sm font-medium shadow-sm transition-colors hover:bg-[#f8f9fa]",
+                "inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-left text-sm font-medium shadow-sm transition-colors hover:bg-[var(--crm-surface)]",
                 appliedOwner.mode === "pool"
-                  ? "border-[#c4b5fd] text-[#4E1BB1]"
-                  : "border-[#dee2e6] text-[#495057]",
+                  ? "border-[var(--crm-brand-border)] text-[var(--crm-brand)]"
+                  : "border-[var(--crm-border)] text-[var(--crm-ink-2)]",
               )}
             >
-              <Users className="h-4 w-4 text-[#5B2FD4]" aria-hidden />
+              <Users className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
               <span className="max-w-[200px] truncate">{ownerTriggerLabel}</span>
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 border-[#dee2e6] bg-white p-0 text-[#212529] shadow-lg">
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#868e96]">
+          <PopoverContent align="start" className="w-80 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
               Responsável
             </div>
             <Separator />
             <div className="p-3 pb-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#868e96]" aria-hidden />
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--crm-ink-3)]" aria-hidden />
                 <Input
                   placeholder="Pesquisar"
                   value={ownerSearch}
                   onChange={(e) => setOwnerSearch(e.target.value)}
-                  className="h-9 border-[#ced4da] pl-9 text-sm"
+                  className="h-9 border-[var(--crm-border-2)] pl-9 text-sm"
                 />
               </div>
             </div>
@@ -1427,7 +1427,7 @@ export default function Crm() {
               <button
                 type="button"
                 onClick={() => setOwnerDraft({ mode: "all", customIds: new Set() })}
-                className="text-sm font-medium text-[#4E1BB1] hover:underline"
+                className="text-sm font-medium text-[var(--crm-brand)] hover:underline"
               >
                 Todas as negociações
               </button>
@@ -1436,7 +1436,7 @@ export default function Crm() {
               <button
                 type="button"
                 onClick={() => setOwnerDraft({ mode: "mine", customIds: new Set() })}
-                className="text-sm font-bold text-[#212529] hover:underline"
+                className="text-sm font-bold text-[var(--crm-ink)] hover:underline"
               >
                 Minhas negociações
               </button>
@@ -1447,17 +1447,17 @@ export default function Crm() {
                 onClick={() => setOwnerDraft({ mode: "pool", customIds: new Set() })}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 text-left text-sm font-semibold hover:underline",
-                  ownerDraft.mode === "pool" ? "text-[#4E1BB1]" : "text-[#212529]",
+                  ownerDraft.mode === "pool" ? "text-[var(--crm-brand)]" : "text-[var(--crm-ink)]",
                 )}
               >
                 <span>Pool (sem responsável)</span>
                 {poolCountInFunnel > 0 ? (
-                  <span className="rounded-full bg-[#F3EBFC] px-2 py-0.5 text-[11px] font-bold text-[#4E1BB1]">
+                  <span className="rounded-full bg-[var(--crm-brand-tint)] px-2 py-0.5 text-[11px] font-bold text-[var(--crm-brand)]">
                     {poolCountInFunnel}
                   </span>
                 ) : null}
               </button>
-              <p className="mt-1 text-[11px] leading-snug text-[#868e96]">
+              <p className="mt-1 text-[11px] leading-snug text-[var(--crm-ink-3)]">
                 Fila para assumir — negócios ainda sem vendedor atribuído.
               </p>
             </div>
@@ -1465,7 +1465,7 @@ export default function Crm() {
             <ul className="max-h-48 overflow-y-auto py-2">
               {filteredAttendants.map((a) => (
                 <li key={a.id}>
-                  <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[#f1f3f5]">
+                  <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--crm-surface)]">
                     <Checkbox
                       checked={ownerDraft.customIds.has(a.id)}
                       onCheckedChange={(checked) => {
@@ -1479,7 +1479,7 @@ export default function Crm() {
                           return { mode: "custom", customIds: next };
                         });
                       }}
-                      className="border-[#adb5bd] data-[state=checked]:bg-[#4E1BB1] data-[state=checked]:border-[#4E1BB1]"
+                      className="border-[var(--crm-ink-3)] data-[state=checked]:bg-[var(--crm-brand)] data-[state=checked]:border-[var(--crm-brand)]"
                     />
                     <span>{a.name}</span>
                   </label>
@@ -1490,14 +1490,14 @@ export default function Crm() {
             <div className="flex items-center justify-between gap-2 p-3">
               <button
                 type="button"
-                className="text-sm font-medium text-[#4E1BB1] hover:underline"
+                className="text-sm font-medium text-[var(--crm-brand)] hover:underline"
                 onClick={() => setOwnerDraft({ mode: "all", customIds: new Set() })}
               >
                 Limpar
               </button>
               <Button
                 type="button"
-                className="h-9 bg-[#4E1BB1] px-4 text-sm font-semibold hover:bg-[#3C1494]"
+                className="h-9 bg-[var(--crm-brand)] px-4 text-sm font-semibold hover:bg-[var(--crm-brand-strong)]"
                 onClick={() => {
                   setAppliedOwner(draftToApplied(ownerDraft, profileId));
                   setOwnerOpen(false);
@@ -1513,15 +1513,15 @@ export default function Crm() {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-[#dee2e6] bg-white px-3 text-left text-sm font-medium text-[#495057] shadow-sm transition-colors hover:bg-[#f8f9fa]"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--crm-border)] bg-card px-3 text-left text-sm font-medium text-[var(--crm-ink-2)] shadow-sm transition-colors hover:bg-[var(--crm-surface)]"
             >
-              <ClipboardList className="h-4 w-4 text-[#5B2FD4]" aria-hidden />
+              <ClipboardList className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
               <span className="max-w-[200px] truncate">{statusTriggerLabel}</span>
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 border-[#dee2e6] bg-white p-0 text-[#212529] shadow-lg">
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#868e96]">
+          <PopoverContent align="start" className="w-72 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
               Status da negociação
             </div>
             <Separator />
@@ -1539,10 +1539,10 @@ export default function Crm() {
                       }}
                       className={cn(
                         "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm",
-                        selected ? "bg-[#F3EBFC] font-medium text-[#4E1BB1]" : "hover:bg-[#f8f9fa]",
+                        selected ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]" : "hover:bg-[var(--crm-surface)]",
                       )}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-[#495057]" aria-hidden />
+                      <Icon className="h-4 w-4 shrink-0 text-[var(--crm-ink-2)]" aria-hidden />
                       {opt.label}
                     </button>
                   </li>
@@ -1557,24 +1557,24 @@ export default function Crm() {
             <button
               type="button"
               className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-left text-sm font-medium shadow-sm transition-colors hover:bg-[#f8f9fa]",
+                "inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-left text-sm font-medium shadow-sm transition-colors hover:bg-[var(--crm-surface)]",
                 alertsFilter !== "off"
-                  ? "border-[#ffe082] bg-[#fff8e1] text-[#e65100]"
-                  : "border-[#dee2e6] text-[#495057]",
+                  ? "border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] text-[var(--crm-orange)]"
+                  : "border-[var(--crm-border)] text-[var(--crm-ink-2)]",
               )}
             >
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
               <span className="max-w-[200px] truncate">{alertsFilterTriggerLabel}</span>
               {alertCountsInView.any > 0 && alertsFilter === "off" ? (
-                <span className="rounded-full bg-[#ffe082] px-1.5 py-0.5 text-[10px] font-bold text-[#e65100]">
+                <span className="rounded-full bg-[var(--crm-amber-border)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--crm-orange)]">
                   {alertCountsInView.any}
                 </span>
               ) : null}
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 border-[#dee2e6] bg-white p-0 text-[#212529] shadow-lg">
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#868e96]">
+          <PopoverContent align="start" className="w-80 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
               Alertas do negócio
             </div>
             <Separator />
@@ -1588,7 +1588,7 @@ export default function Crm() {
                   }}
                   className={cn(
                     "flex w-full px-3 py-2.5 text-left text-sm",
-                    alertsFilter === "off" ? "bg-[#F3EBFC] font-medium text-[#4E1BB1]" : "hover:bg-[#f8f9fa]",
+                    alertsFilter === "off" ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]" : "hover:bg-[var(--crm-surface)]",
                   )}
                 >
                   Todos (sem filtro de alerta)
@@ -1603,7 +1603,7 @@ export default function Crm() {
                   }}
                   className={cn(
                     "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm",
-                    alertsFilter === "any" ? "bg-[#F3EBFC] font-medium text-[#4E1BB1]" : "hover:bg-[#f8f9fa]",
+                    alertsFilter === "any" ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]" : "hover:bg-[var(--crm-surface)]",
                   )}
                 >
                   <span className="inline-flex items-center gap-2">
@@ -1611,7 +1611,7 @@ export default function Crm() {
                     Com alertas
                   </span>
                   {alertCountsInView.any > 0 ? (
-                    <span className="rounded-full bg-[#fff8e1] px-2 py-0.5 text-[11px] font-bold text-[#e65100]">
+                    <span className="rounded-full bg-[var(--crm-amber-tint)] px-2 py-0.5 text-[11px] font-bold text-[var(--crm-orange)]">
                       {alertCountsInView.any}
                     </span>
                   ) : null}
@@ -1626,15 +1626,15 @@ export default function Crm() {
                   }}
                   className={cn(
                     "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm",
-                    alertsFilter === "stale" ? "bg-[#F3EBFC] font-medium text-[#4E1BB1]" : "hover:bg-[#f8f9fa]",
+                    alertsFilter === "stale" ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]" : "hover:bg-[var(--crm-surface)]",
                   )}
                 >
                   <span className="inline-flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-[#e65100]" aria-hidden />
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--crm-orange)]" aria-hidden />
                     Parado ({staleNegotiationDays}+ dias)
                   </span>
                   {alertCountsInView.stale > 0 ? (
-                    <span className="rounded-full bg-[#fff8e1] px-2 py-0.5 text-[11px] font-bold text-[#e65100]">
+                    <span className="rounded-full bg-[var(--crm-amber-tint)] px-2 py-0.5 text-[11px] font-bold text-[var(--crm-orange)]">
                       {alertCountsInView.stale}
                     </span>
                   ) : null}
@@ -1650,23 +1650,23 @@ export default function Crm() {
                   className={cn(
                     "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm",
                     alertsFilter === "no_future_task"
-                      ? "bg-[#F3EBFC] font-medium text-[#4E1BB1]"
-                      : "hover:bg-[#f8f9fa]",
+                      ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]"
+                      : "hover:bg-[var(--crm-surface)]",
                   )}
                 >
                   <span className="inline-flex items-center gap-2">
-                    <CalendarX2 className="h-4 w-4 shrink-0 text-[#c62828]" aria-hidden />
+                    <CalendarX2 className="h-4 w-4 shrink-0 text-[var(--crm-danger)]" aria-hidden />
                     Sem tarefa futura
                   </span>
                   {alertCountsInView.noFutureTask > 0 ? (
-                    <span className="rounded-full bg-[#fdecea] px-2 py-0.5 text-[11px] font-bold text-[#b71c1c]">
+                    <span className="rounded-full bg-[var(--crm-danger-tint)] px-2 py-0.5 text-[11px] font-bold text-[var(--crm-danger-strong)]">
                       {alertCountsInView.noFutureTask}
                     </span>
                   ) : null}
                 </button>
               </li>
             </ul>
-            <p className="border-t border-[#e9ecef] px-3 py-2 text-[11px] leading-snug text-[#868e96]">
+            <p className="border-t border-[var(--crm-surface-2)] px-3 py-2 text-[11px] leading-snug text-[var(--crm-ink-3)]">
               Contadores respeitam funil, responsável e status já selecionados.
             </p>
           </PopoverContent>
@@ -1676,15 +1676,15 @@ export default function Crm() {
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-[#dee2e6] bg-white px-3 text-left text-sm font-medium text-[#495057] shadow-sm transition-colors hover:bg-[#f8f9fa]"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--crm-border)] bg-card px-3 text-left text-sm font-medium text-[var(--crm-ink-2)] shadow-sm transition-colors hover:bg-[var(--crm-surface)]"
             >
-              <ArrowDownUp className="h-4 w-4 text-[#5B2FD4]" aria-hidden />
+              <ArrowDownUp className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
               <span className="max-w-[200px] truncate">{sortTriggerLabel}</span>
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 border-[#dee2e6] bg-white p-0 text-[#212529] shadow-lg">
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#868e96]">
+          <PopoverContent align="start" className="w-72 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
               Ordenação
             </div>
             <Separator />
@@ -1701,7 +1701,7 @@ export default function Crm() {
                       }}
                       className={cn(
                         "flex w-full px-3 py-2 text-left text-sm",
-                        selected ? "font-medium text-[#4E1BB1]" : "hover:bg-[#f8f9fa]",
+                        selected ? "font-medium text-[var(--crm-brand)]" : "hover:bg-[var(--crm-surface)]",
                       )}
                     >
                       {opt.label}
@@ -1718,24 +1718,24 @@ export default function Crm() {
             <PopoverTrigger asChild>
               <Button
                 type="button"
-                className="h-9 gap-2 rounded-md border-0 bg-[#EBDDFC] px-3 text-sm font-semibold text-[#4E1BB1] shadow-none hover:bg-[#E6D9F6]"
+                className="h-9 gap-2 rounded-md border-0 bg-[var(--crm-brand-tint-hover)] px-3 text-sm font-semibold text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint-hover)]"
               >
                 <Filter className="h-4 w-4" aria-hidden />
                 Filtros ({extraFilterCount})
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-[min(100vw-2rem,22rem)] border-[#dee2e6] p-4 shadow-lg">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#868e96]">Datas e limpeza</p>
+            <PopoverContent align="end" className="w-[min(100vw-2rem,22rem)] border-[var(--crm-border)] p-4 shadow-lg">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">Datas e limpeza</p>
               <div className="space-y-3">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label htmlFor="crm-filter-from" className="text-xs text-[#495057]">
+                    <Label htmlFor="crm-filter-from" className="text-xs text-[var(--crm-ink-2)]">
                       Criada a partir de
                     </Label>
                     <Input
                       id="crm-filter-from"
                       type="date"
-                      className="h-9 border-[#ced4da] text-sm"
+                      className="h-9 border-[var(--crm-border-2)] text-sm"
                       value={creationDateFilter?.from ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -1751,13 +1751,13 @@ export default function Crm() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="crm-filter-to" className="text-xs text-[#495057]">
+                    <Label htmlFor="crm-filter-to" className="text-xs text-[var(--crm-ink-2)]">
                       Até
                     </Label>
                     <Input
                       id="crm-filter-to"
                       type="date"
-                      className="h-9 border-[#ced4da] text-sm"
+                      className="h-9 border-[var(--crm-border-2)] text-sm"
                       value={creationDateFilter?.to ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -1773,18 +1773,18 @@ export default function Crm() {
                     />
                   </div>
                 </div>
-                <p className="text-xs text-[#868e96]">Deixe vazio para não filtrar por data de criação.</p>
-                <div className="flex flex-wrap gap-2 border-t border-[#e9ecef] pt-3">
+                <p className="text-xs text-[var(--crm-ink-3)]">Deixe vazio para não filtrar por data de criação.</p>
+                <div className="flex flex-wrap gap-2 border-t border-[var(--crm-surface-2)] pt-3">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-[#ced4da]"
+                    className="border-[var(--crm-border-2)]"
                     onClick={() => setCreationDateFilter(null)}
                   >
                     Limpar datas
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="border-[#ced4da]" onClick={clearAllCrmFilters}>
+                  <Button type="button" variant="outline" size="sm" className="border-[var(--crm-border-2)]" onClick={clearAllCrmFilters}>
                     Limpar todos os filtros
                   </Button>
                 </div>
@@ -1794,8 +1794,8 @@ export default function Crm() {
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[#e9ecef] bg-[#F8F9FA] px-4 py-2 md:px-6">
-        <span className="rounded bg-[#e9ecef] px-2.5 py-1 text-xs font-medium text-[#495057]">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--crm-surface-2)] bg-[var(--crm-surface)] px-4 py-2 md:px-6">
+        <span className="rounded bg-[var(--crm-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--crm-ink-2)]">
           {totalNegotiations} Negociações
         </span>
         {negotiationsWithAlertsCount > 0 || alertsFilter !== "off" ? (
@@ -1813,8 +1813,8 @@ export default function Crm() {
             className={cn(
               "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors",
               alertsFilter !== "off"
-                ? "border-[#e65100] bg-[#e65100] text-white hover:bg-[#bf360c]"
-                : "border-[#ffe082] bg-[#fff8e1] text-[#e65100] hover:bg-[#ffecb3]",
+                ? "border-[var(--crm-orange)] bg-[var(--crm-orange)] text-white hover:bg-[var(--crm-orange)]"
+                : "border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] text-[var(--crm-orange)] hover:bg-[var(--crm-amber-tint-hover)]",
             )}
             title={
               alertsFilter !== "off"
@@ -1833,11 +1833,11 @@ export default function Crm() {
           </button>
         ) : null}
         {appliedOwner.mode === "pool" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#c4b5fd] bg-[#F3EBFC] px-2.5 py-1 text-xs font-medium text-[#4E1BB1]">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-medium text-[var(--crm-brand)]">
             Pool (sem responsável)
             <button
               type="button"
-              className="rounded p-0.5 text-[#4E1BB1]/70 hover:bg-[#e9d5ff]"
+              className="rounded p-0.5 text-[var(--crm-brand)]/70 hover:bg-[var(--crm-brand-tint-hover)]"
               aria-label="Remover filtro de pool"
               onClick={() => setAppliedOwner({ mode: "all" })}
             >
@@ -1846,11 +1846,11 @@ export default function Crm() {
           </span>
         ) : null}
         {creationDateFilter ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#ced4da] bg-white px-2.5 py-1 text-xs text-[#495057]">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--crm-border-2)] bg-card px-2.5 py-1 text-xs text-[var(--crm-ink-2)]">
             Data de criação: {formatIsoDateToBr(creationDateFilter.from)} — {formatIsoDateToBr(creationDateFilter.to)}
             <button
               type="button"
-              className="rounded p-0.5 text-[#868e96] hover:bg-[#f1f3f5]"
+              className="rounded p-0.5 text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface)]"
               aria-label="Remover filtro"
               onClick={() => setCreationDateFilter(null)}
             >
@@ -1887,7 +1887,7 @@ export default function Crm() {
           </div>
         </div>
       ) : isSupabaseConfigured && negotiationsLoading && dbRecords.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-sm text-[#868e96]">
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-sm text-[var(--crm-ink-3)]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Carregando negociações...
         </div>
@@ -1936,67 +1936,67 @@ export default function Crm() {
         </DndContext>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
-          <div className="mx-auto max-w-[1400px] rounded-lg border border-[#dee2e6] bg-white shadow-sm">
+          <div className="mx-auto max-w-[1400px] rounded-lg border border-[var(--crm-border)] bg-card shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow className="bg-[#f8f9fa] hover:bg-[#f8f9fa]">
-                  <TableHead className="w-[28%] font-semibold text-[#495057]">
+                <TableRow className="bg-[var(--crm-surface)] hover:bg-[var(--crm-surface)]">
+                  <TableHead className="w-[28%] font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
                       className={cn(
-                        "text-left hover:text-[#4E1BB1]",
-                        sortId === "alpha_az" || sortId === "alpha_za" ? "text-[#4E1BB1]" : "",
+                        "text-left hover:text-[var(--crm-brand)]",
+                        sortId === "alpha_az" || sortId === "alpha_za" ? "text-[var(--crm-brand)]" : "",
                       )}
                       onClick={() => setSortId((s) => (s === "alpha_az" ? "alpha_za" : "alpha_az"))}
                     >
                       Título
                     </button>
                   </TableHead>
-                  <TableHead className="font-semibold text-[#495057]">Etapa</TableHead>
-                  <TableHead className="font-semibold text-[#495057]">Status</TableHead>
-                  <TableHead className="font-semibold text-[#495057]">
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">Etapa</TableHead>
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">Status</TableHead>
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
-                      className={cn("hover:text-[#4E1BB1]", sortId === "value_desc" ? "text-[#4E1BB1]" : "")}
+                      className={cn("hover:text-[var(--crm-brand)]", sortId === "value_desc" ? "text-[var(--crm-brand)]" : "")}
                       onClick={() => setSortId("value_desc")}
                     >
                       Valor
                     </button>
                   </TableHead>
-                  <TableHead className="font-semibold text-[#495057]">
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
-                      className={cn("hover:text-[#4E1BB1]", sortId === "next_task" ? "text-[#4E1BB1]" : "")}
+                      className={cn("hover:text-[var(--crm-brand)]", sortId === "next_task" ? "text-[var(--crm-brand)]" : "")}
                       onClick={() => setSortId("next_task")}
                     >
                       Próx. tarefa
                     </button>
                   </TableHead>
-                  <TableHead className="font-semibold text-[#495057]">
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
-                      className={cn("hover:text-[#4E1BB1]", sortId === "created_desc" ? "text-[#4E1BB1]" : "")}
+                      className={cn("hover:text-[var(--crm-brand)]", sortId === "created_desc" ? "text-[var(--crm-brand)]" : "")}
                       onClick={() => setSortId("created_desc")}
                     >
                       Criada em
                     </button>
                   </TableHead>
-                  <TableHead className="font-semibold text-[#495057]">
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
-                      className={cn("hover:text-[#4E1BB1]", sortId === "qualified_desc" ? "text-[#4E1BB1]" : "")}
+                      className={cn("hover:text-[var(--crm-brand)]", sortId === "qualified_desc" ? "text-[var(--crm-brand)]" : "")}
                       onClick={() => setSortId("qualified_desc")}
                     >
                       Qualif.
                     </button>
                   </TableHead>
-                  <TableHead className="font-semibold text-[#495057]">Responsável</TableHead>
+                  <TableHead className="font-semibold text-[var(--crm-ink-2)]">Responsável</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredNegotiations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center text-sm text-[#868e96]">
+                    <TableCell colSpan={8} className="py-12 text-center text-sm text-[var(--crm-ink-3)]">
                       Nenhuma negociação neste funil com os filtros atuais.
                     </TableCell>
                   </TableRow>
@@ -2019,7 +2019,7 @@ export default function Crm() {
                         className="cursor-pointer"
                         onClick={() => openNegotiationCard(row)}
                       >
-                        <TableCell className="font-medium text-[#212529]">
+                        <TableCell className="font-medium text-[var(--crm-ink)]">
                           <div className="flex flex-col gap-1.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="min-w-0">{row.title}</span>
@@ -2029,7 +2029,7 @@ export default function Crm() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 shrink-0 gap-1 border-[#ced4da] px-2 text-xs font-medium text-[#4E1BB1] shadow-none hover:bg-[#F3EBFC]"
+                                  className="h-7 shrink-0 gap-1 border-[var(--crm-border-2)] px-2 text-xs font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     navigate(`/clientes/${row.customerId}`);
@@ -2043,22 +2043,22 @@ export default function Crm() {
                             <CrmNegotiationAlertBadges alerts={rowAlerts} compact />
                           </div>
                         </TableCell>
-                        <TableCell className="text-[#495057]">{stageTitleForNegotiation(row, funnels)}</TableCell>
-                        <TableCell className="text-[#495057]">{statusLabel(row.status)}</TableCell>
-                        <TableCell className="text-[#495057]">
+                        <TableCell className="text-[var(--crm-ink-2)]">{stageTitleForNegotiation(row, funnels)}</TableCell>
+                        <TableCell className="text-[var(--crm-ink-2)]">{statusLabel(row.status)}</TableCell>
+                        <TableCell className="text-[var(--crm-ink-2)]">
                           {row.totalValue > 0
                             ? formatBRL(row.totalValue)
                             : "—"}
                         </TableCell>
                         <TableCell
                           className={cn(
-                            "text-[#495057]",
-                            nextTask.overdue && nextTask.label ? "font-medium text-[#c62828]" : "",
+                            "text-[var(--crm-ink-2)]",
+                            nextTask.overdue && nextTask.label ? "font-medium text-[var(--crm-danger)]" : "",
                           )}
                         >
                           {nextTask.label || "—"}
                         </TableCell>
-                        <TableCell className="text-[#495057]">
+                        <TableCell className="text-[var(--crm-ink-2)]">
                           {new Date(row.createdAt).toLocaleString("pt-BR", {
                             day: "2-digit",
                             month: "2-digit",
@@ -2067,8 +2067,8 @@ export default function Crm() {
                             minute: "2-digit",
                           })}
                         </TableCell>
-                        <TableCell className="text-[#495057]">{row.qualification}</TableCell>
-                        <TableCell className="text-[#495057]">
+                        <TableCell className="text-[var(--crm-ink-2)]">{row.qualification}</TableCell>
+                        <TableCell className="text-[var(--crm-ink-2)]">
                           <div className="flex flex-col items-start gap-1.5">
                             <span>
                               {attendants.find((a) => a.id === row.assigneeId)?.name?.trim() ||
@@ -2096,7 +2096,7 @@ export default function Crm() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 gap-1 border-[#c4b5fd] px-2 text-xs text-[#4E1BB1] hover:bg-[#F3EBFC]"
+                                  className="h-7 gap-1 border-[var(--crm-brand-border)] px-2 text-xs text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
                                   disabled={releaseCrmNegotiation.isPending || claimCrmNegotiation.isPending}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2117,7 +2117,7 @@ export default function Crm() {
               </TableBody>
             </Table>
           </div>
-          <p className="mt-3 text-center text-xs text-[#868e96]">
+          <p className="mt-3 text-center text-xs text-[var(--crm-ink-3)]">
             Ordenação ativa: {sortTriggerLabel}. Arraste cards apenas na visualização em quadro.
           </p>
         </div>
@@ -2151,7 +2151,7 @@ export default function Crm() {
           if (!open) setDeleteTarget(null);
         }}
       >
-        <AlertDialogContent className="border-[#cfd8dc]">
+        <AlertDialogContent className="border-[var(--crm-border-2)]">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir negociação?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -2161,9 +2161,9 @@ export default function Crm() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#cfd8dc]">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="border-[var(--crm-border-2)]">Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#c62828] text-white hover:bg-[#b71c1c]"
+              className="bg-[var(--crm-danger)] text-white hover:bg-[var(--crm-danger-strong)]"
               onClick={() => void handleConfirmDeleteNegotiation()}
             >
               Excluir
@@ -2180,7 +2180,7 @@ function CrmPoolBadge({ className }: { className?: string }) {
     <span
       data-testid="crm-pool-badge"
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-[#c4b5fd] bg-[#F3EBFC] px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-[#4E1BB1]",
+        "inline-flex items-center gap-1 rounded-md border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-[var(--crm-brand)]",
         className,
       )}
       title="Negócio no pool — sem vendedor atribuído"
@@ -2255,8 +2255,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       data-testid={`crm-card-${card.id}`}
       style={style}
       className={cn(
-        "cursor-grab rounded-lg border border-[#e9ecef] bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
-        isDragging ? "opacity-90 shadow-lg ring-2 ring-[#5B2FD4]/40" : "hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]",
+        "cursor-grab rounded-lg border border-[var(--crm-surface-2)] bg-card p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
+        isDragging ? "opacity-90 shadow-lg ring-2 ring-[var(--crm-brand-2)]/40" : "hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]",
       )}
       {...listeners}
       {...attributes}
@@ -2268,26 +2268,26 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
         }
       }}
     >
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[#495057]">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[#5B2FD4]" aria-hidden />
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--crm-ink-2)]">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--crm-brand-2)]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
         {isInPool ? <CrmPoolBadge /> : null}
         {!isInPool && card.assigneeId && resolveAssigneeName?.(card.assigneeId) ? (
           <span
-            className="max-w-[7rem] truncate text-[10px] font-medium text-[#495057]"
+            className="max-w-[7rem] truncate text-[10px] font-medium text-[var(--crm-ink-2)]"
             title={`Responsável: ${resolveAssigneeName(card.assigneeId)}`}
           >
             {resolveAssigneeName(card.assigneeId)}
           </span>
         ) : null}
-        <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[#adb5bd]" aria-hidden />
+        <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--crm-ink-3)]" aria-hidden />
       </div>
-      <p className="mb-2 text-[15px] font-bold leading-snug text-[#212529]">{card.title}</p>
+      <p className="mb-2 text-[15px] font-bold leading-snug text-[var(--crm-ink)]">{card.title}</p>
       <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" />
-      <div className="mb-3 flex items-center justify-between gap-2 text-[#868e96]">
+      <div className="mb-3 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
         <span className="inline-flex items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1">
-            <Star className="h-3.5 w-3.5 fill-[#ffc107] text-[#ffc107]" aria-hidden />
+            <Star className="h-3.5 w-3.5 fill-[var(--crm-amber)] text-[var(--crm-amber)]" aria-hidden />
             {card.starCount}
           </span>
           <CrmKanbanCardTaskBadge card={card} />
@@ -2298,7 +2298,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 gap-1 px-2 text-xs font-medium text-[#128C7E] hover:bg-[#e8f5e9]"
+              className="h-7 gap-1 px-2 text-xs font-medium text-[var(--crm-wa-teal)] hover:bg-[var(--crm-success-tint)]"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -2308,7 +2308,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
               <MessageCircle className="h-3.5 w-3.5" aria-hidden />
               WhatsApp
               {(card.sourceChatUnread ?? 0) > 0 ? (
-                <span className="rounded-full bg-[#25D366] px-1.5 text-[10px] font-bold text-white">
+                <span className="rounded-full bg-[var(--crm-wa-green)] px-1.5 text-[10px] font-bold text-white">
                   {card.sourceChatUnread}
                 </span>
               ) : null}
@@ -2319,7 +2319,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 shrink-0 gap-1 px-2 text-xs font-medium text-[#4E1BB1] hover:bg-[#F3EBFC]"
+              className="h-7 shrink-0 gap-1 px-2 text-xs font-medium text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -2355,7 +2355,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
           <Button
             type="button"
             variant="outline"
-            className="h-9 w-full gap-2 border-[#c4b5fd] bg-white text-sm font-medium text-[#4E1BB1] shadow-none hover:bg-[#F3EBFC]"
+            className="h-9 w-full gap-2 border-[var(--crm-brand-border)] bg-card text-sm font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]"
             disabled={assigneeBusy}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -2371,7 +2371,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
           <Button
             type="button"
             variant="ghost"
-            className="h-9 w-full gap-2 text-sm font-medium text-[#c62828] shadow-none hover:bg-[#fdecea] hover:text-[#b71c1c]"
+            className="h-9 w-full gap-2 text-sm font-medium text-[var(--crm-danger)] shadow-none hover:bg-[var(--crm-danger-tint)] hover:text-[var(--crm-danger-strong)]"
             disabled={assigneeBusy}
             onPointerDown={(e) => e.stopPropagation()}
             data-testid={`crm-delete-${card.id}`}
@@ -2454,19 +2454,19 @@ function KanbanColumn({
   });
 
   return (
-    <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col rounded-lg bg-[#E9ECEF] p-3 shadow-sm">
+    <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col rounded-lg bg-[var(--crm-surface-2)] p-3 shadow-sm">
       <div className="mb-3 flex shrink-0 items-start justify-between gap-2">
         <div>
-          <h3 className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[#495057]">
+          <h3 className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[var(--crm-ink-2)]">
             {stage.title}{" "}
-            <span className="font-semibold text-[#6c757d]">({count})</span>
+            <span className="font-semibold text-[var(--crm-ink-3)]">({count})</span>
           </h3>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="rounded bg-[#dee2e6] px-2 py-0.5 text-[11px] font-semibold text-[#495057]">{displayValue}</span>
+          <span className="rounded bg-[var(--crm-border)] px-2 py-0.5 text-[11px] font-semibold text-[var(--crm-ink-2)]">{displayValue}</span>
           <button
             type="button"
-            className="rounded p-1 text-[#6c757d] transition-colors hover:bg-[#dee2e6]/80"
+            className="rounded p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-[var(--crm-border)]/80"
             aria-label="Atualizar coluna"
             onClick={() => onColumnRefresh?.()}
           >
@@ -2474,7 +2474,7 @@ function KanbanColumn({
           </button>
           <button
             type="button"
-            className="rounded p-1 text-[#6c757d] transition-colors hover:bg-[#dee2e6]/80"
+            className="rounded p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-[var(--crm-border)]/80"
             aria-label="Ordenar por valor"
             onClick={() => onColumnValueSort?.()}
           >
@@ -2488,7 +2488,7 @@ function KanbanColumn({
         data-testid={`crm-column-${stage.id}`}
         className={cn(
           "scrollbar-hide min-h-0 flex-1 overflow-y-auto overscroll-y-contain rounded-md transition-colors",
-          isOver && "bg-[#d8ecf7]/90 ring-2 ring-[#5B2FD4] ring-inset",
+          isOver && "bg-[var(--crm-info-tint)]/90 ring-2 ring-[var(--crm-brand-2)] ring-inset",
         )}
       >
         {/* Virtualizado: renderiza só os cards visíveis (+overscan). Gap via pb-2. */}
