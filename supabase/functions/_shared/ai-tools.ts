@@ -152,7 +152,9 @@ export function toolNamesForMode(mode: ChatAiMode): Set<ToolName> {
 export function toolsForMode(mode: ChatAiMode): AnthropicTool[] {
   const names = [...toolNamesForMode(mode)];
   return names.map((name, i) =>
-    i === names.length - 1 ? { ...TOOLS[name], cache_control: { type: "ephemeral" } } : TOOLS[name],
+    i === names.length - 1
+      ? { ...TOOLS[name], cache_control: { type: "ephemeral", ttl: "1h" } as const }
+      : TOOLS[name],
   );
 }
 

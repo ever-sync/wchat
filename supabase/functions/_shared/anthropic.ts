@@ -3,8 +3,16 @@
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+// Beta de TTL estendido (1h). Sem isso, ttl="1h" é ignorado e cai no padrão 5min.
+const ANTHROPIC_BETA = "extended-cache-ttl-2025-04-11";
 
-export type CacheControl = { type: "ephemeral" };
+/**
+ * Prompt caching: marca o fim de um prefixo cacheável (até 4 breakpoints por
+ * request). `ttl` controla a janela de reuso — padrão 5min, opcional 1h (custa
+ * 2× input no write contra 1.25× do 5min, mas vale a pena quando o mesmo
+ * prefixo é lido várias vezes na janela — ex.: chat com pausa de almoço).
+ */
+export type CacheControl = { type: "ephemeral"; ttl?: "5m" | "1h" };
 
 export type AnthropicSystemBlock = {
   type: "text";
@@ -72,6 +80,7 @@ export async function createMessage(input: CreateMessageInput): Promise<Anthropi
       "content-type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
+      "anthropic-beta": ANTHROPIC_BETA,
     },
     body: JSON.stringify({
       model: input.model,

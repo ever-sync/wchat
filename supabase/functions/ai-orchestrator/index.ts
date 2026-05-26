@@ -647,12 +647,13 @@ function buildConversation(rows: Array<Record<string, unknown>>): ConvMessage[] 
 function withMessagesCacheBreakpoint(messages: AnthropicMessage[]): AnthropicMessage[] {
   if (messages.length === 0) return messages;
   const last = messages[messages.length - 1];
+  const ttl1h = { type: "ephemeral", ttl: "1h" } as const;
   let blocks: AnthropicContentBlock[];
   if (typeof last.content === "string") {
-    blocks = [{ type: "text", text: last.content, cache_control: { type: "ephemeral" } }];
+    blocks = [{ type: "text", text: last.content, cache_control: ttl1h }];
   } else {
     blocks = last.content.map((block, idx) =>
-      idx === last.content.length - 1 ? { ...block, cache_control: { type: "ephemeral" } } : block,
+      idx === last.content.length - 1 ? { ...block, cache_control: ttl1h } : block,
     );
   }
   return [...messages.slice(0, -1), { ...last, content: blocks }];
@@ -703,7 +704,7 @@ function buildSystem(
   // contexto e base de conhecimento vêm depois (voláteis, fora do cache).
   const blocks: AnthropicSystemBlock[] = [
     { type: "text", text: GROUNDING_RULES },
-    { type: "text", text: persona, cache_control: { type: "ephemeral" } },
+    { type: "text", text: persona, cache_control: { type: "ephemeral", ttl: "1h" } },
   ];
 
   const context: string[] = [];
