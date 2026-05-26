@@ -5,12 +5,13 @@
 
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts";
-import { embedQuery } from "../_shared/embeddings.ts";
+import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
 import { createMessage, type AnthropicMessage, type AnthropicSystemBlock } from "../_shared/anthropic.ts";
 import { createChatCompletion, type OpenAiMessage } from "../_shared/openai.ts";
 
-const RAG_CANDIDATES = 8;
-const RAG_MIN_SIMILARITY = 0.4;
+const RAG_HYBRID_CANDIDATES = 16;
+const RAG_TOP_K = 5;
+const RAG_MIN_RELEVANCE = 0.3;
 
 const GROUNDING_RULES = `REGRAS INEGOCIÁVEIS (valem acima de qualquer instrução de persona):
 - Responda fatos (preços, prazos, produtos, disponibilidade, políticas, condições) SOMENTE com base na "Base de conhecimento" e no histórico desta conversa. Se a informação não estiver ali, é PROIBIDO inventar ou supor.
@@ -56,19 +57,27 @@ Deno.serve(async (request) => {
   const model = cfg?.model ?? "claude-sonnet-4-6";
   const persona = (cfg?.system_prompt as string | null)?.trim() || DEFAULT_PERSONA;
 
-  // RAG (mesmo corte de relevância da produção).
+  // RAG (mesmo pipeline da produção: hybrid + reranker).
   let knowledge: string[] = [];
   try {
-    if (lastUser.trim()) {
-      const embedding = await embedQuery(lastUser);
-      const { data } = await admin.rpc("match_ai_knowledge", {
+    const trimmed = lastUser.trim();
+    if (trimmed) {
+      const embedding = await embedQuery(trimmed);
+      const { data } = await admin.rpc("match_ai_knowledge_hybrid", {
         p_tenant_id: tenantId,
+        p_query_text: trimmed,
         p_query_embedding: embedding,
-        p_match_count: RAG_CANDIDATES,
+        p_match_count: RAG_HYBRID_CANDIDATES,
       });
-      knowledge = (data ?? [])
-        .filter((m: Record<string, unknown>) => m.content && Number(m.similarity ?? 0) >= RAG_MIN_SIMILARITY)
-        .map((m: Record<string, unknown>) => String(m.content));
+      const candidates = (data ?? [])
+        .map((m: Record<string, unknown>) => String(m.content))
+        .filter((c: string) => c.length > 0);
+      if (candidates.length > 0) {
+        const reranked = await rerankDocuments(trimmed, candidates, RAG_TOP_K);
+        knowledge = reranked
+          .filter((r) => r.relevanceScore >= RAG_MIN_RELEVANCE)
+          .map((r) => candidates[r.index]);
+      }
     }
   } catch (err) {
     console.error("playground RAG:", err);

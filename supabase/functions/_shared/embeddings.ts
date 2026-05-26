@@ -3,7 +3,9 @@
 // input_type: 'document' na ingestão, 'query' na busca (melhora a relevância).
 
 const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
+const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
 const MODEL = "voyage-3.5";
+const RERANK_MODEL = "rerank-2-lite";
 export const EMBEDDING_DIMENSIONS = 1024;
 const BATCH_SIZE = 96;
 
@@ -53,4 +55,47 @@ export async function embedDocuments(texts: string[]): Promise<number[][]> {
     out.push(...(await callVoyage(texts.slice(i, i + BATCH_SIZE), "document")));
   }
   return out;
+}
+
+export type RerankResult = { index: number; relevanceScore: number };
+
+type VoyageRerankResponse = {
+  data: Array<{ index: number; relevance_score: number }>;
+};
+
+/**
+ * Rerank um conjunto de candidatos contra a query. rerank-2-lite é rápido
+ * (~150ms) e barato; usar no topo do RAG depois do hybrid search melhora muito
+ * a precisão final. Retorna em ordem decrescente de relevância.
+ */
+export async function rerankDocuments(
+  query: string,
+  documents: string[],
+  topK: number,
+): Promise<RerankResult[]> {
+  if (documents.length === 0 || !query.trim()) return [];
+
+  const apiKey = Deno.env.get("VOYAGE_API_KEY");
+  if (!apiKey) throw new Error("VOYAGE_API_KEY not configured");
+
+  const res = await fetch(VOYAGE_RERANK_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: RERANK_MODEL,
+      query,
+      documents,
+      top_k: Math.min(topK, documents.length),
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Voyage rerank ${res.status}: ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as VoyageRerankResponse;
+  return data.data.map((d) => ({ index: d.index, relevanceScore: d.relevance_score }));
 }

@@ -15,7 +15,7 @@ import {
 } from "../_shared/anthropic.ts";
 import { normalizeChatAiMode } from "../_shared/ai-business-rules.ts";
 import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from "../_shared/ai-tools.ts";
-import { embedQuery } from "../_shared/embeddings.ts";
+import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
 import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
@@ -29,8 +29,10 @@ const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 20;
 const CHAT_LOCK_TTL_SECONDS = 120;
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // recupera jobs 'processing' órfãos (worker caiu)
-const RAG_CANDIDATES = 8; // candidatos buscados antes do corte de relevância
-const RAG_MIN_SIMILARITY = 0.4; // só usa trechos acima desse cosseno (anti-alucinação)
+// Hybrid retrieval: busca larga (vector + BM25 + RRF) → reranker → corte final.
+const RAG_HYBRID_CANDIDATES = 16; // candidatos para o reranker (mais sinal = melhor ranking)
+const RAG_TOP_K = 5; // trechos finais injetados no prompt
+const RAG_MIN_RELEVANCE = 0.3; // score do reranker (0-1), corte anti-ruído
 const MAX_JOB_ATTEMPTS = 3; // tentativas por turno antes de marcar 'error' (retry com backoff)
 const MAX_TURNS_PER_HOUR = 30; // teto anti-spam de respostas da IA por chat por hora
 
@@ -486,21 +488,38 @@ function lastUserText(conversation: ConvMessage[]): string {
 
 type KnowledgeMatch = { content: string; similarity: number };
 
+/**
+ * Hybrid retrieval: vector (HNSW) + BM25 (tsvector PT-BR) fundidos por RRF no
+ * Postgres, depois reranker (Voyage rerank-2-lite) reordena os candidatos por
+ * relevância real à query. Score final = relevance_score do reranker (0-1).
+ * Sai vector-only para cair em hybrid+rerank: mais resiliente a paráfrase E a
+ * termos exatos (SKU, modelo, código), com menos lixo no contexto.
+ */
 async function retrieveKnowledge(admin: Admin, tenantId: string, query: string): Promise<KnowledgeMatch[]> {
-  if (!query.trim()) return [];
+  const trimmed = query.trim();
+  if (!trimmed) return [];
   try {
-    const embedding = await embedQuery(query);
-    const { data } = await admin.rpc("match_ai_knowledge", {
+    const embedding = await embedQuery(trimmed);
+    const { data } = await admin.rpc("match_ai_knowledge_hybrid", {
       p_tenant_id: tenantId,
+      p_query_text: trimmed,
       p_query_embedding: embedding,
-      p_match_count: RAG_CANDIDATES,
+      p_match_count: RAG_HYBRID_CANDIDATES,
     });
-    return (data ?? [])
-      .map((m: Record<string, unknown>) => ({ content: String(m.content), similarity: Number(m.similarity ?? 0) }))
-      // Corte de relevância: trechos irrelevantes confundem o modelo e geram alucinação.
-      .filter((m: KnowledgeMatch) => m.content && m.similarity >= RAG_MIN_SIMILARITY);
+    const candidates = (data ?? [])
+      .map((m: Record<string, unknown>) => String(m.content))
+      .filter((c: string) => c.length > 0);
+    if (candidates.length === 0) return [];
+
+    // Rerank: o ranking semântico do reranker é muito superior ao do cosine
+    // ou ts_rank; aplicado nos top-N do hybrid, o ganho de precisão é grande.
+    const reranked = await rerankDocuments(trimmed, candidates, RAG_TOP_K);
+    return reranked
+      .filter((r) => r.relevanceScore >= RAG_MIN_RELEVANCE)
+      .map((r) => ({ content: candidates[r.index], similarity: r.relevanceScore }));
   } catch (err) {
-    // RAG é best-effort: se a busca falhar (ex.: VOYAGE_API_KEY ausente), responde sem ela.
+    // RAG é best-effort: se a busca falhar (ex.: VOYAGE_API_KEY ausente,
+    // reranker down), responde sem ela em vez de quebrar o turno.
     console.error("retrieveKnowledge:", err);
     return [];
   }
