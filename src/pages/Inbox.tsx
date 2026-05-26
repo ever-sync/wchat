@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AssignChatDialog } from "@/components/inbox/AssignChatDialog";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import { ConversationList } from "@/components/inbox/ConversationList";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
@@ -67,15 +68,12 @@ import {
   inboxChatFiltersFromListScope,
 } from "@/lib/api/whatsapp";
 import {
-  useAssignChat,
   useAtendimentoUsers,
-  useAutoAssignChat,
   useChatTags,
   useClaimChat,
   useClearChatSnooze,
   useSetChatAiMode,
   useSnoozeChat,
-  useUnassignChat,
 } from "@/lib/api/chat-tags";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import {
@@ -95,7 +93,6 @@ import {
   assumeConversationToViewMessage,
   chatAssigneeBlockedMessage,
   isInboxLeadLocked,
-  managerOnlyReleaseToPoolMessage,
   mustAssumeUnassignedChatToView,
   negotiationAssigneeBlockedMessage,
   shouldOfferInboxClaimBoth,
@@ -127,9 +124,6 @@ import {
   inboxFiltersFromQuickFilter,
   inboxScopeFiltersForQuickFilter,
 } from "@/lib/inbox-quick-filters";
-
-/** Valor sentinela do Select de transferência (Radix não aceita string vazia). */
-const INBOX_ASSIGN_NONE = "__none__";
 
 function formatMoney(value: number) {
   return formatBRL(value);
@@ -182,7 +176,6 @@ export default function Inbox() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
-  const [assignDialogSelectedUser, setAssignDialogSelectedUser] = useState<string>("");
   const [activeChatId, setActiveChatId] = useState<string | null>(() => searchParams.get("chatId"));
   const notificationSettings = useInboxNotificationSettings();
   // Notifica novas mensagens inbound em chats nao ativos / aba em background.
@@ -238,9 +231,6 @@ export default function Inbox() {
   const { data: availableTags = [], isLoading: tagsLoading } = useChatTags();
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
-  const assignChatMutation = useAssignChat();
-  const unassignChatMutation = useUnassignChat();
-  const autoAssignChatMutation = useAutoAssignChat();
   const claimChatMutation = useClaimChat();
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
@@ -1828,7 +1818,6 @@ export default function Inbox() {
                         return;
                       }
                       setAssignDialogChatId(activeChat.id);
-                      setAssignDialogSelectedUser(activeChat.assigneeId ?? "");
                       setAssignDialogOpen(true);
                     }}
                     disabled={!canEditInbox}
@@ -2075,139 +2064,14 @@ export default function Inbox() {
         </>
       ) : null}
 
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-sm rounded-2xl border-border bg-wchat-50 p-0">
-          <DialogHeader className="border-b border-border pb-4 pl-6 pt-5">
-            <DialogTitle className="text-[17px] font-medium text-foreground">
-              {assignDialogChat?.assigneeId ? "Transferir conversa" : "Atribuir conversa"}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {assignDialogChat?.assigneeName
-                ? `Responsável atual: ${assignDialogChat.assigneeName}. Escolha outro atendente para transferir.`
-                : "Escolha o atendente responsável por esta conversa."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 px-6 py-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Novo responsável</Label>
-              <Select
-                value={assignDialogSelectedUser || INBOX_ASSIGN_NONE}
-                onValueChange={(value) =>
-                  setAssignDialogSelectedUser(value === INBOX_ASSIGN_NONE ? "" : value)
-                }
-              >
-                <SelectTrigger className="border border-input bg-card text-foreground focus:ring-primary">
-                  <SelectValue placeholder="Selecionar atendente..." />
-                </SelectTrigger>
-                <SelectContent className="border-border bg-card text-foreground">
-                  {canManageChatPool ? (
-                    <SelectItem value={INBOX_ASSIGN_NONE}>Sem responsável (pool)</SelectItem>
-                  ) : null}
-                  {atendimentoUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.nome}
-                      {user.id === profileId ? " (você)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="border-t border-border px-6 py-4">
-            <div className="flex w-full items-center gap-2">
-              {canManageChatPool ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg border-border bg-transparent text-muted-foreground hover:bg-wchat-100"
-                  disabled={autoAssignChatMutation.isPending}
-                  onClick={async () => {
-                    if (!assignDialogChatId) return;
-                    try {
-                      const nextId = await autoAssignChatMutation.mutateAsync(assignDialogChatId);
-                      if (!nextId) {
-                        toast({ title: "Nenhum atendente disponível", variant: "destructive" });
-                      } else {
-                        const name =
-                          atendimentoUsers.find((u) => u.id === nextId)?.nome ?? "atendente";
-                        toast({ title: "Conversa distribuída", description: `Atribuída a ${name}.` });
-                      }
-                      setAssignDialogOpen(false);
-                    } catch (err) {
-                      toast({
-                        title: "Erro ao distribuir",
-                        description: err instanceof Error ? err.message : "Tente novamente.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  Distribuir fila
-                </Button>
-              ) : null}
-              <div className="flex-1" />
-              <Button
-                size="sm"
-                className="rounded-lg bg-primary text-primary-foreground hover:bg-wchat-700"
-                disabled={assignChatMutation.isPending || unassignChatMutation.isPending}
-                onClick={async () => {
-                  if (!assignDialogChatId) return;
-                  const previousAssigneeId = assignDialogChat?.assigneeId ?? null;
-                  const nextAssigneeId = assignDialogSelectedUser.trim() || null;
-
-                  if (nextAssigneeId && nextAssigneeId === previousAssigneeId) {
-                    toast({
-                      title: "Nenhuma alteração",
-                      description: "Selecione outro atendente para transferir.",
-                    });
-                    return;
-                  }
-
-                  if (!nextAssigneeId && !canManageChatPool) {
-                    toast({
-                      title: "Ação não permitida",
-                      description: managerOnlyReleaseToPoolMessage(),
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-
-                  try {
-                    if (nextAssigneeId) {
-                      await assignChatMutation.mutateAsync({
-                        chatId: assignDialogChatId,
-                        assigneeId: nextAssigneeId,
-                        reason: previousAssigneeId ? "transfer" : "assign",
-                      });
-                      const name =
-                        atendimentoUsers.find((u) => u.id === nextAssigneeId)?.nome ?? "atendente";
-                      toast({
-                        title: previousAssigneeId ? "Conversa transferida" : "Conversa atribuída",
-                        description: name,
-                      });
-                    } else {
-                      await unassignChatMutation.mutateAsync({
-                        chatId: assignDialogChatId,
-                        reason: "release_to_pool",
-                      });
-                      toast({ title: "Conversa devolvida ao pool" });
-                    }
-                    setAssignDialogOpen(false);
-                  } catch (err) {
-                    toast({
-                      title: previousAssigneeId ? "Erro ao transferir" : "Erro ao atribuir",
-                      description: err instanceof Error ? err.message : "Tente novamente.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                {assignDialogChat?.assigneeId ? "Transferir" : "Atribuir"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AssignChatDialog
+        open={assignDialogOpen}
+        onOpenChange={setAssignDialogOpen}
+        chat={assignDialogChat}
+        atendimentoUsers={atendimentoUsers}
+        canManageChatPool={canManageChatPool}
+        profileId={profileId}
+      />
 
       <MarkWinDialog
         open={Boolean(activeChat) && markQuickSaleDialogOpen}
