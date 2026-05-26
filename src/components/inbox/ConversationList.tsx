@@ -338,7 +338,7 @@ export function ConversationList({
                   instanceId !== "all" && "ring-1 ring-primary/35",
                 )}
               >
-                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                <span className="!flex min-w-0 flex-1 items-center gap-1.5 truncate">
                   <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" />
                   <SelectValue placeholder="Instância" />
                 </span>
