@@ -315,7 +315,17 @@ async function runAnthropicLoop(
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     result.iterations = i + 1;
-    const response = await createMessage({ model: config.model, maxTokens: config.maxOutputTokens, system, tools, messages });
+    // Prompt caching: marca o último bloco da última mensagem. A cada iteração
+    // o array cresce (assistant + tool_results); a Anthropic reaproveita o cache
+    // do prefixo até o breakpoint da iteração anterior e só cobra como "novo" o
+    // que entrou depois. Em loops de 3-5 iterações o ganho é grande.
+    const response = await createMessage({
+      model: config.model,
+      maxTokens: config.maxOutputTokens,
+      system,
+      tools,
+      messages: withMessagesCacheBreakpoint(messages),
+    });
     result.usage.input += response.usage.input_tokens ?? 0;
     result.usage.output += response.usage.output_tokens ?? 0;
     result.usage.cacheRead += response.usage.cache_read_input_tokens ?? 0;
@@ -625,6 +635,27 @@ function buildConversation(rows: Array<Record<string, unknown>>): ConvMessage[] 
     messages.shift();
   }
   return messages;
+}
+
+/**
+ * Adiciona cache_control no último bloco da última mensagem para criar um
+ * breakpoint de cache no histórico. Combinado com os breakpoints de tools e
+ * persona, a Anthropic reaproveita o prefixo entre iterações do tool-use loop
+ * (a cada iteração só os novos tool_results contam como input "novo"). Limite:
+ * 4 breakpoints por request — usamos 3 (tools + persona + última mensagem).
+ */
+function withMessagesCacheBreakpoint(messages: AnthropicMessage[]): AnthropicMessage[] {
+  if (messages.length === 0) return messages;
+  const last = messages[messages.length - 1];
+  let blocks: AnthropicContentBlock[];
+  if (typeof last.content === "string") {
+    blocks = [{ type: "text", text: last.content, cache_control: { type: "ephemeral" } }];
+  } else {
+    blocks = last.content.map((block, idx) =>
+      idx === last.content.length - 1 ? { ...block, cache_control: { type: "ephemeral" } } : block,
+    );
+  }
+  return [...messages.slice(0, -1), { ...last, content: blocks }];
 }
 
 /** ConvMessage → mensagem da Anthropic (imagem vira bloco image/source url). */

@@ -27,6 +27,8 @@ export type AnthropicContentBlock = {
   input?: Record<string, unknown>;
   // text
   text?: string;
+  // prompt caching: marca o fim do prefixo cacheável (até 4 breakpoints por request)
+  cache_control?: CacheControl;
   [key: string]: unknown;
 };
 
