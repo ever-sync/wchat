@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { formatBRL } from "@/lib/format";
 import { Briefcase, Hand } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -26,30 +26,21 @@ import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
 import { MessageInput } from "@/components/inbox/MessageInput";
 import { MessageThread } from "@/components/inbox/MessageThread";
-import { extensionForRecordedMime, pickAudioRecorderMime } from "@/lib/inboxAudioRecording";
-import { maybeCompressImage } from "@/lib/inboxImageCompression";
 import { groupThreadItemsByDay, type ThreadEntry } from "@/lib/inboxMessageGroups";
 import {
   useChatNotes,
   useChatNotesRealtime,
-  useCreateChatNote,
 } from "@/lib/api/chat-notes";
-import {
-  uploadWhatsappMediaFile,
-  WHATSAPP_MEDIA_MAX_BYTES,
-} from "@/lib/api/whatsapp-media";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import {
   fetchInboxMessagesPage,
   getNextInboxMessagesPageParam,
   type InboxMessagesPageCursor,
-  type InboxMessagesPageResult,
   useInboxChats,
   useInboxChatsRealtime,
   useInboxMessages,
   useMarkChatAsRead,
-  useSendWhatsappMessage,
   useSyncInbox,
   useWhatsappInstances,
 } from "@/lib/api/whatsapp";
@@ -78,20 +69,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useQuickReplies } from "@/lib/api/quick-replies";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import {
-  type InboxChat,
-  type MessageType,
-  type WhatsappMessage,
-} from "@/types/domain";
+import { type InboxChat } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 import {
   useInboxInboundNotifications,
   useInboxNotificationSettings,
 } from "@/hooks/useInboxInboundNotifications";
 import { useInboxTitleBadge } from "@/hooks/useInboxTitleBadge";
-import { clearInboxChatDraft, useInboxChatDraft } from "@/hooks/useInboxChatDraft";
 import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
+import { useInboxComposer } from "@/hooks/useInboxComposer";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 
 function formatMoney(value: number) {
@@ -106,22 +93,13 @@ export default function Inbox() {
   const [searchParams, setSearchParams] = useSearchParams();
   const messagesScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const loadOlderScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const microphoneStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<number | null>(null);
   const lastMarkReadAttemptRef = useRef<Record<string, number>>({});
   const lastScrollStateRef = useRef<{ chatId: string | null; messageCount: number }>({
     chatId: null,
     messageCount: 0,
   });
   const skipAutoScrollToBottomRef = useRef(false);
-  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const mediaUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const recentSendFingerprintsRef = useRef<Map<string, number>>(new Map());
-  const lastSendErrorToastRef = useRef<{ key: string; at: number } | null>(null);
   const threadAtBottomRef = useRef(true);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
@@ -131,24 +109,7 @@ export default function Inbox() {
   const notificationSettings = useInboxNotificationSettings();
   // Notifica novas mensagens inbound em chats nao ativos / aba em background.
   useInboxInboundNotifications(activeChatId, notificationSettings.enabled);
-  const [messageType, setMessageType] = useState<Exclude<MessageType, "system">>("text");
-  const [bodyText, setBodyText] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
-  const [payloadText, setPayloadText] = useState("{}");
-  const [simulateTyping, setSimulateTyping] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [microphoneState, setMicrophoneState] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDurationSec, setRecordingDurationSec] = useState(0);
-  const [quickReplyOpen, setQuickReplyOpen] = useState(false);
-  const [noteMode, setNoteMode] = useState(false);
-  const [selectedAttachmentName, setSelectedAttachmentName] = useState<string | null>(null);
-  const [attachmentMimeType, setAttachmentMimeType] = useState<string | null>(null);
-  const [attachmentUploading, setAttachmentUploading] = useState(false);
-  const [attachmentProgress, setAttachmentProgress] = useState<number | null>(null);
-  const attachmentAbortRef = useRef<AbortController | null>(null);
-  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [jumpToLatestVisible, setJumpToLatestVisible] = useState(false);
   const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
   const requestedChatId = searchParams.get("chatId");
@@ -290,9 +251,6 @@ export default function Inbox() {
     [chats],
   );
   useInboxTitleBadge(totalUnread);
-  // Rascunho persistido por chat: restaura ao abrir, salva debounced.
-  useInboxChatDraft(activeChat?.id, bodyText, setBodyText);
-
   // Atalhos de teclado globais do inbox.
   // - Ctrl/Cmd+K: foca a busca de conversas (sem inserir nada na caixa).
   // - Esc com foco em campo de texto: blur (sai do composer).
@@ -338,7 +296,6 @@ export default function Inbox() {
     refetchOnWindowFocus: false,
   });
   const markChatAsRead = useMarkChatAsRead();
-  const sendMessage = useSendWhatsappMessage();
   const syncInbox = useSyncInbox({
     onSuccess: (_data, variables) => {
       const descricao = variables?.chatId
@@ -430,14 +387,6 @@ export default function Inbox() {
   }, [activeChat?.id, activeChat?.unreadCount, markChatAsRead, quickFilter]);
 
   useEffect(() => {
-    setShowEmojiPicker(false);
-    setNoteMode(false);
-    // Trocou de chat: cancela upload em andamento (anexo nao se aplica mais).
-    attachmentAbortRef.current?.abort();
-    attachmentAbortRef.current = null;
-  }, [activeChat?.id]);
-
-  useEffect(() => {
     setProfileOpen(false);
   }, [activeChat?.id]);
 
@@ -455,30 +404,8 @@ export default function Inbox() {
     setSearchParams(next, { replace: true });
   }, [activeChat?.id, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current != null) {
-        window.clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      const rec = mediaRecorderRef.current;
-      mediaRecorderRef.current = null;
-      audioChunksRef.current = [];
-      if (rec && rec.state !== "inactive") {
-        rec.ondataavailable = null;
-        rec.onstop = null;
-        rec.stop();
-      }
-      microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
-      microphoneStreamRef.current = null;
-      setIsRecording(false);
-      setRecordingDurationSec(0);
-    };
-  }, [activeChat?.id]);
-
   const { data: chatNotes = [] } = useChatNotes(activeChat?.id);
   useChatNotesRealtime(activeChat?.id);
-  const createChatNote = useCreateChatNote();
 
   const messageGroups = useMemo(() => {
     if (chatNotes.length === 0) {
@@ -519,6 +446,13 @@ export default function Inbox() {
     profileId,
     { hasLinkedNegotiation: Boolean(linkedNegotiation) },
   );
+
+  const composer = useInboxComposer({
+    chat: activeChat,
+    canEditInbox,
+    inboxLeadLocked,
+    hasLinkedNegotiation: Boolean(linkedNegotiation),
+  });
   const canMarkSaleFromChat =
     Boolean(activeChat) &&
     Boolean(linkedNegotiation) &&
@@ -593,389 +527,6 @@ export default function Inbox() {
     setMarkQuickSaleDialogOpen(true);
   }
 
-  function focusBodyComposer() {
-    requestAnimationFrame(() => {
-      bodyTextareaRef.current?.focus();
-    });
-  }
-
-  function appendEmoji(emoji: string) {
-    setBodyText((current) => `${current}${emoji}`);
-    focusBodyComposer();
-  }
-
-  function detectMessageTypeFromFile(file: File): Exclude<MessageType, "system"> {
-    if (file.type.startsWith("audio/")) {
-      return "audio";
-    }
-
-    if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
-      return "media";
-    }
-
-    return "document";
-  }
-
-  function readFileAsDataUrl(file: File) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-          return;
-        }
-
-        reject(new Error("Nao foi possivel ler o arquivo selecionado."));
-      };
-
-      reader.onerror = () => {
-        reject(reader.error ?? new Error("Falha ao ler o arquivo selecionado."));
-      };
-
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function resetComposerAttachmentState(options?: { keepBodyText?: boolean }) {
-    if (!options?.keepBodyText) {
-      setBodyText("");
-    }
-    setMessageType("text");
-    setMediaUrl("");
-    setPayloadText("{}");
-    setSelectedAttachmentName(null);
-    setAttachmentMimeType(null);
-  }
-
-  async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const original = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!original) {
-      return;
-    }
-
-    // Compressao client-side de imagens grandes antes do upload (sem perda
-    // visivel; reduz banda do usuario e quota de storage). Pula PNGs/HEICs e
-    // arquivos pequenos.
-    let file = original;
-    try {
-      const compression = await maybeCompressImage(original);
-      if (compression.compressed) {
-        file = compression.file;
-      }
-    } catch {
-      // Falha na compressao: usa o original.
-    }
-
-    if (file.size > WHATSAPP_MEDIA_MAX_BYTES) {
-      const descricaoLimite = `O limite e ${WHATSAPP_MEDIA_MAX_BYTES / (1024 * 1024)} MB.`;
-      toast({
-        title: "Arquivo muito grande",
-        description: descricaoLimite,
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "aviso",
-        titulo: "Arquivo muito grande",
-        descricao: descricaoLimite,
-      });
-      return;
-    }
-
-    const nextMessageType = detectMessageTypeFromFile(file);
-    setAttachmentUploading(true);
-    setAttachmentProgress(0);
-
-    // Cancela qualquer upload anterior em andamento (ex.: usuario trocou de chat
-    // ou anexou outro arquivo durante o upload).
-    attachmentAbortRef.current?.abort();
-    const abort = new AbortController();
-    attachmentAbortRef.current = abort;
-
-    try {
-      let mediaValue: string;
-
-      if (isSupabaseConfigured) {
-        try {
-          mediaValue = await uploadWhatsappMediaFile(file, {
-            signal: abort.signal,
-            onProgress: ({ ratio }) => setAttachmentProgress(ratio),
-          });
-        } catch (uploadError) {
-          if (
-            uploadError instanceof DOMException &&
-            uploadError.name === "AbortError"
-          ) {
-            // Cancelamento silencioso (esperado).
-            return;
-          }
-          const msgUpload =
-            uploadError instanceof Error
-              ? uploadError.message
-              : "Nao foi possivel enviar o arquivo ao Storage.";
-          toast({
-            title: "Falha no upload",
-            description: msgUpload,
-            variant: "destructive",
-          });
-          useAppStore.getState().addNotification({
-            tipo: "erro",
-            titulo: "Falha no upload (inbox)",
-            descricao: msgUpload,
-          });
-          return;
-        }
-      } else {
-        mediaValue = await readFileAsDataUrl(file);
-      }
-
-      setMessageType(nextMessageType);
-      setMediaUrl(mediaValue);
-      setSelectedAttachmentName(file.name);
-      setAttachmentMimeType(file.type || null);
-      setPayloadText(
-        JSON.stringify(
-          {
-            fileName: file.name,
-            mimeType: file.type,
-            size: file.size,
-          },
-          null,
-          2,
-        ),
-      );
-
-      const anexoDesc = isSupabaseConfigured
-        ? `${file.name} enviado ao Storage e pronto para envio.`
-        : `${file.name} foi preparado para envio (data URL local).`;
-      toast({
-        title: "Arquivo anexado",
-        description: anexoDesc,
-      });
-      useAppStore.getState().addNotification({
-        tipo: "sucesso",
-        titulo: "Arquivo anexado",
-        descricao: anexoDesc,
-      });
-
-      focusBodyComposer();
-    } catch (error) {
-      const msgAnexo = error instanceof Error ? error.message : "Nao foi possivel preparar o arquivo.";
-      toast({
-        title: "Falha ao anexar",
-        description: msgAnexo,
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Falha ao anexar arquivo",
-        descricao: msgAnexo,
-      });
-    } finally {
-      setAttachmentUploading(false);
-      setAttachmentProgress(null);
-      if (attachmentAbortRef.current === abort) {
-        attachmentAbortRef.current = null;
-      }
-    }
-  }
-
-  function clearRecordingTimer() {
-    if (recordingTimerRef.current != null) {
-      window.clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-  }
-
-  async function stopRecordingAndFinalize() {
-    const rec = mediaRecorderRef.current;
-    if (!rec || rec.state === "inactive") {
-      clearRecordingTimer();
-      setIsRecording(false);
-      setRecordingDurationSec(0);
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      rec.onstop = async () => {
-        mediaRecorderRef.current = null;
-        clearRecordingTimer();
-        setIsRecording(false);
-        setRecordingDurationSec(0);
-
-        microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
-        microphoneStreamRef.current = null;
-
-        const mime = rec.mimeType || pickAudioRecorderMime() || "audio/webm";
-        const blob = new Blob(audioChunksRef.current, { type: mime });
-        audioChunksRef.current = [];
-
-        if (blob.size < 256) {
-          toast({
-            title: "Audio muito curto",
-            description: "Grave por pelo menos um instante antes de parar.",
-            variant: "destructive",
-          });
-          useAppStore.getState().addNotification({
-            tipo: "aviso",
-            titulo: "Audio muito curto",
-            descricao: "Grave por pelo menos um instante antes de parar.",
-          });
-          resolve();
-          return;
-        }
-
-        const ext = extensionForRecordedMime(mime);
-        const file = new File([blob], `gravacao-${Date.now()}.${ext}`, {
-          type: mime || "application/octet-stream",
-        });
-
-        setAttachmentUploading(true);
-        setAttachmentProgress(0);
-        // Reaproveita o controle de abort do anexo: trocar de chat tambem
-        // cancela um upload de audio em andamento.
-        attachmentAbortRef.current?.abort();
-        const abort = new AbortController();
-        attachmentAbortRef.current = abort;
-        try {
-          let mediaValue: string;
-          if (isSupabaseConfigured) {
-            mediaValue = await uploadWhatsappMediaFile(file, {
-              signal: abort.signal,
-              onProgress: ({ ratio }) => setAttachmentProgress(ratio),
-            });
-          } else {
-            mediaValue = await readFileAsDataUrl(file);
-          }
-          setMessageType("audio");
-          setMediaUrl(mediaValue);
-          setSelectedAttachmentName(file.name);
-          setAttachmentMimeType(file.type || null);
-          setPayloadText(
-            JSON.stringify(
-              {
-                fileName: file.name,
-                mimeType: file.type,
-                size: file.size,
-                recorded: true,
-              },
-              null,
-              2,
-            ),
-          );
-          focusBodyComposer();
-        } catch (uploadError) {
-          if (
-            uploadError instanceof DOMException &&
-            uploadError.name === "AbortError"
-          ) {
-            // Cancelamento esperado.
-            resolve();
-            return;
-          }
-          const msgGravacao =
-            uploadError instanceof Error ? uploadError.message : "Nao foi possivel processar a gravacao.";
-          toast({
-            title: "Falha ao enviar audio",
-            description: msgGravacao,
-            variant: "destructive",
-          });
-          useAppStore.getState().addNotification({
-            tipo: "erro",
-            titulo: "Falha ao enviar audio",
-            descricao: msgGravacao,
-          });
-        } finally {
-          setAttachmentUploading(false);
-          setAttachmentProgress(null);
-          if (attachmentAbortRef.current === abort) {
-            attachmentAbortRef.current = null;
-          }
-        }
-        resolve();
-      };
-      rec.stop();
-    });
-  }
-
-  async function handleMicrophoneClick() {
-    if (isRecording) {
-      await stopRecordingAndFinalize();
-      return;
-    }
-
-    if (!("mediaDevices" in navigator) || typeof navigator.mediaDevices.getUserMedia !== "function") {
-      toast({
-        title: "Microfone indisponivel",
-        description: "Seu navegador nao oferece captura de audio nesta pagina.",
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Microfone indisponivel",
-        descricao: "Seu navegador nao oferece captura de audio nesta pagina.",
-      });
-      return;
-    }
-
-    if (typeof MediaRecorder === "undefined") {
-      toast({
-        title: "Gravacao nao suportada",
-        description: "Use um navegador atualizado ou anexe um arquivo de audio.",
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Gravacao nao suportada",
-        descricao: "Use um navegador atualizado ou anexe um arquivo de audio.",
-      });
-      return;
-    }
-
-    setMicrophoneState("requesting");
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
-      microphoneStreamRef.current = stream;
-      setMicrophoneState("granted");
-
-      audioChunksRef.current = [];
-      const mime = pickAudioRecorderMime();
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-      recorder.start(250);
-      setMessageType("audio");
-      setIsRecording(true);
-      setRecordingDurationSec(0);
-      clearRecordingTimer();
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordingDurationSec((seconds) => seconds + 1);
-      }, 1000);
-    } catch (error) {
-      setMicrophoneState("denied");
-      microphoneStreamRef.current = null;
-      const permMsg =
-        error instanceof Error ? error.message : "Nao foi possivel acessar o microfone.";
-      toast({
-        title: "Permissao negada",
-        description: permMsg,
-        variant: "destructive",
-      });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Permissao de microfone negada",
-        descricao: permMsg,
-      });
-    }
-  }
 
   function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
     const el = messagesScrollAreaRef.current;
@@ -1090,199 +641,6 @@ export default function Inbox() {
     };
   }, [activeChat?.id, messages.length, messagesLoading]);
 
-  const handleRetryMessage = useCallback(
-    async (failed: WhatsappMessage) => {
-      if (!activeChat) return;
-      if (failed.direction !== "outbound" || failed.status !== "failed") return;
-      if (sendMessage.isPending || retryingMessageId) return;
-
-      setRetryingMessageId(failed.id);
-      // Remove a bolha falhada antes de reenviar; o próprio envio cria uma nova
-      // bolha otimista ("queued") que será reconciliada ou marcada falha de novo.
-      const queryKey = ["inbox-messages", failed.chatId] as const;
-      queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          pages: current.pages.map((page) => ({
-            ...page,
-            messages: page.messages.filter((m) => m.id !== failed.id),
-          })),
-        };
-      });
-      try {
-        await sendMessage.mutateAsync({
-          instanceId: failed.instanceId,
-          chatId: failed.chatId,
-          remoteJid: activeChat.remoteJid,
-          messageType: failed.messageType as Exclude<MessageType, "system">,
-          bodyText: failed.bodyText ?? "",
-          mediaUrl: failed.mediaUrl ?? undefined,
-          payload: (failed.payloadJson ?? {}) as Record<string, unknown>,
-          quotedMessageId: failed.quotedMessageId ?? undefined,
-        });
-      } catch (error) {
-        console.error("Falha ao reenviar mensagem no inbox:", error);
-      } finally {
-        setRetryingMessageId(null);
-      }
-    },
-    [activeChat, queryClient, retryingMessageId, sendMessage],
-  );
-
-  const handleDiscardMessage = useCallback(
-    (failed: WhatsappMessage) => {
-      if (!activeChat) return;
-      if (failed.direction !== "outbound" || failed.status !== "failed") return;
-
-      const queryKey = ["inbox-messages", failed.chatId] as const;
-      queryClient.setQueryData<InfiniteData<InboxMessagesPageResult>>(queryKey, (current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          pages: current.pages.map((page) => ({
-            ...page,
-            messages: page.messages.filter((m) => m.id !== failed.id),
-          })),
-        };
-      });
-    },
-    [activeChat, queryClient],
-  );
-
-  async function handleSendMessage() {
-    if (!activeChat) {
-      return;
-    }
-
-    if (inboxLeadLocked) {
-      toast({
-        title: linkedNegotiation ? "Assuma o negócio" : "Assuma a conversa",
-        description: linkedNegotiation
-          ? negotiationAssigneeBlockedMessage()
-          : chatAssigneeBlockedMessage(),
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!canEditInbox) {
-      toast({
-        title: "Ação indisponível",
-        description: "Seu papel nao tem permissao para enviar mensagens.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (noteMode) {
-      const body = bodyText.trim();
-      if (!body) return;
-      try {
-        await createChatNote.mutateAsync({ chatId: activeChat.id, bodyText: body });
-        setBodyText("");
-        clearInboxChatDraft(activeChat.id);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : "Tente novamente.";
-        toast({ title: "Falha ao salvar nota", description: msg, variant: "destructive" });
-        useAppStore.getState().addNotification({
-          tipo: "erro",
-          titulo: "Falha ao salvar nota",
-          descricao: msg,
-        });
-      }
-      return;
-    }
-
-    const hasBody = Boolean(bodyText.trim());
-    const hasMedia = Boolean(mediaUrl.trim());
-
-    if (messageType === "text" && !hasBody) {
-      return;
-    }
-
-    if (messageType !== "text" && !hasBody && !hasMedia) {
-      return;
-    }
-
-    let payload: Record<string, unknown> = {};
-
-    if (payloadText.trim()) {
-      try {
-        payload = JSON.parse(payloadText);
-      } catch {
-        toast({
-          title: "Payload invalido",
-          description: "Revise o JSON complementar antes de enviar.",
-          variant: "destructive",
-        });
-        useAppStore.getState().addNotification({
-          tipo: "erro",
-          titulo: "Payload invalido",
-          descricao: "Revise o JSON complementar antes de enviar.",
-        });
-        return;
-      }
-    }
-
-    const sendVars = {
-      instanceId: activeChat.instanceId,
-      chatId: activeChat.id,
-      remoteJid: activeChat.remoteJid,
-      messageType,
-      bodyText,
-      mediaUrl: mediaUrl || undefined,
-      payload,
-      simulateTypingMs: simulateTyping ? 600 : undefined,
-    };
-
-    const sendFingerprint = JSON.stringify({
-      chatId: sendVars.chatId,
-      messageType: sendVars.messageType,
-      bodyText: sendVars.bodyText.trim(),
-      mediaUrl: sendVars.mediaUrl ?? "",
-      payload,
-    });
-    const now = Date.now();
-    for (const [key, timestamp] of recentSendFingerprintsRef.current) {
-      if (now - timestamp > 5_000) {
-        recentSendFingerprintsRef.current.delete(key);
-      }
-    }
-    if (recentSendFingerprintsRef.current.has(sendFingerprint)) {
-      return;
-    }
-    recentSendFingerprintsRef.current.set(sendFingerprint, now);
-
-    resetComposerAttachmentState();
-    clearInboxChatDraft(activeChat.id);
-
-    // Envio em background; botao permanece habilitado para varias mensagens em sequencia.
-    sendMessage.mutate(sendVars, {
-      onError: (error) => {
-        recentSendFingerprintsRef.current.delete(sendFingerprint);
-        const envioErroMsg = error instanceof Error ? error.message : "Tente novamente.";
-        const toastKey = `${sendVars.chatId}\0${envioErroMsg}`;
-        const nowToast = Date.now();
-        const lastToast = lastSendErrorToastRef.current;
-        const shouldToast = !lastToast || lastToast.key !== toastKey || nowToast - lastToast.at > 10_000;
-        if (shouldToast) {
-          lastSendErrorToastRef.current = { key: toastKey, at: nowToast };
-          toast({
-            title: "Falha ao enviar",
-            description: envioErroMsg,
-            variant: "destructive",
-          });
-          useAppStore.getState().addNotification({
-            tipo: "erro",
-            titulo: "Falha ao enviar mensagem",
-            descricao: envioErroMsg,
-          });
-        } else {
-          console.error("Falha repetida ao enviar mensagem no inbox:", envioErroMsg);
-        }
-      },
-    });
-  }
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -1584,9 +942,9 @@ export default function Inbox() {
                 hasMoreOlder={hasNextPage}
                 isLoadingOlder={isFetchingNextPage}
                 onLoadOlder={handleLoadOlderMessages}
-                onRetryMessage={handleRetryMessage}
-                onDiscardMessage={handleDiscardMessage}
-                retryingMessageId={retryingMessageId}
+                onRetryMessage={composer.handleRetryMessage}
+                onDiscardMessage={composer.handleDiscardMessage}
+                retryingMessageId={composer.retryingMessageId}
                 jumpToLatestVisible={jumpToLatestVisible}
                 onJumpToLatest={forceScrollToLatestMessage}
                 onScrollStateChange={handleThreadScrollStateChange}
@@ -1595,13 +953,13 @@ export default function Inbox() {
           </div>
 
           <MessageInput
-            bodyTextareaRef={bodyTextareaRef}
-            mediaUrlInputRef={mediaUrlInputRef}
-            attachmentInputRef={attachmentInputRef}
-            messageType={messageType}
-            onMessageTypeChange={setMessageType}
-            simulateTyping={simulateTyping}
-            onSimulateTypingChange={setSimulateTyping}
+            bodyTextareaRef={composer.bodyTextareaRef}
+            mediaUrlInputRef={composer.mediaUrlInputRef}
+            attachmentInputRef={composer.attachmentInputRef}
+            messageType={composer.messageType}
+            onMessageTypeChange={composer.setMessageType}
+            simulateTyping={composer.simulateTyping}
+            onSimulateTypingChange={composer.setSimulateTyping}
             onSync={() =>
               syncInbox.mutate({
                 chatId: activeChat?.id,
@@ -1610,60 +968,60 @@ export default function Inbox() {
             }
             syncPending={syncInbox.isPending}
             syncDisabled={syncInbox.isPending || !activeChat || !canEditInbox}
-            mediaUrl={mediaUrl}
-            onMediaUrlChange={setMediaUrl}
-            payloadText={payloadText}
-            onPayloadTextChange={setPayloadText}
-            selectedAttachmentName={selectedAttachmentName}
-            attachmentMimeType={attachmentMimeType}
-            bodyText={bodyText}
+            mediaUrl={composer.mediaUrl}
+            onMediaUrlChange={composer.setMediaUrl}
+            payloadText={composer.payloadText}
+            onPayloadTextChange={composer.setPayloadText}
+            selectedAttachmentName={composer.selectedAttachmentName}
+            attachmentMimeType={composer.attachmentMimeType}
+            bodyText={composer.bodyText}
             onBodyTextChange={(value) => {
-              if (value === "/" && bodyText === "") {
-                setQuickReplyOpen(true);
+              if (value === "/" && composer.bodyText === "") {
+                composer.setQuickReplyOpen(true);
                 return;
               }
-              setBodyText(value);
+              composer.setBodyText(value);
             }}
-            onSend={handleSendMessage}
+            onSend={composer.handleSendMessage}
             sendDisabled={
-              attachmentUploading ||
+              composer.attachmentUploading ||
               !activeChat ||
               !canEditInbox ||
               inboxLeadLocked ||
-              (noteMode
-                ? !bodyText.trim() || createChatNote.isPending
-                : messageType === "text"
-                ? !bodyText.trim()
-                : !bodyText.trim() && !mediaUrl.trim())
+              (composer.noteMode
+                ? !composer.bodyText.trim() || composer.createChatNote.isPending
+                : composer.messageType === "text"
+                ? !composer.bodyText.trim()
+                : !composer.bodyText.trim() && !composer.mediaUrl.trim())
             }
             composerActionsDisabled={inboxLeadLocked || !canEditInbox}
-            noteMode={noteMode}
+            noteMode={composer.noteMode}
             onNoteModeChange={(value) => {
-              setNoteMode(value);
-              setTimeout(() => bodyTextareaRef.current?.focus(), 50);
+              composer.setNoteMode(value);
+              setTimeout(() => composer.bodyTextareaRef.current?.focus(), 50);
             }}
-            showEmojiPicker={showEmojiPicker}
-            onToggleEmojiPicker={() => setShowEmojiPicker((current) => !current)}
-            onAppendEmoji={appendEmoji}
-            onAttachmentButtonClick={() => attachmentInputRef.current?.click()}
-            onAttachmentChange={handleAttachmentSelection}
-            attachmentUploading={attachmentUploading}
-            attachmentProgress={attachmentProgress}
-            microphoneState={microphoneState}
-            isRecording={isRecording}
-            recordingDurationSec={recordingDurationSec}
-            onMicrophoneClick={handleMicrophoneClick}
+            showEmojiPicker={composer.showEmojiPicker}
+            onToggleEmojiPicker={() => composer.setShowEmojiPicker(!composer.showEmojiPicker)}
+            onAppendEmoji={composer.appendEmoji}
+            onAttachmentButtonClick={() => composer.attachmentInputRef.current?.click()}
+            onAttachmentChange={composer.handleAttachmentSelection}
+            attachmentUploading={composer.attachmentUploading}
+            attachmentProgress={composer.attachmentProgress}
+            microphoneState={composer.microphoneState}
+            isRecording={composer.isRecording}
+            recordingDurationSec={composer.recordingDurationSec}
+            onMicrophoneClick={composer.handleMicrophoneClick}
             quickReplies={quickReplies}
-            quickReplyOpen={quickReplyOpen}
-            onQuickReplyOpenChange={setQuickReplyOpen}
-            onQuickReplyShortcutOpen={() => setQuickReplyOpen(true)}
+            quickReplyOpen={composer.quickReplyOpen}
+            onQuickReplyOpenChange={composer.setQuickReplyOpen}
+            onQuickReplyShortcutOpen={() => composer.setQuickReplyOpen(true)}
             onSelectQuickReply={(reply) => {
-              setBodyText(reply.bodyText);
-              setMessageType("text");
-              setQuickReplyOpen(false);
-              setTimeout(() => bodyTextareaRef.current?.focus(), 50);
+              composer.setBodyText(reply.bodyText);
+              composer.setMessageType("text");
+              composer.setQuickReplyOpen(false);
+              setTimeout(() => composer.bodyTextareaRef.current?.focus(), 50);
             }}
-            onClearAttachment={() => resetComposerAttachmentState({ keepBodyText: true })}
+            onClearAttachment={() => composer.resetComposerAttachmentState({ keepBodyText: true })}
           />
             </>
           )}
