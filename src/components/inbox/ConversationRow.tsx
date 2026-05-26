@@ -70,19 +70,14 @@ function ConversationTagDots({ tags }: { tags: InboxChat["tags"] }) {
   );
 }
 
-function AssigneeChip({ name }: { name: string }) {
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-
+function AssigneeTag({ name }: { name: string }) {
+  const firstName = name.trim().split(/\s+/)[0] ?? name;
   return (
     <span
       title={`Atribuído: ${name}`}
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground"
+      className="inline-flex shrink-0 max-w-[8rem] items-center truncate rounded-full bg-wchat-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground"
     >
-      {initials}
+      {firstName}
     </span>
   );
 }
@@ -142,6 +137,7 @@ export const ConversationRow = memo(function ConversationRow({
                 <p className="min-w-0 truncate text-sm font-medium leading-snug text-foreground">
                   {chat.displayName}
                 </p>
+                {chat.assigneeName ? <AssigneeTag name={chat.assigneeName} /> : null}
                 <ConversationTagDots tags={chat.tags} />
               </div>
               {subtitle ? (
@@ -198,7 +194,6 @@ export const ConversationRow = memo(function ConversationRow({
                   <Clock className="h-3 w-3" />
                 </span>
               ) : null}
-              {chat.assigneeName ? <AssigneeChip name={chat.assigneeName} /> : null}
               {chat.unreadCount > 0 ? (
                 <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
                   {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
