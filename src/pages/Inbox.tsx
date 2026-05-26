@@ -2719,6 +2719,7 @@ export default function Inbox() {
         chat={activeChat}
         messages={messages}
         crmActionsLocked={inboxLeadLocked || !canEditInbox || !canEditCrm}
+        channelAiEnabled={activeChannelAiEnabled}
         onChatDeleted={() => {
           setActiveChatId(null);
           setProfileOpen(false);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Kanban, Pencil, Phone, Plus, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Hand, Kanban, Pencil, Phone, Plus, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +52,7 @@ import {
   useUpdateCustomer,
 } from "@/lib/api/customers";
 import { useChatNegotiation, useEnsureLeadFromChat, useSetChatResolution } from "@/lib/api/crm-lead";
-import { useAtendimentoUsers } from "@/lib/api/chat-tags";
+import { useAtendimentoUsers, useSetChatAiMode } from "@/lib/api/chat-tags";
 import { useDeleteWhatsappChat, useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CUSTOMER_TAGS_SOURCE_KEY, parseCustomerTags, serializeCustomerTags } from "@/lib/customer-tags";
@@ -60,6 +60,7 @@ import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import { leadPrefillFromInboxChat, linkSearchHintFromInboxChat } from "@/lib/inbox-clientes-deeplink";
 import { isInlineMediaUrlAllowed } from "@/lib/restricted-media-hosts";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import {
   canAtendimentoActOnChat,
   chatAssigneeBlockedMessage,
@@ -676,6 +677,7 @@ export function CustomerProfileSheet({
   chat,
   messages,
   crmActionsLocked = false,
+  channelAiEnabled = false,
   onChatDeleted,
 }: {
   open: boolean;
@@ -684,6 +686,8 @@ export function CustomerProfileSheet({
   messages: WhatsappMessage[];
   /** Atendente sem conversa/negócio assumidos: bloqueia CRM e vínculos. */
   crmActionsLocked?: boolean;
+  /** Instância do chat tem IA habilitada — habilita o toggle de Pausar/Retomar IA. */
+  channelAiEnabled?: boolean;
   /** Chamado após admin excluir a conversa — pai limpa seleção/URL. */
   onChatDeleted?: (chatId: string) => void;
 }) {
@@ -696,6 +700,7 @@ export function CustomerProfileSheet({
   const canEditInbox = can("inbox", "edit");
   const isAdmin = profile?.role === "admin";
   const setChatResolution = useSetChatResolution();
+  const setAiMode = useSetChatAiMode();
   const deleteChat = useDeleteWhatsappChat();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const canActOnChat = canAtendimentoActOnChat(profile?.role, chat?.assigneeId, profile?.id);
@@ -948,6 +953,58 @@ export function CustomerProfileSheet({
                       ) : null}
                     </div>
                   ) : null}
+                  {channelAiEnabled && chat ? (() => {
+                    const aiPaused = chat.aiMode === "off" || chat.aiMode === "handoff";
+                    const disabled = setAiMode.isPending || !canActOnChat || !canEditInbox;
+                    return (
+                      <Button
+                        type="button"
+                        variant={aiPaused ? "ghost" : "secondary"}
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (!canEditInbox) {
+                            toast({
+                              title: "Ação indisponível",
+                              description: "Seu papel não tem permissão para esta ação.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          if (!canActOnChat) {
+                            toast({
+                              title: "Assuma a conversa",
+                              description: chatAssigneeBlockedMessage(),
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setAiMode.mutate(
+                            { chatId: chat.id, aiMode: aiPaused ? "full" : "off" },
+                            {
+                              onSuccess: () =>
+                                toast({
+                                  title: aiPaused
+                                    ? "IA reativada nesta conversa"
+                                    : "IA pausada nesta conversa",
+                                }),
+                            },
+                          );
+                        }}
+                        className={cn(
+                          "mt-1 h-9 w-full rounded-xl px-2.5 text-xs font-semibold",
+                          aiPaused
+                            ? "border border-[var(--inbox-border)] bg-transparent text-[var(--inbox-ink)] hover:bg-[var(--crm-brand-tint)] hover:text-[var(--crm-brand)]"
+                            : "bg-[var(--crm-brand)] text-white hover:bg-[var(--crm-brand)]/90",
+                        )}
+                      >
+                        <Hand className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {setAiMode.isPending
+                          ? aiPaused ? "Retomando..." : "Pausando..."
+                          : aiPaused ? "Retomar IA" : "Pausar IA"}
+                      </Button>
+                    );
+                  })() : null}
                   {isAdmin && chat ? (
                     <Button
                       type="button"
