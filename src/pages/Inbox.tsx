@@ -52,20 +52,14 @@ import {
   useSendWhatsappMessage,
   useSyncInbox,
   useWhatsappInstances,
-  inboxChatFiltersFromListScope,
 } from "@/lib/api/whatsapp";
 import {
   useAtendimentoUsers,
   useChatTags,
-  useClaimChat,
   useSnoozeChat,
 } from "@/lib/api/chat-tags";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
-import {
-  useClaimCrmNegotiation,
-  useReleaseCrmNegotiationToPool,
-  useUpdateCrmNegotiation,
-} from "@/lib/api/crm-negotiations";
+import { useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
 import { useChatNegotiation, useSetChatResolution } from "@/lib/api/crm-lead";
 import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
@@ -78,10 +72,7 @@ import {
   assumeConversationToViewMessage,
   chatAssigneeBlockedMessage,
   isInboxLeadLocked,
-  mustAssumeUnassignedChatToView,
   negotiationAssigneeBlockedMessage,
-  shouldOfferInboxClaimBoth,
-  canReleaseCrmNegotiationToPool,
 } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
@@ -89,9 +80,6 @@ import { useQuickReplies } from "@/lib/api/quick-replies";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import {
   type InboxChat,
-  type InboxChatFilters,
-  type InboxListScope,
-  type InboxQuickFilter,
   type MessageType,
   type WhatsappMessage,
 } from "@/types/domain";
@@ -102,12 +90,9 @@ import {
 } from "@/hooks/useInboxInboundNotifications";
 import { useInboxTitleBadge } from "@/hooks/useInboxTitleBadge";
 import { clearInboxChatDraft, useInboxChatDraft } from "@/hooks/useInboxChatDraft";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useInboxFilters } from "@/hooks/useInboxFilters";
+import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
-import {
-  inboxFiltersFromQuickFilter,
-  inboxScopeFiltersForQuickFilter,
-} from "@/lib/inbox-quick-filters";
 
 function formatMoney(value: number) {
   return formatBRL(value);
@@ -138,16 +123,8 @@ export default function Inbox() {
   const recentSendFingerprintsRef = useRef<Map<string, number>>(new Map());
   const lastSendErrorToastRef = useRef<{ key: string; at: number } | null>(null);
   const threadAtBottomRef = useRef(true);
-  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
-  const debouncedSearch = useDebouncedValue(search, 300);
-  const [instanceId, setInstanceId] = useState<string>("all");
-  const [listScope, setListScope] = useState<InboxListScope>("open");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
-  const [snoozedFilter, setSnoozedFilter] = useState<"active" | "snoozed">("active");
-  const [quickFilter, setQuickFilter] = useState<InboxQuickFilter | null>(null);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(() => searchParams.get("chatId"));
@@ -176,7 +153,6 @@ export default function Inbox() {
   const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
   const requestedChatId = searchParams.get("chatId");
   const requestedCustomerId = searchParams.get("customerId");
-  const requestedSearch = searchParams.get("search");
 
   const queryClient = useQueryClient();
   const prefetchChatMessages = (chatId: string) => {
@@ -205,45 +181,29 @@ export default function Inbox() {
   const { data: availableTags = [], isLoading: tagsLoading } = useChatTags();
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
-  const claimChatMutation = useClaimChat();
-  const claimCrmNegotiation = useClaimCrmNegotiation();
-  const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
-  const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
   const snoozeChatMutation = useSnoozeChat();
 
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
   const canEditCrm = can("crm", "edit");
 
-  const inboxChatsFilter = useMemo((): InboxChatFilters => {
-    const quick = inboxFiltersFromQuickFilter(quickFilter, profileId);
-    const useAdvancedAssignee = quickFilter === null;
-    const useAdvancedSnooze = quickFilter === null;
-
-    return {
-      search: debouncedSearch,
-      instanceId: instanceId === "all" ? undefined : instanceId,
-      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-      ...inboxScopeFiltersForQuickFilter(quickFilter, listScope),
-      ...quick,
-      assigneeId: useAdvancedAssignee
-        ? assigneeFilter === "all"
-          ? undefined
-          : assigneeFilter
-        : quick.assigneeId,
-      hideSnoozed: useAdvancedSnooze ? snoozedFilter === "active" : quick.hideSnoozed,
-      snoozedOnly: useAdvancedSnooze ? snoozedFilter === "snoozed" : quick.snoozedOnly,
-    };
-  }, [
-    debouncedSearch,
+  const {
+    search,
     instanceId,
-    assigneeFilter,
-    selectedTagIds,
-    snoozedFilter,
     listScope,
+    assigneeFilter,
+    snoozedFilter,
     quickFilter,
-    profileId,
-  ]);
+    selectedTagIds,
+    setSearch,
+    setInstanceId,
+    setListScope,
+    setAssigneeFilter,
+    setSnoozedFilter,
+    setQuickFilter,
+    setSelectedTagIds,
+    inboxChatsFilter,
+  } = useInboxFilters(profileId);
 
   const { data: chats = [], isLoading: chatsLoading } = useInboxChats(inboxChatsFilter, {
     // Realtime ja cobre updates em whatsapp_chats (ver useInboxChatsRealtime).
@@ -263,11 +223,6 @@ export default function Inbox() {
   const activeChannelAiEnabled = useMemo(
     () => instances.find((i) => i.id === activeChat?.instanceId)?.aiEnabled ?? false,
     [instances, activeChat?.instanceId],
-  );
-
-  const mustAssumeChatToView = useMemo(
-    () => mustAssumeUnassignedChatToView(profile?.role, activeChat?.assigneeId),
-    [profile?.role, activeChat?.assigneeId],
   );
 
   const assignDialogChat = useMemo(() => {
@@ -301,22 +256,23 @@ export default function Inbox() {
         .map((p) => ({ productId: p.productId as string, quantity: p.quantity, unitValue: p.unitPrice })),
     [linkedNegotiationProducts],
   );
-  const showClaimNegotiation =
-    Boolean(activeChat?.primaryNegotiationId) &&
-    !linkedNegotiationLoading &&
-    linkedNegotiation != null &&
-    linkedNegotiation.status === "em_andamento" &&
-    isNegotiationUnassigned(linkedNegotiation.assigneeId);
-  const showReleaseNegotiation =
-    Boolean(activeChat?.primaryNegotiationId) &&
-    !linkedNegotiationLoading &&
-    linkedNegotiation != null &&
-    linkedNegotiation.status === "em_andamento" &&
-    canReleaseToPool &&
-    !isNegotiationUnassigned(linkedNegotiation.assigneeId);
-  const offerClaimBoth =
-    Boolean(activeChat && linkedNegotiation) &&
-    shouldOfferInboxClaimBoth(activeChat?.assigneeId, linkedNegotiation?.assigneeId);
+
+  const {
+    claimChat: claimChatMutation,
+    claimNegotiation: claimCrmNegotiation,
+    releaseNegotiation: releaseCrmNegotiation,
+    canReleaseToPool,
+    mustAssumeChatToView,
+    showClaimNegotiation,
+    showReleaseNegotiation,
+    offerClaimBoth,
+    handleClaimChatAndNegotiation,
+  } = useInboxClaimActions({
+    chat: activeChat,
+    negotiation: linkedNegotiation ?? null,
+    negotiationLoading: linkedNegotiationLoading,
+    viewerRole: profile?.role,
+  });
   const managerUnassignedCount = useMemo(() => {
     if (!isManagerInbox) {
       return 0;
@@ -443,14 +399,6 @@ export default function Inbox() {
       return chats[0].id;
     });
   }, [chats, requestedChatId, requestedCustomerId, quickFilter]);
-
-  useEffect(() => {
-    if (!requestedSearch) {
-      return;
-    }
-
-    setSearch((current) => (current === requestedSearch ? current : requestedSearch));
-  }, [requestedSearch]);
 
   useEffect(() => {
     if (quickFilter === "unread") {
@@ -1201,28 +1149,6 @@ export default function Inbox() {
     },
     [activeChat, queryClient],
   );
-
-  async function handleClaimChatAndNegotiation() {
-    if (!activeChat || !linkedNegotiation) {
-      return;
-    }
-    try {
-      await claimChatMutation.mutateAsync(activeChat.id);
-      if (isNegotiationUnassigned(linkedNegotiation.assigneeId)) {
-        await claimCrmNegotiation.mutateAsync(linkedNegotiation.id);
-      }
-      toast({
-        title: "Conversa e negócio assumidos",
-        description: `Você é o responsável por "${linkedNegotiation.title}".`,
-      });
-    } catch (error) {
-      toast({
-        title: "Não foi possível assumir",
-        description: error instanceof Error ? error.message : "Tente novamente.",
-        variant: "destructive",
-      });
-    }
-  }
 
   async function handleSendMessage() {
     if (!activeChat) {
