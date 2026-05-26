@@ -1044,6 +1044,8 @@ export async function ensureChat(
     unreadCount?: number | null;
     /** Distribui o chat (round-robin) entre os atendentes da instância, se houver. */
     autoAssign?: boolean;
+    /** Inbound do cliente: re-abre conversas marcadas como `lost` (que ficam fora de "Todas"). */
+    reopenOnInbound?: boolean;
   },
 ) {
   const normalized = normalizePhone(params.remoteJid);
@@ -1134,7 +1136,11 @@ export async function ensureChat(
       ? Math.max(0, Number(params.unreadCount))
       : Math.max(0, Number(existing?.unread_count ?? 0) + Number(params.unreadIncrement ?? 0)),
     status: "open",
-    resolution: existing?.resolution ?? "open",
+    // Inbound do cliente re-abre conversa marcada como `lost` (filtro `hideLost`
+    // em "Todas" a manteria escondida mesmo com status=open).
+    resolution: params.reopenOnInbound && existing?.resolution === "lost"
+      ? "open"
+      : existing?.resolution ?? "open",
     ai_mode: existing?.ai_mode ?? defaultAiMode,
   };
 
@@ -1775,6 +1781,7 @@ export async function processMessagePayload(
     lastMessageAt: occurredAt,
     unreadIncrement: direction === "inbound" ? 1 : 0,
     autoAssign: direction === "inbound",
+    reopenOnInbound: direction === "inbound",
   });
 
   const normalizedMediaMeta = extractNormalizedMediaMeta(payload);

@@ -391,6 +391,20 @@ export function ConversationList({
             role="tablist"
             aria-label="Filtros rápidos de conversas"
           >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={quickFilter === null}
+              onClick={() => onQuickFilterChange(null)}
+              className={cn(
+                "shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                quickFilter === null
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-wchat-50 text-muted-foreground hover:bg-wchat-100 hover:text-foreground",
+              )}
+            >
+              Todas
+            </button>
             {INBOX_QUICK_FILTER_OPTIONS.map(({ id, label }) => {
               const active = quickFilter === id;
               return (
