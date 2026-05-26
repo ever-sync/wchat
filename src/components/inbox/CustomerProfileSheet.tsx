@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Kanban, Pencil, Phone, Plus, X } from "lucide-react";
+import { Check, ExternalLink, Kanban, Pencil, Phone, Plus, Trash2, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatBRL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +53,7 @@ import {
 } from "@/lib/api/customers";
 import { useChatNegotiation, useEnsureLeadFromChat, useSetChatResolution } from "@/lib/api/crm-lead";
 import { useAtendimentoUsers } from "@/lib/api/chat-tags";
-import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
+import { useDeleteWhatsappChat, useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CUSTOMER_TAGS_SOURCE_KEY, parseCustomerTags, serializeCustomerTags } from "@/lib/customer-tags";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
@@ -666,6 +676,7 @@ export function CustomerProfileSheet({
   chat,
   messages,
   crmActionsLocked = false,
+  onChatDeleted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -673,6 +684,8 @@ export function CustomerProfileSheet({
   messages: WhatsappMessage[];
   /** Atendente sem conversa/negócio assumidos: bloqueia CRM e vínculos. */
   crmActionsLocked?: boolean;
+  /** Chamado após admin excluir a conversa — pai limpa seleção/URL. */
+  onChatDeleted?: (chatId: string) => void;
 }) {
   const { data: customer } = useCustomer(chat?.customerId ?? undefined, { enabled: Boolean(chat?.customerId) });
   const { toast } = useToast();
@@ -681,7 +694,10 @@ export function CustomerProfileSheet({
   const canViewCrm = can("crm", "view");
   const canEditClientes = can("clientes", "edit");
   const canEditInbox = can("inbox", "edit");
+  const isAdmin = profile?.role === "admin";
   const setChatResolution = useSetChatResolution();
+  const deleteChat = useDeleteWhatsappChat();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const canActOnChat = canAtendimentoActOnChat(profile?.role, chat?.assigneeId, profile?.id);
   const { data: negotiations = [], isLoading: negLoading } = useCrmNegotiationsForCustomer(customer?.id, {
     enabled: Boolean(open && customer?.id && isSupabaseConfigured),
@@ -931,6 +947,19 @@ export function CustomerProfileSheet({
                         </Button>
                       ) : null}
                     </div>
+                  ) : null}
+                  {isAdmin && chat ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={deleteChat.isPending}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="mt-1 h-9 w-full rounded-xl border border-[var(--crm-danger-border,rgba(220,38,38,0.25))] bg-transparent px-2.5 text-xs font-semibold text-[var(--crm-danger,#dc2626)] hover:bg-[var(--crm-danger-tint,rgba(220,38,38,0.08))] hover:text-[var(--crm-danger,#dc2626)]"
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      {deleteChat.isPending ? "Excluindo..." : "Excluir conversa"}
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -1250,6 +1279,43 @@ export function CustomerProfileSheet({
         setLeadPrefill(null);
       }}
     />
+    <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir esta conversa?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Todas as mensagens, notas, etiquetas e histórico desta conversa serão removidos
+            permanentemente. O cadastro do cliente continua intacto. Essa ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteChat.isPending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!chat || deleteChat.isPending}
+            onClick={async (e) => {
+              e.preventDefault();
+              if (!chat) return;
+              try {
+                await deleteChat.mutateAsync({ chatId: chat.id });
+                toast({ title: "Conversa excluída" });
+                setDeleteConfirmOpen(false);
+                onOpenChange(false);
+                onChatDeleted?.(chat.id);
+              } catch (err) {
+                toast({
+                  title: "Não foi possível excluir",
+                  description: err instanceof Error ? err.message : "Erro inesperado.",
+                  variant: "destructive",
+                });
+              }
+            }}
+            className="bg-[var(--crm-danger,#dc2626)] text-white hover:bg-[var(--crm-danger,#dc2626)]/90"
+          >
+            {deleteChat.isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }

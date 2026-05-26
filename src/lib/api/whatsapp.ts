@@ -587,6 +587,40 @@ export function useLinkWhatsappChatCustomer(
   });
 }
 
+export async function deleteWhatsappChat(chatId: string): Promise<void> {
+  if (!isSupabaseConfigured || !chatId) {
+    return;
+  }
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  // RLS (admin-only DELETE policy) é a fonte da verdade; o filtro por tenant
+  // só evita race entre sessões com tenants diferentes.
+  const { error } = await supabase
+    .from("whatsapp_chats")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("id", chatId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export function useDeleteWhatsappChat(
+  options?: UseMutationOptions<void, Error, { chatId: string }>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ chatId }) => deleteWhatsappChat(chatId),
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
 export const INBOX_MESSAGES_PAGE_SIZE = 50;
 
 export type InboxMessagesPageCursor = {

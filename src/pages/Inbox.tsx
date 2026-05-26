@@ -2719,6 +2719,10 @@ export default function Inbox() {
         chat={activeChat}
         messages={messages}
         crmActionsLocked={inboxLeadLocked || !canEditInbox || !canEditCrm}
+        onChatDeleted={() => {
+          setActiveChatId(null);
+          setProfileOpen(false);
+        }}
       />
 
       {/* Diálogo de atribuição/transferência de conversa */}
