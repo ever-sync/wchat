@@ -1,19 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { formatBRL } from "@/lib/format";
-import {
-  Bell,
-  AlarmClock,
-  BellOff,
-  Briefcase,
-  Hand,
-  Pause,
-  Play,
-  ShoppingCart,
-  ArrowRightLeft,
-  UserRound,
-  Users,
-} from "lucide-react";
+import { Briefcase, Hand } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,13 +15,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AssignChatDialog } from "@/components/inbox/AssignChatDialog";
+import { ChatHeaderActions } from "@/components/inbox/ChatHeaderActions";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import { ConversationList } from "@/components/inbox/ConversationList";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
-import { CallButton } from "@/components/crm/CallButton";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
 import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -71,8 +58,6 @@ import {
   useAtendimentoUsers,
   useChatTags,
   useClaimChat,
-  useClearChatSnooze,
-  useSetChatAiMode,
   useSnoozeChat,
 } from "@/lib/api/chat-tags";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
@@ -100,7 +85,6 @@ import {
 } from "@/lib/crm/negotiation-assignee";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
-import { isChatSnoozed } from "@/lib/inbox-chat-rules";
 import { useQuickReplies } from "@/lib/api/quick-replies";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import {
@@ -127,16 +111,6 @@ import {
 
 function formatMoney(value: number) {
   return formatBRL(value);
-}
-
-/** Mostra o nome da ação ao passar o mouse sobre um botão de ícone do cabeçalho. */
-function IconTip({ label, children }: { label: ReactNode; children: ReactElement }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 export default function Inbox() {
@@ -236,15 +210,6 @@ export default function Inbox() {
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
   const snoozeChatMutation = useSnoozeChat();
-  const clearSnoozeMutation = useClearChatSnooze();
-  const setAiModeMutation = useSetChatAiMode({
-    onError: (error) =>
-      toast({
-        title: "Não foi possível alterar a IA",
-        description: error instanceof Error ? error.message : "Tente novamente.",
-        variant: "destructive",
-      }),
-  });
 
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
@@ -1564,328 +1529,76 @@ export default function Inbox() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {offerClaimBoth && linkedNegotiation ? (
-                    <IconTip label="Assumir ambos">
-                    <button
-                      type="button"
-                      onClick={() => void handleClaimChatAndNegotiation()}
-                      disabled={
-                        claimChatMutation.isPending ||
-                        claimCrmNegotiation.isPending ||
-                        releaseCrmNegotiation.isPending ||
-                        !canEditInbox ||
-                        !canEditCrm
-                      }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                      aria-label="Assumir ambos"
-                      data-testid="inbox-claim-both"
-                    >
-                      <Hand className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  ) : null}
-                  {!activeChat.assigneeId && !offerClaimBoth ? (
-                    <IconTip label="Assumir">
-                    <button
-                      type="button"
-                      onClick={() => void claimChatMutation.mutateAsync(activeChat.id)}
-                      disabled={
-                        claimChatMutation.isPending ||
-                        !canEditInbox ||
-                        claimCrmNegotiation.isPending ||
-                        releaseCrmNegotiation.isPending
-                      }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                      aria-label="Assumir conversa"
-                    >
-                      <Hand className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  ) : null}
-                  {showClaimNegotiation && linkedNegotiation && !offerClaimBoth ? (
-                    <IconTip label="Assumir negócio">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void (async () => {
-                          try {
-                            await claimCrmNegotiation.mutateAsync(linkedNegotiation.id);
-                            toast({
-                              title: "Negócio assumido",
-                              description: `Você é o responsável por "${linkedNegotiation.title}".`,
-                            });
-                          } catch (error) {
-                            toast({
-                              title: "Não foi possível assumir o negócio",
-                              description: error instanceof Error ? error.message : "Tente novamente.",
-                              variant: "destructive",
-                            });
-                          }
-                        })();
-                      }}
-                      disabled={
-                        claimCrmNegotiation.isPending ||
-                        claimChatMutation.isPending ||
-                        releaseCrmNegotiation.isPending ||
-                        !canEditCrm
-                      }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)] transition-colors hover:bg-[var(--crm-brand-tint-hover)]"
-                      aria-label="Assumir negócio"
-                    >
-                      <Briefcase className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  ) : null}
-                  {showReleaseNegotiation && linkedNegotiation ? (
-                    <IconTip label="Devolver negócio">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void (async () => {
-                          try {
-                            await releaseCrmNegotiation.mutateAsync(linkedNegotiation.id);
-                            toast({
-                              title: "Devolvido ao pool",
-                              description: `"${linkedNegotiation.title}" está sem responsável.`,
-                            });
-                          } catch (error) {
-                            toast({
-                              title: "Não foi possível devolver o negócio",
-                              description: error instanceof Error ? error.message : "Tente novamente.",
-                              variant: "destructive",
-                            });
-                          }
-                        })();
-                      }}
-                      disabled={
-                        releaseCrmNegotiation.isPending ||
-                        claimCrmNegotiation.isPending ||
-                        claimChatMutation.isPending ||
-                        !canEditCrm
-                      }
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)] transition-colors hover:bg-[var(--crm-brand-tint-hover)]"
-                      aria-label="Devolver negócio"
-                    >
-                      <Users className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  ) : null}
-                  {activeChannelAiEnabled && (() => {
-                    const aiPaused = activeChat.aiMode === "off" || activeChat.aiMode === "handoff";
-                    return (
-                      <IconTip label={aiPaused ? "Retomar IA" : "Pausar IA"}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!canEditInbox) {
-                              toast({
-                                title: "Ação indisponível",
-                                description: "Seu papel nao tem permissao para esta ação.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            if (!canActOnChat) {
-                              toast({
-                                title: "Assuma a conversa",
-                                description: chatAssigneeBlockedMessage(),
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            setAiModeMutation.mutate(
-                              { chatId: activeChat.id, aiMode: aiPaused ? "full" : "off" },
-                              {
-                                onSuccess: () =>
-                                  toast({
-                                    title: aiPaused
-                                      ? "IA reativada nesta conversa"
-                                      : "IA pausada nesta conversa",
-                                  }),
-                              },
-                            );
-                          }}
-                          disabled={setAiModeMutation.isPending || !canActOnChat || !canEditInbox}
-                          className={cn(
-                            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-45",
-                            aiPaused
-                              ? "text-muted-foreground hover:bg-wchat-100 hover:text-foreground"
-                              : "bg-primary text-primary-foreground hover:bg-primary/90",
-                          )}
-                          aria-label={aiPaused ? "Retomar IA" : "Pausar IA"}
-                        >
-                          {aiPaused ? (
-                            <Play className="h-4 w-4 fill-current" />
-                          ) : (
-                            <Pause className="h-4 w-4 fill-current" />
-                          )}
-                        </button>
-                      </IconTip>
-                    );
-                  })()}
-                  {isChatSnoozed(activeChat) ? (
-                    <IconTip label="Remover adiamento">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!canEditInbox) {
-                          toast({
-                            title: "Ação indisponível",
-                            description: "Seu papel nao tem permissao para adiar conversa.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        if (!canActOnChat) {
-                          toast({
-                            title: "Assuma a conversa",
-                            description: chatAssigneeBlockedMessage(),
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        void clearSnoozeMutation.mutateAsync(activeChat.id);
-                      }}
-                      disabled={clearSnoozeMutation.isPending || !canActOnChat || !canEditInbox}
-                      className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[var(--crm-amber-ink)] transition-colors hover:bg-[var(--crm-amber-tint)]"
-                      aria-label="Remover adiamento"
-                    >
-                      <AlarmClock className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  ) : (
-                    <IconTip label="Adiar conversa">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!canEditInbox) {
-                          toast({
-                            title: "Ação indisponível",
-                            description: "Seu papel nao tem permissao para adiar conversa.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        if (!canActOnChat) {
-                          toast({
-                            title: "Assuma a conversa",
-                            description: chatAssigneeBlockedMessage(),
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        setSnoozeDialogOpen(true);
-                      }}
-                      disabled={!canActOnChat || !canEditInbox}
-                      className="inline-flex h-10 items-center justify-center rounded-full px-3 text-sm text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
-                      aria-label="Adiar conversa"
-                    >
-                      <AlarmClock className="h-4 w-4" />
-                    </button>
-                    </IconTip>
-                  )}
-                  <IconTip label="Transferir">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canEditInbox) {
-                        toast({
-                          title: "Ação indisponível",
-                          description: "Seu papel nao tem permissao para atribuir conversa.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      if (
-                        profile?.role === "atendimento" &&
-                        activeChat.assigneeId &&
-                        activeChat.assigneeId !== profileId
-                      ) {
-                        toast({
-                          title: "Conversa de outro atendente",
-                          description: chatAssignedToOtherAttendantMessage(),
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      if (!isManagerInbox && !canActOnChat) {
-                        toast({
-                          title: "Assuma a conversa",
-                          description: chatAssigneeBlockedMessage(),
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setAssignDialogChatId(activeChat.id);
-                      setAssignDialogOpen(true);
-                    }}
-                    disabled={!canEditInbox}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                    data-testid="inbox-transfer-chat"
-                    aria-label="Transferir"
-                  >
-                    <ArrowRightLeft className="h-4 w-4" />
-                  </button>
-                  </IconTip>
-                  <IconTip label="Notificações">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void notificationSettings.setEnabled(!notificationSettings.enabled);
-                    }}
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
-                      notificationSettings.enabled &&
-                        notificationSettings.permission !== "denied"
-                        ? "bg-wchat-100 text-primary hover:bg-wchat-200"
-                        : "text-muted-foreground hover:bg-wchat-100 hover:text-foreground",
-                    )}
-                    aria-label="Notificações"
-                  >
-                    {notificationSettings.enabled &&
-                    notificationSettings.permission !== "denied" ? (
-                      <Bell className="h-4 w-4" />
-                    ) : (
-                      <BellOff className="h-4 w-4" />
-                    )}
-                  </button>
-                  </IconTip>
-                  <IconTip label="Venda">
-                  <button
-                    type="button"
-                    onClick={handleOpenSaleFlow}
-                    disabled={!canMarkSaleFromChat || !canEditCrm || !canEditInbox}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-wchat-100 text-foreground transition-colors hover:bg-wchat-200 disabled:pointer-events-none disabled:opacity-45"
-                    aria-label="Registrar venda"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                  </button>
-                  </IconTip>
-                  <IconTip label="Ligar">
-                    <span className="inline-flex">
-                      <CallButton
-                        phone={activeChat.remotePhoneE164 || activeChat.remotePhoneDigits || null}
-                        customerId={activeChat.customerId}
-                        chatId={activeChat.id}
-                        negotiationId={linkedNegotiation?.id ?? activeChat.primaryNegotiationId ?? null}
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-10 rounded-full text-muted-foreground hover:bg-wchat-100 hover:text-foreground"
-                      />
-                    </span>
-                  </IconTip>
-                  <IconTip label="Perfil do cliente">
-                  <button
-                    type="button"
-                    onClick={() => setProfileOpen(true)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
-                    aria-label="Perfil do cliente"
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </button>
-                  </IconTip>
-                </div>
+                <ChatHeaderActions
+                  chat={activeChat}
+                  negotiation={linkedNegotiation ?? null}
+                  canEditInbox={canEditInbox}
+                  canEditCrm={canEditCrm}
+                  canActOnChat={canActOnChat}
+                  canMarkSaleFromChat={canMarkSaleFromChat}
+                  isManagerInbox={isManagerInbox}
+                  activeChannelAiEnabled={activeChannelAiEnabled}
+                  offerClaimBoth={offerClaimBoth}
+                  showClaimNegotiation={showClaimNegotiation}
+                  showReleaseNegotiation={showReleaseNegotiation}
+                  viewerRole={profile?.role}
+                  viewerProfileId={profileId}
+                  claimPending={claimChatMutation.isPending}
+                  claimNegotiationPending={claimCrmNegotiation.isPending}
+                  releaseNegotiationPending={releaseCrmNegotiation.isPending}
+                  onClaimChat={async () => {
+                    try {
+                      await claimChatMutation.mutateAsync(activeChat.id);
+                    } catch (error) {
+                      toast({
+                        title: "Não foi possível assumir",
+                        description: error instanceof Error ? error.message : "Tente novamente.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  onClaimNegotiation={async () => {
+                    if (!linkedNegotiation) return;
+                    try {
+                      await claimCrmNegotiation.mutateAsync(linkedNegotiation.id);
+                      toast({
+                        title: "Negócio assumido",
+                        description: `Você é o responsável por "${linkedNegotiation.title}".`,
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Não foi possível assumir o negócio",
+                        description: error instanceof Error ? error.message : "Tente novamente.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  onReleaseNegotiation={async () => {
+                    if (!linkedNegotiation) return;
+                    try {
+                      await releaseCrmNegotiation.mutateAsync(linkedNegotiation.id);
+                      toast({
+                        title: "Devolvido ao pool",
+                        description: `"${linkedNegotiation.title}" está sem responsável.`,
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Não foi possível devolver o negócio",
+                        description: error instanceof Error ? error.message : "Tente novamente.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  onClaimChatAndNegotiation={handleClaimChatAndNegotiation}
+                  notificationSettings={notificationSettings}
+                  onOpenSnoozeDialog={() => setSnoozeDialogOpen(true)}
+                  onOpenAssignDialog={() => {
+                    setAssignDialogChatId(activeChat.id);
+                    setAssignDialogOpen(true);
+                  }}
+                  onOpenProfile={() => setProfileOpen(true)}
+                  onOpenSaleFlow={handleOpenSaleFlow}
+                />
               </>
             ) : (
               <div className="px-1">
