@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Hand, Kanban, Pencil, Phone, Plus, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Kanban, Pause, Pencil, Phone, Play, Plus, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -998,7 +998,11 @@ export function CustomerProfileSheet({
                             : "bg-[var(--crm-brand)] text-white hover:bg-[var(--crm-brand)]/90",
                         )}
                       >
-                        <Hand className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {aiPaused ? (
+                          <Play className="mr-1.5 h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
+                        ) : (
+                          <Pause className="mr-1.5 h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
+                        )}
                         {setAiMode.isPending
                           ? aiPaused ? "Retomando..." : "Pausando..."
                           : aiPaused ? "Retomar IA" : "Pausar IA"}

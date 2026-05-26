@@ -7,6 +7,8 @@ import {
   BellOff,
   Briefcase,
   Hand,
+  Pause,
+  Play,
   Plus,
   ShoppingCart,
   Trash2,
@@ -2401,7 +2403,11 @@ export default function Inbox() {
                           )}
                           aria-label={aiPaused ? "Retomar IA" : "Pausar IA"}
                         >
-                          <Hand className="h-4 w-4" />
+                          {aiPaused ? (
+                            <Play className="h-4 w-4 fill-current" />
+                          ) : (
+                            <Pause className="h-4 w-4 fill-current" />
+                          )}
                         </button>
                       </IconTip>
                     );
