@@ -19,6 +19,7 @@ import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
 import { redactPii } from "../_shared/pii-redaction.ts";
 import { assessGrounding, type CritiqueResult } from "../_shared/ai-critique.ts";
 import { emitAiWebhook } from "../_shared/ai-webhooks.ts";
+import { summarizeOldMessages } from "../_shared/ai-summarize.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
 import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
@@ -30,6 +31,11 @@ type Admin = ReturnType<typeof createAdminClient>;
 const DRAIN_BATCH = 10;
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 20;
+// Summarization: gera resumo quando o chat passa de SUMMARY_TRIGGER msgs;
+// reaproveita o resumo existente até acumular SUMMARY_REFRESH_AFTER msgs
+// novas (evita queimar Haiku a cada turno em chat que cresce devagar).
+const SUMMARY_TRIGGER = 30;
+const SUMMARY_REFRESH_AFTER = 10;
 const CHAT_LOCK_TTL_SECONDS = 120;
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // recupera jobs 'processing' órfãos (worker caiu)
 // Hybrid retrieval: busca larga (vector + BM25 + RRF) → reranker → corte final.
@@ -308,6 +314,11 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   const conversation = buildConversation((rows ?? []).reverse());
   if (conversation.length === 0) return;
 
+  // Conversation summary: em chats longos (>SUMMARY_TRIGGER msgs) gera/atualiza
+  // resumo das mensagens ANTES da janela atual e injeta no system. Mantém
+  // contexto sem inflar o prompt; reaproveita cache do chat.
+  const conversationSummary = await maybeRefreshSummary(admin, chatId, chat);
+
   // RAG: busca os trechos relevantes (acima do corte de similaridade) da base do tenant.
   const startedAt = Date.now();
   const userMessage = lastUserText(conversation);
@@ -321,6 +332,7 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     fieldNames,
     customerFacts,
     knowledge: retrieved.map((r) => r.content),
+    conversationSummary,
   });
   const ctx: ToolContext = { admin, tenantId, chat, negotiationId, customerId, aiMode };
 
@@ -781,6 +793,88 @@ async function retrieveKnowledge(admin: Admin, tenantId: string, query: string):
 // no painel se algum cliente passar disso.
 const MAX_CUSTOMER_FACTS = 30;
 
+/**
+ * Em chats longos, gera/atualiza um resumo das mensagens antes da janela atual.
+ * - Só roda se o chat tem >= SUMMARY_TRIGGER mensagens totais.
+ * - Reaproveita resumo cached se não acumulou SUMMARY_REFRESH_AFTER msgs novas.
+ * - Persiste em whatsapp_chats (cache por chat).
+ * Best-effort: falha devolve string vazia (sem resumo no system).
+ */
+async function maybeRefreshSummary(
+  admin: Admin,
+  chatId: string,
+  chat: Record<string, unknown>,
+): Promise<string> {
+  const cached = (chat.ai_conversation_summary as string | null | undefined) ?? "";
+  const cachedUpTo = (chat.ai_summary_up_to_msg_id as string | null | undefined) ?? null;
+
+  const { count: total } = await admin
+    .from("whatsapp_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("chat_id", chatId);
+  if ((total ?? 0) < SUMMARY_TRIGGER) return "";
+
+  // Mensagens ANTES da janela visível ao Claude (as últimas HISTORY_LIMIT já
+  // vão verbatim no array). cachedUpTo = última msg incluída no resumo anterior.
+  // Quantas mensagens "novas pra resumir" existem entre o resumo cached e o
+  // início da janela atual.
+  let cachedUpToTime: string | null = null;
+  if (cachedUpTo) {
+    const { data } = await admin
+      .from("whatsapp_messages")
+      .select("created_at")
+      .eq("id", cachedUpTo)
+      .maybeSingle();
+    cachedUpToTime = (data?.created_at as string | undefined) ?? null;
+  }
+
+  // Cut-off: pega tudo MAIS ANTIGO que as últimas HISTORY_LIMIT msgs (essas vão
+  // verbatim, não entram no resumo).
+  const { data: windowEdge } = await admin
+    .from("whatsapp_messages")
+    .select("created_at, id")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: false })
+    .range(HISTORY_LIMIT - 1, HISTORY_LIMIT - 1)
+    .maybeSingle();
+  const cutoffCreatedAt = (windowEdge?.created_at as string | undefined) ?? null;
+  if (!cutoffCreatedAt) return cached; // não há "antigas" o suficiente, mantém cached
+
+  let query = admin
+    .from("whatsapp_messages")
+    .select("id, direction, body_text, created_at")
+    .eq("chat_id", chatId)
+    .lt("created_at", cutoffCreatedAt)
+    .order("created_at", { ascending: true });
+  if (cachedUpToTime) query = query.gt("created_at", cachedUpToTime);
+  const { data: pending } = await query;
+
+  const fresh = (pending ?? []).filter((r) => String(r.body_text ?? "").trim().length > 0);
+  // Se já temos resumo e ainda não acumulou bastante coisa nova, reaproveita.
+  if (cached && fresh.length < SUMMARY_REFRESH_AFTER) return cached;
+  if (fresh.length === 0) return cached;
+
+  const summary = await summarizeOldMessages({
+    previousSummary: cached || null,
+    messages: fresh.map((r) => ({
+      role: r.direction === "inbound" ? "user" : "assistant",
+      text: redactPii(String(r.body_text ?? "").trim()),
+    })),
+  });
+  if (!summary.trim()) return cached;
+
+  const lastMsg = fresh[fresh.length - 1];
+  await admin
+    .from("whatsapp_chats")
+    .update({
+      ai_conversation_summary: summary,
+      ai_summary_up_to_msg_id: lastMsg.id,
+      ai_summary_updated_at: new Date().toISOString(),
+    })
+    .eq("id", chatId);
+  return summary;
+}
+
 async function loadCustomerFacts(admin: Admin, customerId: string): Promise<string[]> {
   const { data } = await admin
     .from("customer_ai_facts")
@@ -990,6 +1084,8 @@ function buildSystem(
     fieldNames: string[];
     customerFacts: string[];
     knowledge: string[];
+    /** Resumo de mensagens antigas (gerado por Haiku) — vazio quando o chat é curto. */
+    conversationSummary: string;
   },
 ): AnthropicSystemBlock[] {
   // Persona do canal (se houver) > persona do tenant > padrão do sistema.
@@ -1017,6 +1113,19 @@ function buildSystem(
   }
   if (context.length > 0) {
     blocks.push({ type: "text", text: `Contexto desta conversa: ${context.join(" ")}` });
+  }
+
+  // Resumo das mensagens anteriores em chats longos. Vem antes da memória do
+  // cliente e do RAG porque é o histórico imediato (mensagens fora da janela
+  // de 20 mais recentes que já estão no array de messages).
+  if (opts.conversationSummary && opts.conversationSummary.trim().length > 0) {
+    blocks.push({
+      type: "text",
+      text:
+        "Resumo das mensagens anteriores desta conversa (o que ficou fora da janela recente):\n\n" +
+        opts.conversationSummary.trim() +
+        "\n\nAs últimas mensagens completas vêm a seguir no histórico.",
+    });
   }
 
   // Memória de longo prazo: fatos persistentes do cliente. Bloco separado e
