@@ -76,6 +76,7 @@ import {
   useInboxNotificationSettings,
 } from "@/hooks/useInboxInboundNotifications";
 import { useInboxTitleBadge } from "@/hooks/useInboxTitleBadge";
+import { isChatWaitingForCustomer } from "@/lib/inbox-chat-rules";
 import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { useInboxComposer } from "@/hooks/useInboxComposer";
@@ -245,6 +246,18 @@ export default function Inbox() {
         c.status === "open",
     ).length;
   }, [isManagerInbox, chats]);
+
+  /**
+   * Lista efetivamente exibida na barra lateral. O filtro "Aguardando cliente"
+   * é client-side (heurística em isChatWaitingForCustomer) — server traz a
+   * fila do operador inteira via assigneeId="mine".
+   */
+  const displayedChats = useMemo(() => {
+    if (quickFilter === "waiting_customer") {
+      return chats.filter((c) => isChatWaitingForCustomer(c));
+    }
+    return chats;
+  }, [chats, quickFilter]);
   // Badge "(N) Distribui Bot" no titulo da aba enquanto em background.
   const totalUnread = useMemo(
     () => chats.reduce((acc, chat) => acc + (chat.unreadCount ?? 0), 0),
@@ -681,6 +694,11 @@ export default function Inbox() {
             } else if (value === "unread") {
               setAssigneeFilter("all");
               setSnoozedFilter("active");
+            } else if (value === "waiting_customer") {
+              // Mostra a fila do operador (server traz assigneeId="mine") e
+              // o filtro client-side `isChatWaitingForCustomer` afina depois.
+              setAssigneeFilter("mine");
+              setSnoozedFilter("active");
             } else {
               setAssigneeFilter("all");
               setSnoozedFilter("active");
@@ -697,7 +715,7 @@ export default function Inbox() {
           tagsLoading={tagsLoading}
           instances={instances}
           chatsLoading={chatsLoading}
-          chats={chats}
+          chats={displayedChats}
           activeChatId={activeChat?.id ?? null}
           onSelectChat={stableSelectChat}
           onPrefetchChat={stablePrefetchChat}

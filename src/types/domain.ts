@@ -71,7 +71,12 @@ export type ChatResolution = "open" | "pending" | "resolved" | "waiting_customer
 export type InboxListScope = "all" | "open" | "closed" | "resolved" | "lost";
 
 /** Chips rápidos na lista de conversas (Inbox). */
-export type InboxQuickFilter = "mine" | "unread" | "unassigned" | "hidden";
+export type InboxQuickFilter =
+  | "mine"
+  | "unread"
+  | "unassigned"
+  | "hidden"
+  | "waiting_customer";
 export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
 export type MessageActorType = "human" | "ai" | "system";
 export type MessageDirection = "inbound" | "outbound";

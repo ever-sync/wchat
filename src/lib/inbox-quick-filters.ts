@@ -5,6 +5,7 @@ export const INBOX_QUICK_FILTER_OPTIONS: ReadonlyArray<{ id: InboxQuickFilter; l
   { id: "mine", label: "Minhas" },
   { id: "unread", label: "Não lidas" },
   { id: "unassigned", label: "Sem atendente" },
+  { id: "waiting_customer", label: "Aguardando cliente" },
   { id: "hidden", label: "Ocultas" },
 ];
 
@@ -40,6 +41,16 @@ export function inboxFiltersFromQuickFilter(
     case "unassigned":
       return {
         assigneeId: "unassigned",
+        hideSnoozed: true,
+        snoozedOnly: false,
+        unreadOnly: false,
+      };
+    case "waiting_customer":
+      // Filtro real é client-side (isChatWaitingForCustomer). Aqui só garantimos
+      // que o server traga as conversas do operador atual com fila ativa.
+      return {
+        assigneeId: "mine",
+        currentUserId,
         hideSnoozed: true,
         snoozedOnly: false,
         unreadOnly: false,

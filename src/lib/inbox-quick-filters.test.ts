@@ -27,6 +27,16 @@ describe("inboxFiltersFromQuickFilter", () => {
   it("mapeia Não lidas para unreadOnly", () => {
     expect(inboxFiltersFromQuickFilter("unread", undefined).unreadOnly).toBe(true);
   });
+
+  it("Aguardando cliente passa pelo escopo 'mine' (filtro real é client-side)", () => {
+    expect(inboxFiltersFromQuickFilter("waiting_customer", "u1")).toEqual({
+      assigneeId: "mine",
+      currentUserId: "u1",
+      hideSnoozed: true,
+      snoozedOnly: false,
+      unreadOnly: false,
+    });
+  });
 });
 
 describe("inboxScopeFiltersForQuickFilter", () => {
@@ -49,5 +59,8 @@ describe("inboxQuickFilterLabel", () => {
   it("retorna Todas quando sem filtro", () => {
     expect(inboxQuickFilterLabel(null)).toBe("Todas");
     expect(inboxQuickFilterLabel("mine")).toBe("Minhas");
+  });
+  it("traduz waiting_customer", () => {
+    expect(inboxQuickFilterLabel("waiting_customer")).toBe("Aguardando cliente");
   });
 });
