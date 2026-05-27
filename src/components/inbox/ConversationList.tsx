@@ -481,10 +481,13 @@ export function ConversationList({
           </div>
 
           <div
-            className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
-            role="tablist"
-            aria-label="Filtros rápidos de conversas"
+            className="relative -mx-1 px-1 before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:z-10 before:w-4 before:bg-gradient-to-r before:from-background before:to-transparent after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:z-10 after:w-4 after:bg-gradient-to-l after:from-background after:to-transparent"
           >
+            <div
+              className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin] [-webkit-overflow-scrolling:touch]"
+              role="tablist"
+              aria-label="Filtros rápidos de conversas"
+            >
             <button
               type="button"
               role="tab"
@@ -519,6 +522,7 @@ export function ConversationList({
                 </button>
               );
             })}
+            </div>
           </div>
 
           {selectedTagIds.length > 0 ? (

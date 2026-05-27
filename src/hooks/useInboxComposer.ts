@@ -235,10 +235,78 @@ export function useInboxComposer({
   }
 
   // -------- Anexo (arquivo) --------
+  /**
+   * Faz upload de um arquivo e dispara o envio como mensagem independente.
+   * Usado no fluxo multi-anexo (cada arquivo vira uma mensagem própria, sem caption).
+   */
+  async function uploadAndSendStandalone(rawFile: File): Promise<void> {
+    if (!chat) return;
+    let file = rawFile;
+    try {
+      const compression = await maybeCompressImage(rawFile);
+      if (compression.compressed) file = compression.file;
+    } catch {
+      // Falha na compressão: usa o original.
+    }
+    if (file.size > WHATSAPP_MEDIA_MAX_BYTES) {
+      toast({
+        title: "Arquivo muito grande",
+        description: `${file.name}: limite é ${WHATSAPP_MEDIA_MAX_BYTES / (1024 * 1024)} MB.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    let mediaValue: string;
+    try {
+      mediaValue = isSupabaseConfigured
+        ? await uploadWhatsappMediaFile(file)
+        : await readFileAsDataUrl(file);
+    } catch (uploadError) {
+      const msg =
+        uploadError instanceof Error ? uploadError.message : "Falha no upload do arquivo.";
+      toast({ title: `Falha ao enviar ${file.name}`, description: msg, variant: "destructive" });
+      return;
+    }
+    const nextMessageType = detectMessageTypeFromFile(file);
+    sendMessage.mutate({
+      instanceId: chat.instanceId,
+      chatId: chat.id,
+      remoteJid: chat.remoteJid,
+      messageType: nextMessageType,
+      bodyText: "",
+      mediaUrl: mediaValue,
+      payload: { fileName: file.name, mimeType: file.type, size: file.size },
+      simulateTypingMs: undefined,
+      quotedMessageId: undefined,
+    });
+  }
+
   async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const original = event.target.files?.[0];
+    const allFiles = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!original) return;
+    if (allFiles.length === 0) return;
+
+    // Multi-anexo: envia cada arquivo como mensagem própria, sem caption.
+    if (allFiles.length > 1) {
+      if (inboxLeadLocked || !canEditInbox) {
+        toast({
+          title: "Ação indisponível",
+          description: "Assuma a conversa para enviar arquivos.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: `Enviando ${allFiles.length} arquivos`,
+        description: "Cada arquivo será enviado como uma mensagem.",
+      });
+      for (const f of allFiles) {
+        await uploadAndSendStandalone(f);
+      }
+      return;
+    }
+
+    const original = allFiles[0];
 
     // Compressão client-side de imagens grandes (sem perda visível).
     let file = original;

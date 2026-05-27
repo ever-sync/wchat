@@ -2040,7 +2040,7 @@ export default function Crm() {
                                 </Button>
                               ) : null}
                             </div>
-                            <CrmNegotiationAlertBadges alerts={rowAlerts} compact />
+                            <CrmNegotiationAlertBadges alerts={rowAlerts} compact nextTaskAt={row.nextTaskAt} />
                           </div>
                         </TableCell>
                         <TableCell className="text-[var(--crm-ink-2)]">{stageTitleForNegotiation(row, funnels)}</TableCell>
@@ -2283,7 +2283,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
         <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--crm-ink-3)]" aria-hidden />
       </div>
       <p className="mb-2 text-[15px] font-bold leading-snug text-[var(--crm-ink)]">{card.title}</p>
-      <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" />
+      <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" nextTaskAt={card.nextTaskAt} />
       <div className="mb-3 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
         <span className="inline-flex items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1">

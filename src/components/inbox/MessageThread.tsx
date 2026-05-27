@@ -167,16 +167,20 @@ export function MessageThread({
   }, [searchOpen, matchIndices, activeMatchIndex, virtualizer]);
 
   // Atalho global de busca (Cmd/Ctrl+F) e ESC pra fechar.
+  // Também escuta evento "inbox:open-thread-search" pra ser disparado por botões externos.
   useEffect(() => {
+    function openAndFocus() {
+      setSearchOpen(true);
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      });
+    }
     function onKeydown(e: KeyboardEvent) {
       const isMod = e.metaKey || e.ctrlKey;
       if (isMod && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
-        setSearchOpen(true);
-        requestAnimationFrame(() => {
-          searchInputRef.current?.focus();
-          searchInputRef.current?.select();
-        });
+        openAndFocus();
       } else if (e.key === "Escape" && searchOpen) {
         // Só fecha se a busca está aberta; se foco está em outro input, deixa o
         // handler local dele tomar a decisão.
@@ -188,7 +192,11 @@ export function MessageThread({
       }
     }
     document.addEventListener("keydown", onKeydown);
-    return () => document.removeEventListener("keydown", onKeydown);
+    document.addEventListener("inbox:open-thread-search", openAndFocus);
+    return () => {
+      document.removeEventListener("keydown", onKeydown);
+      document.removeEventListener("inbox:open-thread-search", openAndFocus);
+    };
   }, [searchOpen]);
 
   function goToNextMatch() {

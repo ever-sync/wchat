@@ -9,6 +9,7 @@ import {
   Hand,
   Pause,
   Play,
+  Search,
   ShoppingCart,
   Tag,
   UserRound,
@@ -229,6 +230,16 @@ export function ChatHeaderActions({
 
   return (
     <div className="flex items-center gap-2">
+      <IconTip label="Buscar na conversa">
+        <button
+          type="button"
+          onClick={() => document.dispatchEvent(new CustomEvent("inbox:open-thread-search"))}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
+          aria-label="Buscar na conversa"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+      </IconTip>
       {offerClaimBoth && negotiation ? (
         <IconTip label="Assumir ambos">
           <button

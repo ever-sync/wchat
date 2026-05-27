@@ -336,6 +336,7 @@ export function MessageInput({
         <input
           ref={attachmentInputRef}
           type="file"
+          multiple
           className="hidden"
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
           onChange={onAttachmentChange}
