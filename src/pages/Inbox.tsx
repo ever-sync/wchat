@@ -19,6 +19,7 @@ import { AssignChatDialog } from "@/components/inbox/AssignChatDialog";
 import { ChatHeaderActions } from "@/components/inbox/ChatHeaderActions";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import { ConversationList } from "@/components/inbox/ConversationList";
+import { ChatFollowupBadge } from "@/components/inbox/ChatFollowupBadge";
 import { CustomerLocalTime } from "@/components/inbox/CustomerLocalTime";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
@@ -82,6 +83,7 @@ import { isChatWaitingForCustomer } from "@/lib/inbox-chat-rules";
 import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { useInboxComposer } from "@/hooks/useInboxComposer";
+import { useFollowupsForChat } from "@/hooks/useFollowupsForChat";
 import { useRunPlayground } from "@/lib/api/ai-agent";
 import { buildCopilotPromptFromThread } from "@/lib/inboxAiCopilot";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
@@ -109,6 +111,7 @@ export default function Inbox() {
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
   const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false);
+  // O `activeChat` ainda não está disponível neste ponto — usaremos abaixo.
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(() => searchParams.get("chatId"));
@@ -223,6 +226,7 @@ export default function Inbox() {
         .map((p) => ({ productId: p.productId as string, quantity: p.quantity, unitValue: p.unitPrice })),
     [linkedNegotiationProducts],
   );
+  const { followups: chatFollowups } = useFollowupsForChat(activeChat);
 
   const {
     claimChat: claimChatMutation,
@@ -854,6 +858,10 @@ export default function Inbox() {
                       <p className="min-w-0 truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
                       <CustomerLocalTime
                         phone={activeChat.remotePhoneE164 ?? activeChat.remotePhoneDigits ?? null}
+                      />
+                      <ChatFollowupBadge
+                        followups={chatFollowups}
+                        onClick={() => setFollowUpDialogOpen(true)}
                       />
                       {activeChat.customerId && !linkedNegotiation && !linkedNegotiationLoading ? (
                         <Button
