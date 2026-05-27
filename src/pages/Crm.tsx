@@ -668,6 +668,50 @@ export default function Crm() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
+  // Espelha o estado de filtros na URL — permite compartilhar visões filtradas
+  // e preserva o contexto após reload. Usa replace p/ não inflar o histórico.
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        const apply = (key: string, value: string | null | undefined) => {
+          if (value === null || value === undefined || value === "") {
+            next.delete(key);
+          } else {
+            next.set(key, value);
+          }
+        };
+        apply("funnel", funnelId === DEFAULT_CRM_FUNNELS[0].id ? null : funnelId);
+        apply("q", searchTerm.trim() || null);
+        apply("owner", appliedOwner.mode === "all" ? null : appliedOwner.mode);
+        apply(
+          "owners",
+          appliedOwner.mode === "custom" && appliedOwner.ids.length > 0
+            ? appliedOwner.ids.join(",")
+            : null,
+        );
+        apply("status", statusFilter === "all" ? null : statusFilter);
+        apply("alerts", alertsFilter === "off" ? null : alertsFilter);
+        apply("from", creationDateFilter?.from ?? null);
+        apply("to", creationDateFilter?.to ?? null);
+        apply("sort", sortId === "created_desc" ? null : sortId);
+        apply("view", view === "board" ? null : view);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [
+    alertsFilter,
+    appliedOwner,
+    creationDateFilter,
+    funnelId,
+    searchTerm,
+    setSearchParams,
+    sortId,
+    statusFilter,
+    view,
+  ]);
+
   // Realtime para crm_negotiations / tenant_crm_funnel_config é tratado
   // globalmente em useCrmRealtimeSync, montado via CrmNotificationListener.
 
@@ -687,8 +731,39 @@ export default function Crm() {
     setAppliedOwner({ mode: "all" });
     setStatusFilter("all");
     setAlertsFilter("off");
+    setSearchTerm("");
     toast({ title: "Filtros limpos", description: "Exibindo todas as negociações do funil." });
   }, [toast]);
+
+  const applySavedView = useCallback(
+    (viewId: SavedViewId) => {
+      // Vista 1: minhas quentes — em andamento, comigo, qualif. alta primeiro.
+      // Vista 2: fechando logo — em andamento, próx. data de fechamento.
+      // Vista 3: negócios frios — só com alerta de "parado", contato mais antigo no topo.
+      if (viewId === "hot") {
+        setAppliedOwner(profileId ? { mode: "mine" } : { mode: "all" });
+        setStatusFilter("em_andamento");
+        setAlertsFilter("off");
+        setSortId("qualified_desc");
+      } else if (viewId === "closing") {
+        setAppliedOwner({ mode: "all" });
+        setStatusFilter("em_andamento");
+        setAlertsFilter("off");
+        setSortId("closing");
+      } else if (viewId === "cold") {
+        setAppliedOwner({ mode: "all" });
+        setStatusFilter("em_andamento");
+        setAlertsFilter("stale");
+        setSortId("contact_oldest");
+      }
+      setCreationDateFilter(null);
+      setSearchTerm("");
+      setSavedViewsOpen(false);
+      const label = SAVED_VIEWS.find((v) => v.id === viewId)?.label ?? "Vista salva";
+      toast({ title: `Vista aplicada: ${label}` });
+    },
+    [profileId, toast],
+  );
 
   const negotiationsBeforeAlertsFilter = useMemo(() => {
     let list: CrmNegotiation[];
@@ -721,6 +796,14 @@ export default function Crm() {
     statusFilter,
   ]);
 
+  const customerById = useMemo(() => {
+    const map = new Map<string, (typeof customers)[number]>();
+    for (const c of customers) {
+      map.set(c.id, c);
+    }
+    return map;
+  }, [customers]);
+
   const filteredNegotiations = useMemo(() => {
     let list = negotiationsBeforeAlertsFilter;
     if (alertsFilter !== "off") {
@@ -728,8 +811,33 @@ export default function Crm() {
         negotiationMatchesAlertsFilter(n, alertsFilter, undefined, staleNegotiationDays),
       );
     }
+    const q = deferredSearchTerm.trim().toLowerCase();
+    if (q) {
+      const digits = q.replace(/\D/g, "");
+      list = list.filter((n) => {
+        if (n.title?.toLowerCase().includes(q)) return true;
+        const cid = n.customerId;
+        if (cid) {
+          const c = customerById.get(cid);
+          if (c) {
+            if (c.nome?.toLowerCase().includes(q)) return true;
+            if (c.telefone?.toLowerCase().includes(q)) return true;
+            if (c.email?.toLowerCase().includes(q)) return true;
+            if (digits && c.phoneDigits?.includes(digits)) return true;
+          }
+        }
+        return false;
+      });
+    }
     return [...list].sort((a, b) => compareNegotiations(a, b, sortId));
-  }, [alertsFilter, negotiationsBeforeAlertsFilter, sortId, staleNegotiationDays]);
+  }, [
+    alertsFilter,
+    customerById,
+    deferredSearchTerm,
+    negotiationsBeforeAlertsFilter,
+    sortId,
+    staleNegotiationDays,
+  ]);
 
   const alertCountsInView = useMemo(() => {
     let any = 0;
@@ -819,7 +927,8 @@ export default function Crm() {
     (creationDateFilter ? 1 : 0) +
     (appliedOwner.mode !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
-    (alertsFilter !== "off" ? 1 : 0);
+    (alertsFilter !== "off" ? 1 : 0) +
+    (searchTerm.trim() ? 1 : 0);
 
   const filteredAttendants = useMemo(() => {
     const q = ownerSearch.trim().toLowerCase();
@@ -922,6 +1031,36 @@ export default function Crm() {
       });
     }
   }, [canDeleteNegotiation, deleteCrmNegotiation, deleteTarget, toast]);
+
+  /** Edição inline a partir do card do Kanban (estrelas/valor/responsável). */
+  const handleUpdateInlineNegotiation = useCallback(
+    async (
+      card: CrmNegotiation,
+      patch: { qualification?: number; totalValue?: number; assigneeId?: string },
+    ) => {
+      if (!isPersistedCrmNegotiationId(card.id)) {
+        return;
+      }
+      if (!canEditCrm) {
+        toast({
+          title: "Ação indisponível",
+          description: "Seu papel não tem permissão para editar negociações.",
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
+        await updateCrmNegotiation.mutateAsync({ id: card.id, patch });
+      } catch (err) {
+        toast({
+          title: "Não foi possível salvar",
+          description: err instanceof Error ? err.message : "Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    },
+    [canEditCrm, toast, updateCrmNegotiation],
+  );
 
   const negotiationsWithAlertsCount = alertCountsInView.any;
 
@@ -1787,7 +1926,75 @@ export default function Crm() {
           </PopoverContent>
         </Popover>
 
-        <div className="ml-auto">
+        <div className="relative ml-auto flex min-w-[180px] max-w-[280px] flex-1 items-center">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--crm-ink-3)]"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar negócio, cliente ou telefone"
+            aria-label="Buscar negociações"
+            className="h-9 border-[var(--crm-border-2)] bg-card pl-9 pr-8 text-sm"
+          />
+          {searchTerm ? (
+            <button
+              type="button"
+              onClick={() => setSearchTerm("")}
+              aria-label="Limpar busca"
+              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface-2)] hover:text-[var(--crm-ink)]"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          ) : null}
+        </div>
+
+        <Popover open={savedViewsOpen} onOpenChange={setSavedViewsOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 gap-2 rounded-md border-[var(--crm-border)] bg-card px-3 text-sm font-medium text-[var(--crm-ink-2)] shadow-sm hover:bg-[var(--crm-surface)]"
+            >
+              <Bookmark className="h-4 w-4 text-[var(--crm-brand-2)]" aria-hidden />
+              Vistas
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="w-72 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+          >
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
+              Vistas salvas
+            </div>
+            <Separator />
+            <ul className="py-1">
+              {SAVED_VIEWS.map((v) => {
+                const Icon = v.icon;
+                return (
+                  <li key={v.id}>
+                    <button
+                      type="button"
+                      onClick={() => applySavedView(v.id)}
+                      className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-[var(--crm-surface)]"
+                    >
+                      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--crm-brand)]" aria-hidden />
+                      <span className="flex flex-col">
+                        <span className="text-sm font-semibold text-[var(--crm-ink)]">{v.label}</span>
+                        <span className="text-xs text-[var(--crm-ink-3)]">{v.description}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </PopoverContent>
+        </Popover>
+
+        <div>
           <Popover open={filtersPopoverOpen} onOpenChange={setFiltersPopoverOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -2265,6 +2472,144 @@ function CrmPoolBadge({ className }: { className?: string }) {
   );
 }
 
+/**
+ * 5 estrelas clicáveis para `qualification` (0–5). Hover destaca preview até o
+ * índice; clique grava. Clicar na estrela atual zera (toggle off).
+ */
+function InlineQualificationStars({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  disabled?: boolean;
+  onChange: (next: number) => void;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const displayValue = hover ?? value;
+  return (
+    <div
+      className="inline-flex items-center gap-0.5"
+      role="group"
+      aria-label={`Qualificação ${value} de 5`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onMouseLeave={() => setHover(null)}
+    >
+      {[1, 2, 3, 4, 5].map((n) => {
+        const filled = n <= displayValue;
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={disabled}
+            aria-label={`Definir qualificação ${n}`}
+            className={cn(
+              "flex h-5 w-5 items-center justify-center rounded transition-transform",
+              disabled ? "cursor-not-allowed opacity-50" : "hover:scale-110",
+            )}
+            onMouseEnter={() => !disabled && setHover(n)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disabled) return;
+              onChange(value === n ? 0 : n);
+            }}
+          >
+            <Star
+              className={cn(
+                "h-3.5 w-3.5",
+                filled
+                  ? "fill-[var(--crm-amber)] text-[var(--crm-amber)]"
+                  : "text-[var(--crm-ink-3)]",
+              )}
+              aria-hidden
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Valor total do negócio editável por click. Mostra `formatBRL(value)`; ao
+ * clicar abre input numérico inline. Enter salva, Esc/blur cancela.
+ */
+function InlineValueEditor({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  disabled?: boolean;
+  onChange: (next: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>(() => String(value ?? 0));
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+    setDraft(value ? String(value) : "");
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const parsed = Number.parseFloat(draft.replace(",", "."));
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed !== value) {
+      onChange(parsed);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min="0"
+        autoFocus
+        value={draft}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setEditing(false);
+          }
+        }}
+        className="h-6 w-20 rounded border border-[var(--crm-brand-border)] bg-card px-1.5 text-xs font-semibold text-[var(--crm-ink)] outline-none focus:ring-1 focus:ring-[var(--crm-brand-2)]"
+        aria-label="Valor do negócio"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={startEdit}
+      onPointerDown={(e) => e.stopPropagation()}
+      aria-label={`Editar valor: ${formatBRL(value || 0)}`}
+      className={cn(
+        "rounded px-1.5 py-0.5 text-xs font-semibold text-[var(--crm-ink-2)] transition-colors",
+        disabled
+          ? "cursor-not-allowed opacity-60"
+          : "hover:bg-[var(--crm-brand-tint)] hover:text-[var(--crm-brand)]",
+      )}
+    >
+      {value > 0 ? formatBRL(value) : "R$ —"}
+    </button>
+  );
+}
+
 const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   card,
   staleNegotiationDays,
@@ -2279,6 +2624,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onOpenNegotiation,
   onOpenCustomer,
   onOpenChat,
+  onUpdateInline,
   resolveAssigneeName,
 }: {
   card: CrmNegotiation;
@@ -2294,6 +2640,10 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
+  onUpdateInline?: (
+    card: CrmNegotiation,
+    patch: { qualification?: number; totalValue?: number },
+  ) => void;
   resolveAssigneeName?: (assigneeId: string) => string | null;
 }) {
   const { profile } = useAuth();
@@ -2358,12 +2708,29 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       </div>
       <p className="mb-2 text-[15px] font-bold leading-snug text-[var(--crm-ink)]">{card.title}</p>
       <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" nextTaskAt={card.nextTaskAt} />
+      <div className="mb-2 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
+        <InlineQualificationStars
+          value={card.qualification ?? 0}
+          disabled={!canDrag || !onUpdateInline || !isPersistedCrmNegotiationId(card.id)}
+          onChange={(next) => onUpdateInline?.(card, { qualification: next })}
+        />
+        <InlineValueEditor
+          value={card.totalValue ?? 0}
+          disabled={!canDrag || !onUpdateInline || !isPersistedCrmNegotiationId(card.id)}
+          onChange={(next) => onUpdateInline?.(card, { totalValue: next })}
+        />
+      </div>
       <div className="mb-3 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
         <span className="inline-flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1">
-            <Star className="h-3.5 w-3.5 fill-[var(--crm-amber)] text-[var(--crm-amber)]" aria-hidden />
-            {card.starCount}
-          </span>
+          {card.starCount > 0 ? (
+            <span
+              className="inline-flex items-center gap-1"
+              title={`Pontos: ${card.starCount}`}
+            >
+              <Star className="h-3.5 w-3.5 fill-[var(--crm-amber)] text-[var(--crm-amber)]" aria-hidden />
+              {card.starCount}
+            </span>
+          ) : null}
           <CrmKanbanCardTaskBadge card={card} />
         </span>
         <div className="flex shrink-0 items-center gap-1">
@@ -2477,6 +2844,7 @@ function KanbanColumn({
   onOpenNegotiation,
   onOpenCustomer,
   onOpenChat,
+  onUpdateInline,
   onColumnRefresh,
   onColumnValueSort,
   resolveAssigneeName,
@@ -2494,6 +2862,10 @@ function KanbanColumn({
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
   onOpenChat?: (chatId: string) => void;
+  onUpdateInline?: (
+    card: CrmNegotiation,
+    patch: { qualification?: number; totalValue?: number },
+  ) => void;
   onColumnRefresh?: () => void;
   onColumnValueSort?: () => void;
   resolveAssigneeName?: (assigneeId: string) => string | null;
