@@ -3,8 +3,6 @@ import type { ChatAiMode } from "@/types/domain";
 export type AiReplyEligibilityReason =
   | "ai_off"
   | "handoff_mode"
-  | "chat_assigned"
-  | "negotiation_assigned"
   | "qualifying_stage_limit";
 
 export type AiReplyEligibilityInput = {
@@ -31,14 +29,6 @@ export function evaluateAiReplyEligibility(
 
   if (aiMode === "handoff") {
     return { allowed: false, reason: "handoff_mode" };
-  }
-
-  if (input.chatAssigneeId?.trim()) {
-    return { allowed: false, reason: "chat_assigned" };
-  }
-
-  if (input.negotiationAssigneeId?.trim()) {
-    return { allowed: false, reason: "negotiation_assigned" };
   }
 
   if (aiMode === "qualifying") {

@@ -62,3 +62,7 @@ verify_jwt = false
 # Playground de teste da IA: JWT do tenant (requireTenantContext valida).
 [functions.ai-playground]
 verify_jwt = false
+
+# Resumo IA de negociação (CRM): JWT do tenant; gate crm/view via requireTenantPermission.
+[functions.crm-summarize-negotiation]
+verify_jwt = false

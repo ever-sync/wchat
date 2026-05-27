@@ -7,6 +7,7 @@ import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationD
 import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
 import { CallButton } from "@/components/crm/CallButton";
 import { CallLogsPanel } from "@/components/crm/CallLogsPanel";
+import { NegotiationCommentsPanel } from "@/components/crm/NegotiationCommentsPanel";
 import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -322,6 +323,17 @@ function CrmNegotiationDetailContent({
         id: p.id,
         nome: (p.nome?.trim() || p.email?.trim() || "Sem nome").trim(),
       })),
+    [tenantCollaborators],
+  );
+
+  const commentMentionAttendants = useMemo(
+    () =>
+      tenantCollaborators
+        .filter((p) => p.status === "active")
+        .map((p) => ({
+          id: p.id,
+          name: (p.nome?.trim() || p.email?.trim() || "Sem nome").trim(),
+        })),
     [tenantCollaborators],
   );
 
@@ -930,6 +942,14 @@ function CrmNegotiationDetailContent({
                 }}
               />
             </div>
+          ) : undefined
+        }
+        negotiationCommentsSlot={
+          isPersistedRow && isSupabaseConfigured ? (
+            <NegotiationCommentsPanel
+              negotiationId={negotiation.id}
+              attendants={commentMentionAttendants}
+            />
           ) : undefined
         }
         onPipelineStageChange={(idx) => {

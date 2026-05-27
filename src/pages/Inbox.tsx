@@ -389,11 +389,11 @@ export default function Inbox() {
     isFetchingNextPage,
   } = useInboxMessages(activeChat?.id, {
     enabled: Boolean(activeChat?.id) && !mustAssumeChatToView,
-    // Fallback longo se o Realtime cair (mensagens ja entram via WebSocket).
-    // Sem refetch ao focar a janela: useInboxRealtime cobre INSERT/UPDATE.
-    refetchInterval: activeChat && !mustAssumeChatToView ? 60_000 : false,
+    // Fallback curto: se o Realtime do self-host oscilar, a conversa ativa
+    // ainda recebe mensagens em poucos segundos.
+    refetchInterval: activeChat && !mustAssumeChatToView ? 5_000 : false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
   const markChatAsRead = useMarkChatAsRead();
   const syncInbox = useSyncInbox({

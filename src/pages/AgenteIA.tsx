@@ -128,20 +128,19 @@ export default function AgenteIA() {
   const quotaPct = limit ? Math.min(100, Math.round((totalTokens / limit) * 100)) : null;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
-      {/* Premium Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card/60 via-card to-primary/5 p-6 shadow-sm backdrop-blur-sm">
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-primary/5 blur-3xl" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner">
-              <Bot className="h-6 w-6" aria-hidden />
+    <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 md:px-7">
+      <div className="relative shrink-0 overflow-hidden rounded-xl border border-border/70 bg-card px-5 py-4 shadow-sm">
+        <div className="absolute inset-y-0 right-0 w-1/3 bg-primary/[0.04]" />
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Bot className="h-5 w-5" aria-hidden />
             </div>
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">Agente IA</h1>
+                <h1 className="text-xl font-bold leading-tight tracking-normal text-foreground md:text-2xl">Agente IA</h1>
                 {isAiActive ? (
-                  <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 font-medium flex items-center gap-1">
+                  <Badge className="flex items-center gap-1 border-emerald-500/20 bg-emerald-500/10 text-xs font-medium text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300">
                     <span className="relative flex h-1.5 w-1.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -154,14 +153,14 @@ export default function AgenteIA() {
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="max-w-2xl text-xs text-muted-foreground">
                 Configure e personalize a inteligência artificial para automatizar seus atendimentos.
               </p>
             </div>
           </div>
 
           {limit && limit > 0 ? (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border/40 bg-card/60 p-3 sm:text-right backdrop-blur-sm">
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border/50 bg-background/70 p-3 sm:text-right">
               <div className="flex items-center justify-between gap-4 text-xs">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Coins className="h-3.5 w-3.5 text-primary/80" />
@@ -171,7 +170,7 @@ export default function AgenteIA() {
                   {nf(totalTokens)} / {nf(limit)} tokens
                 </span>
               </div>
-              <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted sm:w-48">
+              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted sm:w-48">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
@@ -190,27 +189,25 @@ export default function AgenteIA() {
         </div>
       </div>
 
-      <OnboardingChecklist onGo={setTab} />
-
-      <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-5">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-border/40 bg-muted/30 p-1 sm:w-auto">
-          <TabsTrigger value="configuracao" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
+      <Tabs value={tab} onValueChange={setTab} className="flex shrink-0 flex-col gap-4">
+        <TabsList className="h-auto w-full shrink-0 flex-nowrap justify-start gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1 shadow-sm">
+          <TabsTrigger value="configuracao" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <SlidersHorizontal className="h-4 w-4" />
             Configuração
           </TabsTrigger>
-          <TabsTrigger value="conhecimento" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="conhecimento" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <BookOpen className="h-4 w-4" />
             Base de conhecimento
           </TabsTrigger>
-          <TabsTrigger value="canais" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="canais" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <Radio className="h-4 w-4" />
             Canais
           </TabsTrigger>
-          <TabsTrigger value="atividade" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="atividade" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <Activity className="h-4 w-4" />
             Atividade
           </TabsTrigger>
-          <TabsTrigger value="testar" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="testar" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <MessageSquare className="h-4 w-4" />
             Testar
           </TabsTrigger>
@@ -614,24 +611,22 @@ function ConfiguracaoTab() {
   const currentLength = form.systemPrompt?.length ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Coluna Principal: Persona e LGPD (2/3 da tela) */}
-        <div className="space-y-6 lg:col-span-2">
-          {/* Card Persona */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-4">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="px-5 pb-3 pt-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
                     <Sparkles className="h-4.5 w-4.5 text-primary" />
                     Persona / Instruções do Agente
                   </CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className="mt-1 text-xs">
                     Molde o tom de voz, regras de atendimento e como a IA deve se comportar.
                   </CardDescription>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex shrink-0 flex-wrap gap-1.5">
                   <Button
                     size="sm"
                     variant="outline"
@@ -659,16 +654,16 @@ function ConfiguracaoTab() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 px-5 pb-5">
               <div className="space-y-2">
                 <Textarea
                   id="ai-persona"
                   value={form.systemPrompt}
                   onChange={(e) => set({ systemPrompt: e.target.value })}
                   placeholder="Ex.: Você é a Ana, atendente virtual da nossa loja. Responda sempre com cordialidade e simplicidade..."
-                  className="min-h-[220px] font-sans text-sm resize-y leading-relaxed border-border focus-visible:ring-primary/30"
+                  className="min-h-[168px] font-sans text-sm leading-relaxed border-border focus-visible:ring-primary/30 md:min-h-[190px]"
                 />
-                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                <div className="flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
                   <span>Em branco usará a persona padrão da plataforma.</span>
                   <span className={cn("font-medium", currentLength > 4000 ? "text-destructive" : "text-muted-foreground")}>
                     {currentLength} caracteres
@@ -678,10 +673,9 @@ function ConfiguracaoTab() {
             </CardContent>
           </Card>
 
-          {/* Card Transparência (LGPD) */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="px-5 pb-3 pt-5">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
                 <Info className="h-4.5 w-4.5 text-primary" />
                 Transparência e Avisos (LGPD)
               </CardTitle>
@@ -689,9 +683,9 @@ function ConfiguracaoTab() {
                 Notifique o cliente de forma clara que ele está interagindo com um robô inteligente.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/40 bg-muted/10 p-4">
-                <div className="space-y-0.5">
+            <CardContent className="space-y-4 px-5 pb-5">
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 bg-muted/10 p-4">
+                <div className="min-w-0 space-y-0.5">
                   <span className="text-sm font-semibold text-foreground">Divulgação de IA ativa</span>
                   <p className="text-xs text-muted-foreground">
                     Envia um aviso automático no início do primeiro atendimento para cada cliente.
@@ -725,12 +719,10 @@ function ConfiguracaoTab() {
           </Card>
         </div>
 
-        {/* Coluna Lateral: Parâmetros e Provedor (1/3 da tela) */}
-        <div className="space-y-6">
-          {/* Card Provedor */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+        <div className="space-y-4">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="px-5 pb-3 pt-5">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
                 <Cpu className="h-4.5 w-4.5 text-primary" />
                 Provedor & Conexão
               </CardTitle>
@@ -738,11 +730,11 @@ function ConfiguracaoTab() {
                 Defina o cérebro do agente e onde as mensagens serão processadas.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 px-5 pb-5">
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Modo de atuação</Label>
                 <Select value={form.provider} onValueChange={(v) => set({ provider: v as AiProvider })}>
-                  <SelectTrigger className="w-full bg-background border-border/85 focus:ring-primary/20">
+                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm focus:ring-primary/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -765,7 +757,7 @@ function ConfiguracaoTab() {
                     set({ llmProvider: provider, model: LLM_MODELS[provider][0].value });
                   }}
                 >
-                  <SelectTrigger className="w-full bg-background border-border/85">
+                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -778,7 +770,7 @@ function ConfiguracaoTab() {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Modelo principal</Label>
                 <Select value={form.model} onValueChange={(v) => set({ model: v })}>
-                  <SelectTrigger className="w-full bg-background border-border/85">
+                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -793,10 +785,9 @@ function ConfiguracaoTab() {
             </CardContent>
           </Card>
 
-          {/* Card Parâmetros de Controle */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="px-5 pb-3 pt-5">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
                 <SlidersHorizontal className="h-4.5 w-4.5 text-primary" />
                 Configurações de Controle
               </CardTitle>
@@ -804,7 +795,7 @@ function ConfiguracaoTab() {
                 Ajuste os limites operacionais e tempo de resposta.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="grid gap-3 px-5 pb-5 sm:grid-cols-3 xl:grid-cols-1">
               <div className="space-y-2">
                 <Label htmlFor="ai-debounce" className="text-xs font-semibold flex items-center gap-1.5">
                   Tempo de Espera (s)
@@ -819,7 +810,7 @@ function ConfiguracaoTab() {
                   max={120}
                   value={form.debounceSeconds}
                   onChange={(e) => set({ debounceSeconds: Number(e.target.value) })}
-                  className="bg-background focus-visible:ring-primary/20"
+                  className="h-10 bg-background focus-visible:ring-primary/20"
                 />
               </div>
 
@@ -837,7 +828,7 @@ function ConfiguracaoTab() {
                   max={8192}
                   value={form.maxOutputTokens}
                   onChange={(e) => set({ maxOutputTokens: Number(e.target.value) })}
-                  className="bg-background focus-visible:ring-primary/20"
+                  className="h-10 bg-background focus-visible:ring-primary/20"
                 />
               </div>
 
@@ -855,16 +846,15 @@ function ConfiguracaoTab() {
                   value={form.monthlyTokenLimit ?? ""}
                   onChange={(e) => set({ monthlyTokenLimit: e.target.value === "" ? null : Number(e.target.value) })}
                   placeholder="Sem limite"
-                  className="bg-background focus-visible:ring-primary/20"
+                  className="h-10 bg-background focus-visible:ring-primary/20"
                 />
               </div>
             </CardContent>
           </Card>
 
-          {/* Card Recursos Avançados */}
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="px-5 pb-3 pt-5">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
                 <Sparkles className="h-4.5 w-4.5 text-primary" />
                 Recursos Inteligentes
               </CardTitle>
@@ -872,8 +862,8 @@ function ConfiguracaoTab() {
                 Aumente a eficiência e reduza custos com roteamento dinâmico.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/10 p-3">
+            <CardContent className="space-y-3 px-5 pb-5">
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1">
                     Roteamento Dinâmico
@@ -889,7 +879,7 @@ function ConfiguracaoTab() {
                 />
               </div>
 
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/10 p-3">
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1">
                     Pensamento Adaptativo
@@ -910,7 +900,7 @@ function ConfiguracaoTab() {
       </div>
 
       {/* Save Button Row */}
-      <div className="flex items-center justify-end rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-end border-t border-border/70 bg-background py-3">
         <Button
           onClick={() => upsert.mutate(form)}
           disabled={upsert.isPending}

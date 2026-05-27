@@ -5,8 +5,6 @@ export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
 export type AiBlockReason =
   | "ai_off"
   | "handoff_mode"
-  | "chat_assigned"
-  | "negotiation_assigned"
   | "negotiation_closed"
   | "customer_opt_out"
   | "qualifying_stage_limit";
@@ -51,12 +49,6 @@ export function evaluateAiReplyEligibility(input: AiEligibilityInput): AiEligibi
   if (input.customerOptOut === true) {
     return { allowed: false, reason: "customer_opt_out", aiMode };
   }
-  if (input.chatAssigneeId?.trim()) {
-    return { allowed: false, reason: "chat_assigned", aiMode };
-  }
-  if (input.negotiationAssigneeId?.trim()) {
-    return { allowed: false, reason: "negotiation_assigned", aiMode };
-  }
 
   const status = input.negotiationStatus?.trim();
   if (status && !ALERTABLE_NEGOTIATION_STATUSES.has(status)) {
@@ -79,10 +71,6 @@ export function aiBlockReasonMessage(reason: AiBlockReason): string {
       return "IA desligada neste chat.";
     case "handoff_mode":
       return "Chat em handoff (somente humano).";
-    case "chat_assigned":
-      return "Conversa com atendente atribuído.";
-    case "negotiation_assigned":
-      return "Negócio CRM já tem responsável.";
     case "negotiation_closed":
       return "Negócio encerrado ou fora de atendimento ativo.";
     case "customer_opt_out":

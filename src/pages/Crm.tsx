@@ -47,14 +47,31 @@ import {
   Filter,
   Flame,
   Globe2,
+  LayoutList,
   Lock,
   Pencil,
   Plus,
+  Rows2,
+  Rows3,
   Snowflake,
   Target,
   X,
 } from "lucide-react";
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
+import { AdvancedFilterDialog } from "@/components/crm/AdvancedFilterDialog";
+import { LeadScoreBadge } from "@/components/crm/LeadScoreBadge";
+import {
+  decodeAdvancedFilter,
+  encodeAdvancedFilter,
+  evaluateAdvancedFilter,
+  isAdvancedFilterActive,
+  type AdvancedFilter,
+} from "@/lib/crm/advanced-filter";
+import {
+  buildScoringContext,
+  computeLeadScore,
+  type LeadScoreResult,
+} from "@/lib/crm/lead-score";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -164,6 +181,21 @@ import type { CrmNegotiation, CrmNegotiationStatus, Customer } from "@/types/dom
 export type { CrmNegotiation, CrmNegotiationStatus } from "@/types/domain";
 export type { CrmFunnel } from "@/data/crm-funnels";
 
+type CardDensity = "compact" | "cozy" | "expanded";
+
+const CARD_DENSITY_STORAGE_KEY = "wchat:crm:card-density";
+
+function readCardDensity(): CardDensity {
+  if (typeof window === "undefined") return "cozy";
+  try {
+    const raw = window.localStorage.getItem(CARD_DENSITY_STORAGE_KEY);
+    if (raw === "compact" || raw === "cozy" || raw === "expanded") return raw;
+  } catch {
+    // localStorage indisponível (modo privado) → silencia.
+  }
+  return "cozy";
+}
+
 type SortId =
   | "priority"
   | "alpha_az"
@@ -179,7 +211,9 @@ type SortId =
   | "value_desc"
   | "value_asc"
   | "interaction_recent"
-  | "interaction_oldest";
+  | "interaction_oldest"
+  | "score_desc"
+  | "score_asc";
 
 type AppliedOwner =
   | { mode: "all" }
@@ -206,6 +240,8 @@ const STATUS_OPTIONS: {
 ];
 
 const SORT_OPTIONS: { id: SortId; label: string }[] = [
+  { id: "score_desc", label: "Lead score — mais quentes" },
+  { id: "score_asc", label: "Lead score — mais frias" },
   { id: "priority", label: "Prioridade (qualif. × valor × tarefa)" },
   { id: "alpha_az", label: "Alfabética A-Z" },
   { id: "alpha_za", label: "Alfabética Z-A" },
@@ -227,6 +263,37 @@ const STATUS_FILTER_IDS = new Set<string>(STATUS_OPTIONS.map((s) => s.id));
 const SORT_FILTER_IDS = new Set<string>(SORT_OPTIONS.map((s) => s.id));
 const ALERTS_FILTER_IDS = new Set<CrmAlertsFilterMode>(["off", "any", "stale", "no_future_task"]);
 const OWNER_MODE_IDS = new Set<AppliedOwner["mode"]>(["all", "mine", "pool", "custom"]);
+
+type ScoreFilterMode = "all" | "hot" | "warm_plus" | "tepid_plus" | "cold";
+const SCORE_FILTER_IDS = new Set<ScoreFilterMode>([
+  "all",
+  "hot",
+  "warm_plus",
+  "tepid_plus",
+  "cold",
+]);
+const SCORE_FILTER_OPTIONS: { id: ScoreFilterMode; label: string; hint: string }[] = [
+  { id: "all", label: "Todos os scores", hint: "Sem filtro de lead score" },
+  { id: "hot", label: "🔥 Só quentes", hint: "Lead score ≥ 75" },
+  { id: "warm_plus", label: "Mornos ou melhores", hint: "Lead score ≥ 50" },
+  { id: "tepid_plus", label: "Tépidos ou melhores", hint: "Lead score ≥ 25" },
+  { id: "cold", label: "❄️ Só frios", hint: "Lead score < 25" },
+];
+function scoreFilterMatches(mode: ScoreFilterMode, total: number): boolean {
+  switch (mode) {
+    case "hot":
+      return total >= 75;
+    case "warm_plus":
+      return total >= 50;
+    case "tepid_plus":
+      return total >= 25;
+    case "cold":
+      return total < 25;
+    case "all":
+    default:
+      return true;
+  }
+}
 
 type SavedViewId = "hot" | "closing" | "cold";
 
@@ -499,6 +566,15 @@ export default function Crm() {
     return v && ALERTS_FILTER_IDS.has(v as CrmAlertsFilterMode) ? (v as CrmAlertsFilterMode) : "off";
   });
   const [alertsFilterOpen, setAlertsFilterOpen] = useState(false);
+  const [scoreFilter, setScoreFilter] = useState<ScoreFilterMode>(() => {
+    const v = searchParams.get("score");
+    return v && SCORE_FILTER_IDS.has(v as ScoreFilterMode) ? (v as ScoreFilterMode) : "all";
+  });
+  const [scoreFilterOpen, setScoreFilterOpen] = useState(false);
+  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilter | null>(
+    () => decodeAdvancedFilter(searchParams.get("adv")),
+  );
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [creationDateFilter, setCreationDateFilter] = useState<CreationDateRangeIso | null>(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -694,6 +770,15 @@ export default function Crm() {
     const v = searchParams.get("view");
     return v === "list" ? "list" : "board";
   });
+  const [cardDensity, setCardDensity] = useState<CardDensity>(() => readCardDensity());
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(CARD_DENSITY_STORAGE_KEY, cardDensity);
+    } catch {
+      // ignora — funcionalidade não-crítica.
+    }
+  }, [cardDensity]);
   const [sortId, setSortId] = useState<SortId>(() => {
     const v = searchParams.get("sort");
     return v && SORT_FILTER_IDS.has(v) ? (v as SortId) : "created_desc";
@@ -731,6 +816,8 @@ export default function Crm() {
         );
         apply("status", statusFilter === "all" ? null : statusFilter);
         apply("alerts", alertsFilter === "off" ? null : alertsFilter);
+        apply("score", scoreFilter === "all" ? null : scoreFilter);
+        apply("adv", encodeAdvancedFilter(advancedFilter));
         apply("from", creationDateFilter?.from ?? null);
         apply("to", creationDateFilter?.to ?? null);
         apply("sort", sortId === "created_desc" ? null : sortId);
@@ -740,10 +827,12 @@ export default function Crm() {
       { replace: true },
     );
   }, [
+    advancedFilter,
     alertsFilter,
     appliedOwner,
     creationDateFilter,
     funnelId,
+    scoreFilter,
     searchTerm,
     setSearchParams,
     sortId,
@@ -785,7 +874,9 @@ export default function Crm() {
     setAppliedOwner({ mode: "all" });
     setStatusFilter("all");
     setAlertsFilter("off");
+    setScoreFilter("all");
     setSearchTerm("");
+    setAdvancedFilter(null);
     toast({ title: "Filtros limpos", description: "Exibindo todas as negociações do funil." });
   }, [toast]);
 
@@ -812,6 +903,8 @@ export default function Crm() {
       }
       setCreationDateFilter(null);
       setSearchTerm("");
+      setScoreFilter("all");
+      setAdvancedFilter(null);
       setSavedViewsOpen(false);
       const label = SAVED_VIEWS.find((v) => v.id === viewId)?.label ?? "Vista salva";
       toast({ title: `Vista aplicada: ${label}` });
@@ -830,6 +923,11 @@ export default function Crm() {
     }
     if (statusFilter !== "all") f.status = statusFilter;
     if (alertsFilter !== "off") f.alerts = alertsFilter;
+    if (scoreFilter !== "all") f.score = scoreFilter;
+    if (isAdvancedFilterActive(advancedFilter)) {
+      const adv = encodeAdvancedFilter(advancedFilter);
+      if (adv) f.adv = adv;
+    }
     if (creationDateFilter?.from && creationDateFilter?.to) {
       f.from = creationDateFilter.from;
       f.to = creationDateFilter.to;
@@ -838,10 +936,12 @@ export default function Crm() {
     if (view !== "board") f.view = view;
     return f;
   }, [
+    advancedFilter,
     alertsFilter,
     appliedOwner,
     creationDateFilter,
     funnelId,
+    scoreFilter,
     searchTerm,
     sortId,
     statusFilter,
@@ -869,6 +969,12 @@ export default function Crm() {
           ? (f.alerts as CrmAlertsFilterMode)
           : "off",
       );
+      setScoreFilter(
+        f.score && SCORE_FILTER_IDS.has(f.score as ScoreFilterMode)
+          ? (f.score as ScoreFilterMode)
+          : "all",
+      );
+      setAdvancedFilter(f.adv ? decodeAdvancedFilter(f.adv) : null);
       if (f.from && f.to) {
         setCreationDateFilter({ from: f.from, to: f.to });
       } else {
@@ -987,6 +1093,25 @@ export default function Crm() {
     return map;
   }, [customers]);
 
+  // Contexto + scores de lead (recalculados quando o conjunto pré-alertas muda).
+  const scoringContext = useMemo(
+    () => buildScoringContext(negotiationsBeforeAlertsFilter, funnel.stages),
+    [funnel.stages, negotiationsBeforeAlertsFilter],
+  );
+  const scoresByNegId = useMemo(() => {
+    const now = Date.now();
+    const map = new Map<string, LeadScoreResult>();
+    for (const n of negotiationsBeforeAlertsFilter) {
+      const result = computeLeadScore(n, {
+        funnelMedianValue: scoringContext.funnelMedianValue,
+        stageProbabilityPct: scoringContext.stageProbabilities.get(n.stageId) ?? null,
+        nowMs: now,
+      });
+      map.set(n.id, result);
+    }
+    return map;
+  }, [negotiationsBeforeAlertsFilter, scoringContext]);
+
   const filteredNegotiations = useMemo(() => {
     let list = negotiationsBeforeAlertsFilter;
     if (alertsFilter !== "off") {
@@ -1012,12 +1137,35 @@ export default function Crm() {
         return false;
       });
     }
-    return [...list].sort((a, b) => compareNegotiations(a, b, sortId));
+    if (scoreFilter !== "all") {
+      list = list.filter((n) =>
+        scoreFilterMatches(scoreFilter, scoresByNegId.get(n.id)?.total ?? 0),
+      );
+    }
+    if (isAdvancedFilterActive(advancedFilter)) {
+      list = list.filter((n) =>
+        evaluateAdvancedFilter(n, advancedFilter, {
+          customerById,
+          scoresByNegId,
+        }),
+      );
+    }
+    return [...list].sort((a, b) => {
+      if (sortId === "score_desc" || sortId === "score_asc") {
+        const sa = scoresByNegId.get(a.id)?.total ?? 0;
+        const sb = scoresByNegId.get(b.id)?.total ?? 0;
+        return sortId === "score_desc" ? sb - sa : sa - sb;
+      }
+      return compareNegotiations(a, b, sortId);
+    });
   }, [
+    advancedFilter,
     alertsFilter,
     customerById,
     deferredSearchTerm,
     negotiationsBeforeAlertsFilter,
+    scoreFilter,
+    scoresByNegId,
     sortId,
     staleNegotiationDays,
   ]);
@@ -1111,7 +1259,9 @@ export default function Crm() {
     (appliedOwner.mode !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
     (alertsFilter !== "off" ? 1 : 0) +
-    (searchTerm.trim() ? 1 : 0);
+    (scoreFilter !== "all" ? 1 : 0) +
+    (searchTerm.trim() ? 1 : 0) +
+    (isAdvancedFilterActive(advancedFilter) ? 1 : 0);
 
   const filteredAttendants = useMemo(() => {
     const q = ownerSearch.trim().toLowerCase();
@@ -1749,29 +1899,84 @@ export default function Crm() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--crm-surface)] text-[var(--crm-ink)]">
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[var(--crm-border)] bg-card px-4 py-3 md:gap-3 md:px-6">
-        <div className="mr-auto inline-flex overflow-hidden rounded-md border border-[var(--crm-border-2)] bg-card shadow-sm">
-          <button
-            type="button"
-            aria-pressed={view === "board"}
-            onClick={() => setView("board")}
-            className={cn(
-              "flex h-9 w-10 items-center justify-center transition-colors",
-              view === "board" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
-            )}
-          >
-            <BarChart3 className="h-4 w-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === "list"}
-            onClick={() => setView("list")}
-            className={cn(
-              "flex h-9 w-10 items-center justify-center transition-colors",
-              view === "list" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
-            )}
-          >
-            <List className="h-4 w-4" aria-hidden />
-          </button>
+        <div className="mr-auto inline-flex items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-[var(--crm-border-2)] bg-card shadow-sm">
+            <button
+              type="button"
+              aria-pressed={view === "board"}
+              onClick={() => setView("board")}
+              className={cn(
+                "flex h-9 w-10 items-center justify-center transition-colors",
+                view === "board" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
+              )}
+            >
+              <BarChart3 className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-pressed={view === "list"}
+              onClick={() => setView("list")}
+              className={cn(
+                "flex h-9 w-10 items-center justify-center transition-colors",
+                view === "list" ? "bg-[var(--crm-brand)] text-white" : "bg-[var(--crm-brand-tint)] text-[var(--crm-brand-2)]",
+              )}
+            >
+              <List className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          {view === "board" ? (
+            <div
+              className="inline-flex overflow-hidden rounded-md border border-[var(--crm-border-2)] bg-card shadow-sm"
+              role="group"
+              aria-label="Densidade do card"
+            >
+              <button
+                type="button"
+                aria-pressed={cardDensity === "compact"}
+                aria-label="Compacto"
+                title="Compacto"
+                onClick={() => setCardDensity("compact")}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center transition-colors",
+                  cardDensity === "compact"
+                    ? "bg-[var(--crm-brand)] text-white"
+                    : "bg-card text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface)]",
+                )}
+              >
+                <Rows3 className="h-4 w-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-pressed={cardDensity === "cozy"}
+                aria-label="Confortável"
+                title="Confortável"
+                onClick={() => setCardDensity("cozy")}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center border-l border-[var(--crm-border-2)] transition-colors",
+                  cardDensity === "cozy"
+                    ? "bg-[var(--crm-brand)] text-white"
+                    : "bg-card text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface)]",
+                )}
+              >
+                <Rows2 className="h-4 w-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-pressed={cardDensity === "expanded"}
+                aria-label="Expandido"
+                title="Expandido"
+                onClick={() => setCardDensity("expanded")}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center border-l border-[var(--crm-border-2)] transition-colors",
+                  cardDensity === "expanded"
+                    ? "bg-[var(--crm-brand)] text-white"
+                    : "bg-card text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface)]",
+                )}
+              >
+                <LayoutList className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <Button
@@ -2218,6 +2423,58 @@ export default function Crm() {
           </PopoverContent>
         </Popover>
 
+        <Popover open={scoreFilterOpen} onOpenChange={setScoreFilterOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-left text-sm font-medium shadow-sm transition-colors hover:bg-[var(--crm-surface)]",
+                scoreFilter !== "all"
+                  ? "border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)]"
+                  : "border-[var(--crm-border)] text-[var(--crm-ink-2)]",
+              )}
+              title="Filtrar por lead score (0–100, calculado a partir de recência, valor, qualificação, etapa e tarefas)"
+            >
+              <Flame className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="max-w-[200px] truncate">
+                {SCORE_FILTER_OPTIONS.find((o) => o.id === scoreFilter)?.label ?? "Lead score"}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
+              Lead score
+            </div>
+            <Separator />
+            <ul className="py-1">
+              {SCORE_FILTER_OPTIONS.map((opt) => (
+                <li key={opt.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScoreFilter(opt.id);
+                      setScoreFilterOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm",
+                      scoreFilter === opt.id
+                        ? "bg-[var(--crm-brand-tint)] font-medium text-[var(--crm-brand)]"
+                        : "hover:bg-[var(--crm-surface)]",
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    <span className="text-[10px] text-[var(--crm-ink-3)]">{opt.hint}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="border-t border-[var(--crm-surface-2)] px-3 py-2 text-[11px] leading-snug text-[var(--crm-ink-3)]">
+              Score combina recência, engajamento, valor, qualificação, etapa e tarefa futura.
+            </p>
+          </PopoverContent>
+        </Popover>
+
         <Popover open={sortOpen} onOpenChange={setSortOpen}>
           <PopoverTrigger asChild>
             <button
@@ -2604,6 +2861,33 @@ export default function Crm() {
           </AlertDialogContent>
         </AlertDialog>
 
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "h-9 gap-2 rounded-md px-3 text-sm font-medium shadow-sm",
+            isAdvancedFilterActive(advancedFilter)
+              ? "border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint-hover)]"
+              : "border-[var(--crm-border)] bg-card text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface)]",
+          )}
+          onClick={() => setAdvancedFilterOpen(true)}
+          title="Filtro avançado: combina regras com E/OU em campos como score, valor, data, cliente, etapa"
+        >
+          <Filter className="h-4 w-4" aria-hidden />
+          {isAdvancedFilterActive(advancedFilter)
+            ? `Avançado · ${advancedFilter?.rules.length ?? 0}`
+            : "Avançado"}
+        </Button>
+
+        <AdvancedFilterDialog
+          open={advancedFilterOpen}
+          onOpenChange={setAdvancedFilterOpen}
+          value={advancedFilter}
+          onApply={(f) => setAdvancedFilter(f)}
+          attendants={attendants}
+          stages={funnel.stages.map((s) => ({ id: s.id, title: s.title }))}
+        />
+
         <div>
           <Popover open={filtersPopoverOpen} onOpenChange={setFiltersPopoverOpen}>
             <PopoverTrigger asChild>
@@ -2723,6 +3007,16 @@ export default function Crm() {
               : `${negotiationsWithAlertsCount} com alerta${negotiationsWithAlertsCount === 1 ? "" : "s"}`}
           </button>
         ) : null}
+        {alertCountsInView.stale > 0 ? (
+          <Link
+            to={`/relatorios?tab=parados&funil=${encodeURIComponent(funnelId)}`}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-2.5 py-1 text-xs font-semibold text-[var(--crm-orange)] hover:bg-[var(--crm-amber-tint-hover)]"
+            title="Abrir painel Reanimar no relatório de parados"
+          >
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            Reanimar {alertCountsInView.stale}
+          </Link>
+        ) : null}
         {appliedOwner.mode === "pool" ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-medium text-[var(--crm-brand)]">
             Pool (sem responsável)
@@ -2807,6 +3101,8 @@ export default function Crm() {
                   resolveAssigneeName={resolveAssigneeName}
                   attendantsForReassign={attendants}
                   canReassign={canEditCrm && profile?.role !== "atendimento"}
+                  density={cardDensity}
+                  scoresByNegId={scoresByNegId}
                   onColumnRefresh={() => {
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiation-stages"] });
@@ -3445,6 +3741,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   resolveAssigneeName,
   attendantsForReassign,
   canReassign,
+  density,
+  leadScore,
 }: {
   card: CrmNegotiation;
   staleNegotiationDays: number;
@@ -3466,10 +3764,15 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   resolveAssigneeName?: (assigneeId: string) => string | null;
   attendantsForReassign?: { id: string; name: string }[];
   canReassign?: boolean;
+  density?: CardDensity;
+  leadScore?: LeadScoreResult;
 }) {
   const { profile } = useAuth();
   const profileId = profile?.id;
   const canDrag = canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
+  const densityMode: CardDensity = density ?? "cozy";
+  const isCompact = densityMode === "compact";
+  const isExpanded = densityMode === "expanded";
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignSearch, setReassignSearch] = useState("");
   const canReassignChip =
@@ -3513,7 +3816,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       data-testid={`crm-card-${card.id}`}
       style={style}
       className={cn(
-        "cursor-grab rounded-lg border border-[var(--crm-surface-2)] bg-card p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
+        "cursor-grab rounded-lg border border-[var(--crm-surface-2)] bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
+        isCompact ? "p-2" : isExpanded ? "p-4" : "p-3",
         isDragging ? "opacity-90 shadow-lg ring-2 ring-[var(--crm-brand-2)]/40" : "hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]",
       )}
       {...listeners}
@@ -3526,6 +3830,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
         }
       }}
     >
+      {isCompact ? null : (
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--crm-ink-2)]">
         <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--crm-brand-2)]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
@@ -3674,8 +3979,23 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
         ) : null}
         <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--crm-ink-3)]" aria-hidden />
       </div>
-      <p className="mb-2 text-[15px] font-bold leading-snug text-[var(--crm-ink)]">{card.title}</p>
-      <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" nextTaskAt={card.nextTaskAt} />
+      )}
+      <p
+        className={cn(
+          "font-bold leading-snug text-[var(--crm-ink)]",
+          isCompact ? "mb-1.5 text-sm" : isExpanded ? "mb-2 text-base" : "mb-2 text-[15px]",
+        )}
+      >
+        {card.title}
+      </p>
+      {isCompact ? null : (
+        <CrmNegotiationAlertBadges alerts={alerts} className="mb-2" nextTaskAt={card.nextTaskAt} />
+      )}
+      {!isCompact && leadScore ? (
+        <div className="mb-2">
+          <LeadScoreBadge score={leadScore} variant="compact" />
+        </div>
+      ) : null}
       <div className="mb-2 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
         <InlineQualificationStars
           value={card.qualification ?? 0}
@@ -3688,6 +4008,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
           onChange={(next) => onUpdateInline?.(card, { totalValue: next })}
         />
       </div>
+      {isCompact ? null : (
       <div className="mb-3 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
         <span className="inline-flex items-center gap-2 text-xs">
           {card.starCount > 0 ? (
@@ -3743,11 +4064,38 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
           )}
         </div>
       </div>
-      <div className="flex flex-col gap-2">
+      )}
+      {isExpanded ? (
+        <div className="mb-3 flex flex-col gap-0.5 border-t border-[var(--crm-surface-2)] pt-2 text-[10px] text-[var(--crm-ink-3)]">
+          <span>
+            Criada{" "}
+            {new Date(card.createdAt).toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "2-digit",
+            })}
+          </span>
+          {card.nextTaskAt ? (
+            <span>
+              Próx. tarefa{" "}
+              {new Date(card.nextTaskAt).toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <div className={cn("flex flex-col", isCompact ? "gap-1" : "gap-2")}>
         {showClaim ? (
           <Button
             type="button"
-            className="h-9 w-full gap-2 bg-primary text-sm font-medium text-primary-foreground shadow-none hover:bg-primary/90"
+            className={cn(
+              "w-full gap-2 bg-primary font-medium text-primary-foreground shadow-none hover:bg-primary/90",
+              isCompact ? "h-8 text-xs" : "h-9 text-sm",
+            )}
             disabled={assigneeBusy}
             onPointerDown={(e) => e.stopPropagation()}
             data-testid={`crm-claim-${card.id}`}
@@ -3757,14 +4105,17 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
             }}
           >
             <Hand className="h-4 w-4 shrink-0" aria-hidden />
-            Assumir negócio
+            {isCompact ? "Assumir" : "Assumir negócio"}
           </Button>
         ) : null}
         {showRelease ? (
           <Button
             type="button"
             variant="outline"
-            className="h-9 w-full gap-2 border-[var(--crm-brand-border)] bg-card text-sm font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]"
+            className={cn(
+              "w-full gap-2 border-[var(--crm-brand-border)] bg-card font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]",
+              isCompact ? "h-8 text-xs" : "h-9 text-sm",
+            )}
             disabled={assigneeBusy}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -3773,10 +4124,10 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
             }}
           >
             <Users className="h-4 w-4 shrink-0" aria-hidden />
-            Devolver ao pool
+            {isCompact ? "Pool" : "Devolver ao pool"}
           </Button>
         ) : null}
-        {showDelete ? (
+        {showDelete && !isCompact ? (
           <Button
             type="button"
             variant="ghost"
@@ -3818,6 +4169,8 @@ function KanbanColumn({
   resolveAssigneeName,
   attendantsForReassign,
   canReassign,
+  density,
+  scoresByNegId,
 }: {
   stage: CrmStageDef & { cards: CrmNegotiation[] };
   staleNegotiationDays: number;
@@ -3841,6 +4194,8 @@ function KanbanColumn({
   resolveAssigneeName?: (assigneeId: string) => string | null;
   attendantsForReassign?: { id: string; name: string }[];
   canReassign?: boolean;
+  density?: CardDensity;
+  scoresByNegId?: Map<string, LeadScoreResult>;
 }) {
   const count = stage.cards.length;
   const columnValue = stage.cards.reduce((acc, c) => acc + c.totalValue, 0);
@@ -3863,10 +4218,11 @@ function KanbanColumn({
     },
     [setNodeRef],
   );
+  const estimatedCardHeight = density === "compact" ? 72 : density === "expanded" ? 200 : 120;
   const cardVirtualizer = useVirtualizer({
     count: stage.cards.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 120,
+    estimateSize: () => estimatedCardHeight,
     getItemKey: (index) => stage.cards[index]?.id ?? index,
     overscan: 6,
   });
@@ -3939,6 +4295,8 @@ function KanbanColumn({
                   resolveAssigneeName={resolveAssigneeName}
                   attendantsForReassign={attendantsForReassign}
                   canReassign={canReassign}
+                  density={density}
+                  leadScore={scoresByNegId?.get(card.id)}
                 />
               </div>
             );

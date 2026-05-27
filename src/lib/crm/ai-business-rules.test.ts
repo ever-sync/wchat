@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import { evaluateAiReplyEligibility } from "./ai-business-rules";
 
 describe("evaluateAiReplyEligibility", () => {
-  it("bloqueia quando negócio tem responsável", () => {
+  it("permite IA quando negócio tem responsável", () => {
     const r = evaluateAiReplyEligibility({
       aiMode: "full",
       negotiationAssigneeId: "seller-1",
     });
-    expect(r.allowed).toBe(false);
-    expect(r.reason).toBe("negotiation_assigned");
+    expect(r.allowed).toBe(true);
   });
 
   it("bloqueia handoff e off", () => {
@@ -16,13 +15,12 @@ describe("evaluateAiReplyEligibility", () => {
     expect(evaluateAiReplyEligibility({ aiMode: "handoff" }).reason).toBe("handoff_mode");
   });
 
-  it("bloqueia chat com assignee", () => {
+  it("permite IA quando chat tem atendente atribuído", () => {
     const r = evaluateAiReplyEligibility({
       aiMode: "qualifying",
       chatAssigneeId: "user-1",
     });
-    expect(r.allowed).toBe(false);
-    expect(r.reason).toBe("chat_assigned");
+    expect(r.allowed).toBe(true);
   });
 
   it("qualifying só em lead/contato", () => {

@@ -20,6 +20,9 @@ export type CrmSavedViewFilters = Partial<{
   owners: string[];
   status: string;
   alerts: string;
+  score: string;
+  /** Filtro avançado serializado (mesmo formato do search param `?adv=`). */
+  adv: string;
   from: string;
   to: string;
   sort: string;

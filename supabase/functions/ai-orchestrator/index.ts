@@ -281,6 +281,13 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     return;
   }
 
+  // Se uma execução anterior enviou a resposta mas morreu/estourou timeout antes
+  // de marcar o job como done, não gere outra resposta para o mesmo inbound.
+  // Ignora o aviso LGPD, porque ele pode ser a única mensagem já enviada antes
+  // de uma queda e o cliente ainda precisa receber a resposta do turno.
+  const disclosureTexts = [DEFAULT_DISCLOSURE, config.disclosureMessage ?? ""].filter(Boolean);
+  if (await hasAiReplyAfterLatestInbound(admin, chatId, disclosureTexts)) return;
+
   const aiMode = normalizeChatAiMode(chat.ai_mode as string | null | undefined);
   let tools = toolsForMode(aiMode);
   if (tools.length === 0) return; // off/handoff — sem ferramentas
@@ -427,6 +434,40 @@ function classifyOutcome(result: LoopResult): string {
   const allTools = result.toolLog ?? [];
   if (allTools.length > 0 && allTools.every((t) => Boolean(t.is_error))) return "tool_error";
   return "no_reply";
+}
+
+async function hasAiReplyAfterLatestInbound(admin: Admin, chatId: string, ignoredTexts: string[] = []): Promise<boolean> {
+  const { data: latestInbound } = await admin
+    .from("whatsapp_messages")
+    .select("created_at")
+    .eq("chat_id", chatId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const inboundCreatedAt = latestInbound?.created_at as string | undefined;
+  if (!inboundCreatedAt) return false;
+
+  const ignored = new Set(ignoredTexts.map(normalizeComparableText).filter(Boolean));
+  const { data } = await admin
+    .from("whatsapp_messages")
+    .select("body_text")
+    .eq("chat_id", chatId)
+    .eq("direction", "outbound")
+    .eq("actor_type", "ai")
+    .gte("created_at", inboundCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  return (data ?? []).some((row: Record<string, unknown>) => {
+    const text = normalizeComparableText(String(row.body_text ?? ""));
+    return Boolean(text && !ignored.has(text));
+  });
+}
+
+function normalizeComparableText(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
 async function tripCircuitBreakerIfNeeded(admin: Admin, tenantId: string, chatId: string): Promise<boolean> {

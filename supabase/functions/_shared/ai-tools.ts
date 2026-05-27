@@ -198,6 +198,15 @@ export async function sendWhatsappText(
   source = "ai-orchestrator",
 ): Promise<void> {
   const instance = await getInstanceById(admin, String(chat.instance_id));
+
+  // Idempotência defensiva: se o worker for cancelado/der 504 depois de enviar
+  // pelo provedor, o mesmo ai_job pode ser reprocessado. Não reenvie a mesma
+  // resposta da IA para o mesmo inbound.
+  if (await wasSameAiTextAlreadySentForLatestInbound(admin, String(chat.id), text)) {
+    console.warn("sendWhatsappText: duplicate AI reply suppressed", String(chat.id));
+    return;
+  }
+
   const apiKey = await decryptSecret(instance.encrypted_apikey);
   const config = {
     instanceName: instance.uazapi_instance_name,
@@ -231,6 +240,45 @@ export async function sendWhatsappText(
     .from("whatsapp_chats")
     .update({ last_message_preview: text, last_message_at: new Date().toISOString() })
     .eq("id", chat.id);
+}
+
+async function wasSameAiTextAlreadySentForLatestInbound(
+  admin: Admin,
+  chatId: string,
+  text: string,
+): Promise<boolean> {
+  const normalizedText = normalizeMessageText(text);
+  if (!normalizedText) return false;
+
+  const { data: latestInbound } = await admin
+    .from("whatsapp_messages")
+    .select("created_at")
+    .eq("chat_id", chatId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let query = admin
+    .from("whatsapp_messages")
+    .select("body_text")
+    .eq("chat_id", chatId)
+    .eq("direction", "outbound")
+    .eq("actor_type", "ai")
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  const inboundCreatedAt = latestInbound?.created_at as string | undefined;
+  if (inboundCreatedAt) {
+    query = query.gte("created_at", inboundCreatedAt);
+  }
+
+  const { data } = await query;
+  return (data ?? []).some((row: Record<string, unknown>) => normalizeMessageText(String(row.body_text ?? "")) === normalizedText);
+}
+
+function normalizeMessageText(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
 export async function moveNegotiationStage(admin: Admin, negotiationId: string, stageId: string): Promise<void> {

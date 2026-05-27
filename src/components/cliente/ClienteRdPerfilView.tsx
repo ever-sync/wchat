@@ -642,6 +642,8 @@ export type ClienteRdPerfilViewProps = {
   negotiationProductsSlot?: ReactNode;
   /** Conteúdo da aba “Ligações” (histórico de chamadas do lead). */
   negotiationCallsSlot?: ReactNode;
+  /** Conteúdo da aba “Comentários” (thread + @mentions na negociação). */
+  negotiationCommentsSlot?: ReactNode;
   /** Dados da negociação persistida (ficha CRM); habilita edição com lápis. */
   negotiationPanelSnapshot?: NegotiationPanelSnapshot;
   onSaveNegotiationPanel?: (payload: NegotiationPanelSavePayload) => Promise<void>;
@@ -696,6 +698,7 @@ export function ClienteRdPerfilView({
   negotiationDocumentsSlot,
   negotiationProductsSlot,
   negotiationCallsSlot,
+  negotiationCommentsSlot,
   negotiationPanelSnapshot,
   onSaveNegotiationPanel,
   negotiationPanelSavePending,
@@ -1300,18 +1303,22 @@ export function ClienteRdPerfilView({
         <main className="min-w-0 space-y-6">
           <Tabs defaultValue={mainTabDefault} className="w-full">
             <TabsList className="h-auto w-full flex-wrap justify-start gap-0 rounded-none border-b border-[var(--crm-surface-2)] bg-transparent p-0">
-              {(
-                [
+              {((): Array<[string, string]> => {
+                const tabs: Array<[string, string]> = [
                   ["historico", "Histórico"],
                   ["email", "E-mail"],
                   ["tarefas", "Tarefas"],
+                ];
+                if (negotiationCommentsSlot) tabs.push(["comentarios", "Comentários"]);
+                tabs.push(
                   ["questionarios", "Questionários"],
                   ["produtos", "Produtos"],
                   ["ligacoes", "Ligações"],
                   ["arquivos", "Arquivos"],
                   ["propostas", "Propostas"],
-                ] as const
-              ).map(([value, label]) => (
+                );
+                return tabs;
+              })().map(([value, label]) => (
                 <TabsTrigger
                   key={value}
                   value={value}
@@ -1431,6 +1438,15 @@ export function ClienteRdPerfilView({
             >
               {negotiationCallsSlot ?? "Nenhum conteúdo nesta aba ainda."}
             </TabsContent>
+            {negotiationCommentsSlot ? (
+              <TabsContent
+                value="comentarios"
+                className="mt-0 border border-t-0 border-[var(--crm-surface-2)] bg-card p-4 md:p-5"
+                style={{ boxShadow: RD_CARD_SHADOW }}
+              >
+                {negotiationCommentsSlot}
+              </TabsContent>
+            ) : null}
             <TabsContent
               value="tarefas"
               className="mt-0 overflow-hidden border border-t-0 border-[var(--crm-surface-2)] bg-card p-0"

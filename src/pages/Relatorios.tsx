@@ -6,12 +6,17 @@ import {
   ArrowUp,
   ArrowUpDown,
   BarChart3,
+  CalendarPlus,
   Download,
   Gauge,
+  Hand,
   Inbox,
   RefreshCcw,
+  Search,
+  Sparkles,
   TrendingDown,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import {
   Bar,
@@ -29,6 +34,8 @@ import { formatBRL, downloadBlob } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -39,7 +46,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_CRM_FUNNELS, funnelStageTitleIn } from "@/data/crm-funnels";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
-import { useCrmTasksReport } from "@/lib/api/crm-tasks";
+import { useCreateCrmTask, useCrmTasksReport } from "@/lib/api/crm-tasks";
+import { useClaimCrmNegotiation, useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
+import { useAuth } from "@/hooks/useAuth";
 import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import { useTenantCollaborators } from "@/lib/api/settings";
 import {
@@ -451,6 +460,108 @@ export default function Relatorios() {
   const { data: taskCollaborators = [] } = useTenantCollaborators({ enabled: tab === "tarefas" });
   const tasksReport = useMemo(() => tasksReportQ.data ?? [], [tasksReportQ.data]);
 
+  // Pacote 8 — Smart prompts na aba "Parados": criar tarefa de follow-up e
+  // atribuir negócio do pool sem sair do relatório.
+  const { profile } = useAuth();
+  const { data: staleCollaborators = [] } = useTenantCollaborators({ enabled: tab === "parados" });
+  const stalePool = useMemo(
+    () =>
+      staleCollaborators
+        .filter((c) => c.status === "active" && c.role === "atendimento")
+        .map((c) => ({
+          id: c.id,
+          name: (c.nome?.trim() || c.email?.trim() || "Sem nome").trim(),
+        })),
+    [staleCollaborators],
+  );
+  const createCrmTaskMut = useCreateCrmTask();
+  const updateCrmNegotiationMut = useUpdateCrmNegotiation();
+  const claimCrmNegotiationMut = useClaimCrmNegotiation();
+  const [staleReanimBusy, setStaleReanimBusy] = useState(false);
+  const [staleAssignOpen, setStaleAssignOpen] = useState<string | null>(null);
+  const [staleAssignSearch, setStaleAssignSearch] = useState("");
+
+  // Próximo expediente local (16h se ainda dá tempo hoje; senão amanhã 10h).
+  const buildSmartDueAt = useCallback((days = 0): string => {
+    const d = new Date();
+    if (days > 0) {
+      d.setDate(d.getDate() + days);
+      d.setHours(10, 0, 0, 0);
+    } else if (d.getHours() < 16) {
+      d.setHours(16, 0, 0, 0);
+    } else {
+      d.setDate(d.getDate() + 1);
+      d.setHours(10, 0, 0, 0);
+    }
+    return d.toISOString();
+  }, []);
+
+  const createReanimateTask = useCallback(
+    async (
+      negotiationId: string,
+      assigneeId: string | null,
+      title: string,
+      dayOffset: number,
+    ) => {
+      try {
+        await createCrmTaskMut.mutateAsync({
+          negotiationId,
+          assigneeId: assigneeId ?? profile?.id ?? null,
+          title,
+          dueAt: buildSmartDueAt(dayOffset),
+          notes: "Criada pelo painel Reanimar.",
+        });
+        toast({
+          title: dayOffset === 0 ? "Tarefa para hoje criada." : "Tarefa para amanhã criada.",
+        });
+      } catch (err) {
+        toast({
+          title: "Não foi possível criar a tarefa",
+          description: err instanceof Error ? err.message : "Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    },
+    [buildSmartDueAt, createCrmTaskMut, profile?.id, toast],
+  );
+
+  const assignStaleNegotiation = useCallback(
+    async (negotiationId: string, assigneeId: string) => {
+      try {
+        await updateCrmNegotiationMut.mutateAsync({
+          id: negotiationId,
+          patch: { assigneeId },
+        });
+        setStaleAssignOpen(null);
+        setStaleAssignSearch("");
+        toast({ title: "Responsável atribuído." });
+      } catch (err) {
+        toast({
+          title: "Não foi possível atribuir",
+          description: err instanceof Error ? err.message : "Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast, updateCrmNegotiationMut],
+  );
+
+  const claimStaleNegotiation = useCallback(
+    async (negotiationId: string) => {
+      try {
+        await claimCrmNegotiationMut.mutateAsync(negotiationId);
+        toast({ title: "Negócio assumido." });
+      } catch (err) {
+        toast({
+          title: "Não foi possível assumir",
+          description: err instanceof Error ? err.message : "Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    },
+    [claimCrmNegotiationMut, toast],
+  );
+
   const tasksTotals = useMemo(() => {
     const now = Date.now();
     return tasksReport.reduce(
@@ -525,6 +636,40 @@ export default function Relatorios() {
   const attendanceSort = useSortable(attendance, "chats_resolved", "desc");
   const funnelSort = useSortable(sortedFunnelRows, "stage_order", "asc");
   const staleSort = useSortable(staleRows, "days_without_touch", "desc");
+  const staleNoTaskRows = useMemo(
+    () => (staleQ.data ?? []).filter((r) => r.missing_future_task),
+    [staleQ.data],
+  );
+  const stalePoolRows = useMemo(
+    () => (staleQ.data ?? []).filter((r) => !r.assignee_id),
+    [staleQ.data],
+  );
+
+  const reanimateAllMissingTask = useCallback(async () => {
+    if (staleNoTaskRows.length === 0) return;
+    setStaleReanimBusy(true);
+    const results = await Promise.allSettled(
+      staleNoTaskRows.map((r) =>
+        createCrmTaskMut.mutateAsync({
+          negotiationId: r.negotiation_id,
+          assigneeId: r.assignee_id ?? profile?.id ?? null,
+          title: "Reanimar contato",
+          dueAt: buildSmartDueAt(0),
+          notes: "Criada em lote pelo painel Reanimar.",
+        }),
+      ),
+    );
+    setStaleReanimBusy(false);
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = staleNoTaskRows.length - ok;
+    toast({
+      title:
+        failed === 0
+          ? `${ok} tarefa${ok === 1 ? "" : "s"} de follow-up criada${ok === 1 ? "" : "s"}.`
+          : `${ok} concluída${ok === 1 ? "" : "s"}, ${failed} falharam.`,
+      variant: failed > 0 ? "destructive" : undefined,
+    });
+  }, [buildSmartDueAt, createCrmTaskMut, profile?.id, staleNoTaskRows, toast]);
   const sellersSort = useSortable(crmSellers, "won_value", "desc");
   const salesSort = useSortable(sellerSales, "sales_total", "desc");
 
@@ -1187,6 +1332,47 @@ export default function Relatorios() {
               hint="Sem responsável"
             />
           </div>
+          {staleRows.length > 0 ? (
+            <Card className="border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)]/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-[var(--crm-amber)]" aria-hidden />
+                  Reanimar agora
+                </CardTitle>
+                <CardDescription>
+                  Sugestões de ação para destravar o que está parado neste funil.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2"
+                  disabled={staleNoTaskRows.length === 0 || staleReanimBusy}
+                  onClick={() => void reanimateAllMissingTask()}
+                >
+                  <CalendarPlus className="h-4 w-4" />
+                  {staleNoTaskRows.length === 0
+                    ? "Sem follow-ups pendentes"
+                    : `Criar follow-up para ${staleNoTaskRows.length} sem tarefa`}
+                </Button>
+                {stalePoolRows.length > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    asChild
+                  >
+                    <Link to={`/crm?owner=pool&alerts=stale&funnel=${funnelId}`}>
+                      <Users className="h-4 w-4" />
+                      {`Distribuir ${stalePoolRows.length} do pool no CRM`}
+                    </Link>
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Negócios que precisam de atenção</CardTitle>
@@ -1204,7 +1390,7 @@ export default function Relatorios() {
               ) : (
                 <>
                   <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[720px] text-sm">
+                    <table className="w-full min-w-[860px] text-sm">
                       <thead>
                         <tr className="border-b text-left text-muted-foreground">
                           <SortableTh k="title" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort}>Negócio</SortableTh>
@@ -1212,46 +1398,196 @@ export default function Relatorios() {
                           <SortableTh k="assignee_name" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort}>Responsável</SortableTh>
                           <SortableTh k="days_without_touch" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort}>Dias parado</SortableTh>
                           <SortableTh k="total_value" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort}>Valor</SortableTh>
-                          <SortableTh k="last_interaction_at" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort} className="pr-0">Última interação</SortableTh>
+                          <SortableTh k="last_interaction_at" sortKey={staleSort.sortKey} sortDir={staleSort.sortDir} onSort={staleSort.toggleSort}>Última interação</SortableTh>
+                          <th className="py-2 pr-0 font-normal">Ações</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {staleSort.sorted.map((row) => (
-                          <tr key={row.negotiation_id} className="border-b border-border/60">
-                            <td className="py-2 pr-4">
-                              <Link to={`/crm/negociacao/${row.negotiation_id}`} className="font-medium text-primary hover:underline">
-                                {row.title}
-                              </Link>
-                              {row.missing_future_task ? <span className="ml-2 text-[10px] font-semibold text-warning">sem tarefa</span> : null}
-                            </td>
-                            <td className="py-2 pr-4">{funnelStageTitleIn(funnels, row.funnel_id, row.stage_id)}</td>
-                            <td className="py-2 pr-4">{row.assignee_name ?? "Pool"}</td>
-                            <td className="py-2 pr-4">{row.days_without_touch}</td>
-                            <td className="py-2 pr-4">{formatCurrency(row.total_value)}</td>
-                            <td className="py-2">{formatDateTime(row.last_interaction_at)}</td>
-                          </tr>
-                        ))}
+                        {staleSort.sorted.map((row) => {
+                          const isPool = !row.assignee_id;
+                          return (
+                            <tr key={row.negotiation_id} className="border-b border-border/60">
+                              <td className="py-2 pr-4">
+                                <Link to={`/crm/negociacao/${row.negotiation_id}`} className="font-medium text-primary hover:underline">
+                                  {row.title}
+                                </Link>
+                                {row.missing_future_task ? <span className="ml-2 text-[10px] font-semibold text-warning">sem tarefa</span> : null}
+                              </td>
+                              <td className="py-2 pr-4">{funnelStageTitleIn(funnels, row.funnel_id, row.stage_id)}</td>
+                              <td className="py-2 pr-4">{row.assignee_name ?? "Pool"}</td>
+                              <td className="py-2 pr-4">{row.days_without_touch}</td>
+                              <td className="py-2 pr-4">{formatCurrency(row.total_value)}</td>
+                              <td className="py-2 pr-4">{formatDateTime(row.last_interaction_at)}</td>
+                              <td className="py-2 pr-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 gap-1.5 px-2 text-xs"
+                                    disabled={createCrmTaskMut.isPending || staleReanimBusy}
+                                    onClick={() =>
+                                      void createReanimateTask(
+                                        row.negotiation_id,
+                                        row.assignee_id ?? null,
+                                        "Reanimar contato",
+                                        0,
+                                      )
+                                    }
+                                  >
+                                    <CalendarPlus className="h-3.5 w-3.5" />
+                                    Tarefa hoje
+                                  </Button>
+                                  {isPool ? (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-7 gap-1.5 px-2 text-xs"
+                                        disabled={
+                                          claimCrmNegotiationMut.isPending || !profile?.id
+                                        }
+                                        onClick={() => void claimStaleNegotiation(row.negotiation_id)}
+                                      >
+                                        <Hand className="h-3.5 w-3.5" />
+                                        Assumir
+                                      </Button>
+                                      <Popover
+                                        open={staleAssignOpen === row.negotiation_id}
+                                        onOpenChange={(o) => {
+                                          setStaleAssignOpen(o ? row.negotiation_id : null);
+                                          if (!o) setStaleAssignSearch("");
+                                        }}
+                                      >
+                                        <PopoverTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 gap-1.5 px-2 text-xs"
+                                          >
+                                            <Users className="h-3.5 w-3.5" />
+                                            Atribuir
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent
+                                          align="end"
+                                          className="w-64 p-0"
+                                        >
+                                          <div className="border-b p-2">
+                                            <div className="relative">
+                                              <Search
+                                                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                                                aria-hidden
+                                              />
+                                              <Input
+                                                autoFocus
+                                                value={staleAssignSearch}
+                                                onChange={(e) =>
+                                                  setStaleAssignSearch(e.target.value)
+                                                }
+                                                placeholder="Atribuir a..."
+                                                className="h-8 pl-8 text-xs"
+                                              />
+                                            </div>
+                                          </div>
+                                          <ul className="max-h-56 overflow-y-auto py-1">
+                                            {stalePool
+                                              .filter((a) =>
+                                                a.name
+                                                  .toLowerCase()
+                                                  .includes(
+                                                    staleAssignSearch.trim().toLowerCase(),
+                                                  ),
+                                              )
+                                              .map((a) => (
+                                                <li key={a.id}>
+                                                  <button
+                                                    type="button"
+                                                    className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-muted/60"
+                                                    onClick={() =>
+                                                      void assignStaleNegotiation(
+                                                        row.negotiation_id,
+                                                        a.id,
+                                                      )
+                                                    }
+                                                  >
+                                                    {a.name}
+                                                  </button>
+                                                </li>
+                                              ))}
+                                            {stalePool.length === 0 ? (
+                                              <li className="px-3 py-2 text-xs text-muted-foreground">
+                                                Nenhum atendente disponível.
+                                              </li>
+                                            ) : null}
+                                          </ul>
+                                        </PopoverContent>
+                                      </Popover>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                   <div className="space-y-2 md:hidden">
-                    {staleSort.sorted.map((row) => (
-                      <div key={row.negotiation_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <Link to={`/crm/negociacao/${row.negotiation_id}`} className="font-medium text-primary hover:underline">
-                            {row.title}
-                          </Link>
-                          {row.missing_future_task ? <span className="text-[10px] font-semibold text-warning">sem tarefa</span> : null}
+                    {staleSort.sorted.map((row) => {
+                      const isPool = !row.assignee_id;
+                      return (
+                        <div key={row.negotiation_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <Link to={`/crm/negociacao/${row.negotiation_id}`} className="font-medium text-primary hover:underline">
+                              {row.title}
+                            </Link>
+                            {row.missing_future_task ? <span className="text-[10px] font-semibold text-warning">sem tarefa</span> : null}
+                          </div>
+                          <dl className="grid grid-cols-2 gap-2 text-xs">
+                            <div><dt className="text-muted-foreground">Etapa</dt><dd>{funnelStageTitleIn(funnels, row.funnel_id, row.stage_id)}</dd></div>
+                            <div><dt className="text-muted-foreground">Responsável</dt><dd>{row.assignee_name ?? "Pool"}</dd></div>
+                            <div><dt className="text-muted-foreground">Dias parado</dt><dd>{row.days_without_touch}</dd></div>
+                            <div><dt className="text-muted-foreground">Valor</dt><dd>{formatCurrency(row.total_value)}</dd></div>
+                            <div className="col-span-2"><dt className="text-muted-foreground">Última interação</dt><dd>{formatDateTime(row.last_interaction_at)}</dd></div>
+                          </dl>
+                          <Separator className="my-2" />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1.5 px-2 text-xs"
+                              disabled={createCrmTaskMut.isPending || staleReanimBusy}
+                              onClick={() =>
+                                void createReanimateTask(
+                                  row.negotiation_id,
+                                  row.assignee_id ?? null,
+                                  "Reanimar contato",
+                                  0,
+                                )
+                              }
+                            >
+                              <CalendarPlus className="h-3.5 w-3.5" />
+                              Tarefa hoje
+                            </Button>
+                            {isPool ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                disabled={claimCrmNegotiationMut.isPending || !profile?.id}
+                                onClick={() => void claimStaleNegotiation(row.negotiation_id)}
+                              >
+                                <Hand className="h-3.5 w-3.5" />
+                                Assumir
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                        <dl className="grid grid-cols-2 gap-2 text-xs">
-                          <div><dt className="text-muted-foreground">Etapa</dt><dd>{funnelStageTitleIn(funnels, row.funnel_id, row.stage_id)}</dd></div>
-                          <div><dt className="text-muted-foreground">Responsável</dt><dd>{row.assignee_name ?? "Pool"}</dd></div>
-                          <div><dt className="text-muted-foreground">Dias parado</dt><dd>{row.days_without_touch}</dd></div>
-                          <div><dt className="text-muted-foreground">Valor</dt><dd>{formatCurrency(row.total_value)}</dd></div>
-                          <div className="col-span-2"><dt className="text-muted-foreground">Última interação</dt><dd>{formatDateTime(row.last_interaction_at)}</dd></div>
-                        </dl>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <span>Exibindo {staleRows.length} {staleRows.length === 1 ? "item" : "itens"}</span>

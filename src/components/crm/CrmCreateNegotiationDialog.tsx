@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { UserPlus, Users } from "lucide-react";
+import { useEffect, useDeferredValue, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, ExternalLink, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
 import { SearchSelect } from "@/components/inbox/SearchSelect";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateCrmNegotiation } from "@/lib/api/crm-negotiations";
+import { useLeadDuplicates } from "@/lib/api/crm-lead-duplicates";
 import {
   useCreateCustomer,
   useCustomer,
@@ -122,6 +124,7 @@ export function CrmCreateNegotiationDialog({
   canEdit: boolean;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const createNegotiation = useCreateCrmNegotiation();
   const createCustomer = useCreateCustomer();
   const updateCustomer = useUpdateCustomer();
@@ -238,6 +241,58 @@ export function CrmCreateNegotiationDialog({
   );
 
   const selectedCustomer = selectedCustomerRecord ?? null;
+
+  // Detecção de duplicatas: roda quando há contato selecionado (existing) OU
+  // quando o usuário digita um telefone novo. Debounce via useDeferredValue.
+  const deferredNewPhone = useDeferredValue(newContactPhone);
+  const duplicateArgs = useMemo(() => {
+    if (customerMode === "existing" && selectedCustomer) {
+      const phone =
+        selectedCustomer.phoneE164 ||
+        selectedCustomer.phoneDigits ||
+        selectedCustomer.telefone ||
+        null;
+      return {
+        phone,
+        email: selectedCustomer.email || null,
+        cpf: selectedCustomer.cpf || null,
+        // não excluímos o próprio: queremos as negociações ABERTAS dele +
+        // outros possíveis duplicatas com mesmo telefone/email/CPF.
+        excludeCustomerId: null,
+      };
+    }
+    if (customerMode === "new") {
+      const digits = deferredNewPhone.replace(/\D/g, "");
+      if (digits.length < 8) return null;
+      return {
+        phone: deferredNewPhone,
+        email: null,
+        cpf: null,
+        excludeCustomerId: null,
+      };
+    }
+    return null;
+  }, [customerMode, deferredNewPhone, selectedCustomer]);
+
+  const duplicatesQ = useLeadDuplicates(
+    duplicateArgs ?? { phone: null, email: null, cpf: null },
+    { enabled: open && duplicateArgs !== null },
+  );
+  const openDuplicateNegotiations = useMemo(
+    () => (duplicatesQ.data ?? []).filter((d) => d.openNegotiationId),
+    [duplicatesQ.data],
+  );
+  // Em modo "new", customers casados com o telefone digitado são duplicatas em
+  // potencial mesmo sem negociação aberta — sugerimos usar o contato existente.
+  const duplicateCustomersForNewMode = useMemo(() => {
+    if (customerMode !== "new") return [];
+    const seen = new Set<string>();
+    return (duplicatesQ.data ?? []).filter((d) => {
+      if (seen.has(d.customerId)) return false;
+      seen.add(d.customerId);
+      return true;
+    });
+  }, [customerMode, duplicatesQ.data]);
 
   const busy = createNegotiation.isPending || createCustomer.isPending || updateCustomer.isPending;
 
@@ -492,6 +547,93 @@ export function CrmCreateNegotiationDialog({
               </div>
             )}
           </div>
+
+          {openDuplicateNegotiations.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)]/60 p-3">
+              <div className="flex items-start gap-2 text-sm font-semibold text-[var(--crm-orange)]">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                Este contato já tem negociação aberta
+              </div>
+              <ul className="space-y-1.5 text-xs text-[var(--crm-ink-2)]">
+                {openDuplicateNegotiations.slice(0, 4).map((d) => (
+                  <li
+                    key={`${d.customerId}-${d.openNegotiationId}`}
+                    className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-[var(--crm-ink)]">
+                        {d.openNegotiationTitle ?? d.customerName}
+                      </div>
+                      <div className="truncate text-[10px] text-[var(--crm-ink-3)]">
+                        {d.customerName}
+                        {d.openAssigneeName ? ` · ${d.openAssigneeName}` : " · sem responsável"}
+                        {` · ${d.matchReason === "phone" ? "telefone" : d.matchReason === "email" ? "e-mail" : "CPF"}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!d.openNegotiationId) return;
+                        navigate(`/crm/negociacao/${d.openNegotiationId}`);
+                        onOpenChange(false);
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--crm-amber-border)] bg-card px-2 py-1 text-[11px] font-semibold text-[var(--crm-orange)] hover:bg-[var(--crm-amber-tint)]"
+                    >
+                      Abrir
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+                {openDuplicateNegotiations.length > 4 ? (
+                  <li className="text-[10px] text-[var(--crm-ink-3)]">
+                    +{openDuplicateNegotiations.length - 4} outras
+                  </li>
+                ) : null}
+              </ul>
+              <p className="text-[10px] text-[var(--crm-ink-3)]">
+                Se for outro contexto, criar mesmo assim é OK. Caso contrário, retome a
+                negociação existente.
+              </p>
+            </div>
+          ) : customerMode === "new" && duplicateCustomersForNewMode.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-[var(--crm-border)] bg-[var(--crm-surface)] p-3">
+              <div className="flex items-start gap-2 text-sm font-semibold text-[var(--crm-ink-2)]">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--crm-orange)]" aria-hidden />
+                Contato com esse telefone já existe
+              </div>
+              <ul className="space-y-1.5 text-xs text-[var(--crm-ink-2)]">
+                {duplicateCustomersForNewMode.slice(0, 3).map((d) => (
+                  <li
+                    key={d.customerId}
+                    className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-[var(--crm-ink)]">
+                        {d.customerName || d.customerPhone || "(sem nome)"}
+                      </div>
+                      <div className="truncate text-[10px] text-[var(--crm-ink-3)]">
+                        {d.customerPhone ?? d.customerEmail ?? d.customerCpf ?? ""}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerMode("existing");
+                        setSelectedCustomerId(d.customerId);
+                        setCustomerSearch(d.customerName ?? "");
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--crm-border-2)] bg-card px-2 py-1 text-[11px] font-semibold text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
+                    >
+                      Usar este
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[10px] text-[var(--crm-ink-3)]">
+                Você pode escolher o contato existente em vez de criar um duplicado.
+              </p>
+            </div>
+          ) : null}
 
           {mustPickAssignee ? (
             <div className="space-y-1.5">

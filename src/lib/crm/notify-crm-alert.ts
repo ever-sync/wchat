@@ -2,7 +2,7 @@ import { toast } from "@/hooks/use-toast";
 import { playNotificationPing, postBrowserNotification } from "@/lib/notifications/browser-notify";
 import { useAppStore } from "@/store/useAppStore";
 
-export type CrmAlertNotifyKind = "pool" | "stale";
+export type CrmAlertNotifyKind = "pool" | "stale" | "mention";
 
 export function notifyCrmAlert(payload: {
   kind: CrmAlertNotifyKind;
