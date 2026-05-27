@@ -22,6 +22,11 @@ export type TenantSettings = {
   syncAssigneeChatCrm: boolean;
   autoLeadOnInbound: boolean;
   autoAssignOnLead: boolean;
+  /**
+   * Auto-atribuição de novas negociações via trigger BEFORE INSERT em
+   * crm_negotiations — round-robin por menor carga + disponibilidade.
+   */
+  autoAssignNewDeals: boolean;
   defaultAiMode: "off" | "qualifying" | "full" | "handoff";
   /** Dias sem interação para alerta "Parado" no Kanban (1–90). */
   staleNegotiationDays: number;
@@ -47,6 +52,7 @@ function mapSettings(row: Record<string, unknown>): TenantSettings {
     syncAssigneeChatCrm: row.sync_assignee_chat_crm !== false,
     autoLeadOnInbound: row.auto_lead_on_inbound !== false,
     autoAssignOnLead: Boolean(row.auto_assign_on_lead),
+    autoAssignNewDeals: Boolean(row.auto_assign_new_deals),
     defaultAiMode: (row.default_ai_mode as TenantSettings["defaultAiMode"]) ?? "off",
     staleNegotiationDays: normalizeStaleNegotiationDays(row.stale_negotiation_days),
     slaFirstResponseMinutes: normalizeSlaMinutes(row.sla_first_response_minutes),
@@ -115,6 +121,7 @@ export async function fetchTenantSettings(): Promise<TenantSettings | null> {
       syncAssigneeChatCrm: true,
       autoLeadOnInbound: true,
       autoAssignOnLead: false,
+      autoAssignNewDeals: false,
       defaultAiMode: "off",
       staleNegotiationDays: DEFAULT_STALE_NEGOTIATION_DAYS,
       slaFirstResponseMinutes: 15,
@@ -131,6 +138,7 @@ export async function upsertTenantSettings(
       | "syncAssigneeChatCrm"
       | "autoLeadOnInbound"
       | "autoAssignOnLead"
+      | "autoAssignNewDeals"
       | "defaultAiMode"
       | "staleNegotiationDays"
       | "slaFirstResponseMinutes"
@@ -144,6 +152,7 @@ export async function upsertTenantSettings(
   if (patch.syncAssigneeChatCrm !== undefined) row.sync_assignee_chat_crm = patch.syncAssigneeChatCrm;
   if (patch.autoLeadOnInbound !== undefined) row.auto_lead_on_inbound = patch.autoLeadOnInbound;
   if (patch.autoAssignOnLead !== undefined) row.auto_assign_on_lead = patch.autoAssignOnLead;
+  if (patch.autoAssignNewDeals !== undefined) row.auto_assign_new_deals = patch.autoAssignNewDeals;
   if (patch.defaultAiMode !== undefined) row.default_ai_mode = patch.defaultAiMode;
   if (patch.staleNegotiationDays !== undefined) {
     row.stale_negotiation_days = normalizeStaleNegotiationDays(patch.staleNegotiationDays);

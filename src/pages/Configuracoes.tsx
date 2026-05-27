@@ -351,6 +351,7 @@ export default function Configuracoes() {
   const [n8nEnabled, setN8nEnabled] = useState(false);
   const [autoLead, setAutoLead] = useState(true);
   const [autoAssignLead, setAutoAssignLead] = useState(false);
+  const [autoAssignNewDeals, setAutoAssignNewDeals] = useState(false);
   const [defaultAiMode, setDefaultAiMode] = useState<"off" | "qualifying" | "full" | "handoff">("off");
   const [staleNegotiationDays, setStaleNegotiationDays] = useState(7);
 
@@ -366,6 +367,7 @@ export default function Configuracoes() {
     if (tenantSettings) {
       setAutoLead(tenantSettings.autoLeadOnInbound);
       setAutoAssignLead(tenantSettings.autoAssignOnLead);
+      setAutoAssignNewDeals(tenantSettings.autoAssignNewDeals);
       setDefaultAiMode(tenantSettings.defaultAiMode);
       setStaleNegotiationDays(tenantSettings.staleNegotiationDays);
     }
@@ -1128,6 +1130,21 @@ export default function Configuracoes() {
                   />
                   <Label htmlFor="auto-assign">Distribuir chat automaticamente</Label>
                 </div>
+                <div className="flex items-center gap-2 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="auto-assign-new-deals"
+                    checked={autoAssignNewDeals}
+                    onChange={(e) => setAutoAssignNewDeals(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  <Label htmlFor="auto-assign-new-deals" className="leading-snug">
+                    Distribuir negociações novas do CRM automaticamente
+                    <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                      (round-robin por menor carga + disponibilidade — deal sem responsável recebe um atendente no INSERT)
+                    </span>
+                  </Label>
+                </div>
               </div>
               <div className="space-y-2 border-t border-border/60 pt-4">
                 <Label htmlFor="stale-negotiation-days">Dias sem contato para alerta &quot;Parado&quot;</Label>
@@ -1191,6 +1208,7 @@ export default function Configuracoes() {
                     await upsertSettings.mutateAsync({
                       autoLeadOnInbound: autoLead,
                       autoAssignOnLead: autoAssignLead,
+                      autoAssignNewDeals,
                       defaultAiMode,
                       staleNegotiationDays,
                     });
