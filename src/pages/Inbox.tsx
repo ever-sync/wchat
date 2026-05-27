@@ -19,6 +19,7 @@ import { AssignChatDialog } from "@/components/inbox/AssignChatDialog";
 import { ChatHeaderActions } from "@/components/inbox/ChatHeaderActions";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import { ConversationList } from "@/components/inbox/ConversationList";
+import { CustomerLocalTime } from "@/components/inbox/CustomerLocalTime";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
@@ -813,6 +814,9 @@ export default function Inbox() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="min-w-0 truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
+                      <CustomerLocalTime
+                        phone={activeChat.remotePhoneE164 ?? activeChat.remotePhoneDigits ?? null}
+                      />
                       {activeChat.customerId && !linkedNegotiation && !linkedNegotiationLoading ? (
                         <Button
                           type="button"
