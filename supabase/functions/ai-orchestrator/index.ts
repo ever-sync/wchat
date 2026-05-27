@@ -16,6 +16,7 @@ import {
 import { normalizeChatAiMode } from "../_shared/ai-business-rules.ts";
 import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from "../_shared/ai-tools.ts";
 import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
+import { redactPii } from "../_shared/pii-redaction.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
 import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
@@ -637,12 +638,18 @@ async function resolveMediaContent(admin: Admin, rows: Array<Record<string, unkn
 // Mensagem neutra: texto + imagem opcional (cada loop formata pro seu provedor).
 type ConvMessage = { role: "user" | "assistant"; text: string; imageUrl?: string };
 
-/** Histórico (cronológico) → mensagens neutras. Garante que comece em 'user'. */
+/**
+ * Histórico (cronológico) → mensagens neutras. Garante que comece em 'user'.
+ * Aplica redação de PII (CPF/CNPJ/RG/CNH/cartão) ANTES de mandar pro LLM —
+ * o DB mantém o dado original para a operação humana. Telefone e e-mail
+ * ficam intactos porque a IA usa em set_custom_field/create_task.
+ */
 function buildConversation(rows: Array<Record<string, unknown>>): ConvMessage[] {
   const messages: ConvMessage[] = [];
   for (const row of rows) {
     const role = row.direction === "inbound" ? "user" : "assistant";
-    const text = String(row.body_text ?? "").trim();
+    const rawText = String(row.body_text ?? "").trim();
+    const text = rawText ? redactPii(rawText) : "";
     const isImage = String(row.message_type ?? "") === "image" && row.media_url;
     if (isImage) {
       messages.push({ role, text: text || "[imagem enviada pelo cliente]", imageUrl: String(row.media_url) });

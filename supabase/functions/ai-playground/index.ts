@@ -6,6 +6,7 @@
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts";
 import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
+import { redactPii } from "../_shared/pii-redaction.ts";
 import { createMessage, type AnthropicMessage, type AnthropicSystemBlock } from "../_shared/anthropic.ts";
 import { createChatCompletion, type OpenAiMessage } from "../_shared/openai.ts";
 
@@ -43,7 +44,10 @@ Deno.serve(async (request) => {
   } catch {
     return jsonResponse({ error: "JSON inválido." }, 400);
   }
-  const messages = (body.messages ?? []).filter((m) => m && m.text?.trim());
+  // Redação de PII espelha a produção (CPF/CNPJ/RG/CNH/cartão viram placeholder).
+  const messages = (body.messages ?? [])
+    .filter((m) => m && m.text?.trim())
+    .map((m) => ({ role: m.role, text: redactPii(m.text) }));
   if (messages.length === 0) return jsonResponse({ error: "Envie ao menos uma mensagem." }, 400);
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
