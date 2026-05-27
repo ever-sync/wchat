@@ -1,12 +1,13 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ArrowDown, ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
 import {
   bubbleGroupSpacingClass,
   flattenMessageGroups,
   type MessageDayGroup,
   type ThreadFlattenItem,
 } from "@/lib/inboxMessageGroups";
+import { textContainsQuery } from "@/lib/inboxTextHighlight";
 import type { ChatNote, WhatsappMessage } from "@/types/domain";
 import { useTheme } from "next-themes";
 import { MessageBubble } from "./MessageBubble";
@@ -132,6 +133,73 @@ export function MessageThread({
     overscan: 8,
   });
 
+  // --- Busca dentro da thread (Cmd/Ctrl+F) ---
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** Índices em `flat` (não em `messages`) das bolhas cujo bodyText casa com a query. */
+  const matchIndices = useMemo(() => {
+    if (!searchQuery.trim()) return [] as number[];
+    const out: number[] = [];
+    for (let i = 0; i < flat.length; i += 1) {
+      const item = flat[i];
+      if (item.kind !== "msg") continue;
+      if (textContainsQuery(item.message.bodyText, searchQuery)) {
+        out.push(i);
+      }
+    }
+    return out;
+  }, [flat, searchQuery]);
+
+  // Reseta active quando query muda; mantém-no dentro dos limites.
+  useEffect(() => {
+    setActiveMatchIndex(0);
+  }, [searchQuery]);
+
+  // Scroll-to-index quando muda o match ativo.
+  useEffect(() => {
+    if (!searchOpen || matchIndices.length === 0) return;
+    const flatIdx = matchIndices[activeMatchIndex];
+    if (flatIdx == null) return;
+    virtualizer.scrollToIndex(flatIdx, { align: "center" });
+  }, [searchOpen, matchIndices, activeMatchIndex, virtualizer]);
+
+  // Atalho global de busca (Cmd/Ctrl+F) e ESC pra fechar.
+  useEffect(() => {
+    function onKeydown(e: KeyboardEvent) {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        setSearchOpen(true);
+        requestAnimationFrame(() => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        });
+      } else if (e.key === "Escape" && searchOpen) {
+        // Só fecha se a busca está aberta; se foco está em outro input, deixa o
+        // handler local dele tomar a decisão.
+        if (document.activeElement === searchInputRef.current) {
+          e.preventDefault();
+          setSearchOpen(false);
+          setSearchQuery("");
+        }
+      }
+    }
+    document.addEventListener("keydown", onKeydown);
+    return () => document.removeEventListener("keydown", onKeydown);
+  }, [searchOpen]);
+
+  function goToNextMatch() {
+    if (matchIndices.length === 0) return;
+    setActiveMatchIndex((i) => (i + 1) % matchIndices.length);
+  }
+  function goToPrevMatch() {
+    if (matchIndices.length === 0) return;
+    setActiveMatchIndex((i) => (i - 1 + matchIndices.length) % matchIndices.length);
+  }
+
   const loadOlderArmedRef = useRef(true);
 
   const reportScrollState = useCallback(() => {
@@ -187,6 +255,79 @@ export function MessageThread({
 
   return (
     <div className="relative h-full min-h-0">
+      {searchOpen ? (
+        <div
+          className="pointer-events-auto absolute inset-x-0 top-2 z-20 mx-auto flex max-w-md items-center gap-1 rounded-full border border-border bg-card px-2 py-1.5 shadow-lg"
+          role="search"
+          data-testid="thread-search-bar"
+        >
+          <Search className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) goToPrevMatch();
+                else goToNextMatch();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                setSearchOpen(false);
+                setSearchQuery("");
+              }
+            }}
+            placeholder="Buscar na conversa…"
+            aria-label="Buscar na conversa"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+          {searchQuery.trim() ? (
+            <span
+              className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
+              data-testid="thread-search-count"
+            >
+              {matchIndices.length === 0
+                ? "0/0"
+                : `${activeMatchIndex + 1}/${matchIndices.length}`}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={goToPrevMatch}
+            disabled={matchIndices.length === 0}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-40"
+            aria-label="Match anterior"
+            title="Anterior (Shift+Enter)"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={goToNextMatch}
+            disabled={matchIndices.length === 0}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-40"
+            aria-label="Próximo match"
+            title="Próximo (Enter)"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchOpen(false);
+              setSearchQuery("");
+            }}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
+            aria-label="Fechar busca"
+            title="Fechar (Esc)"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-none bg-background bg-[length:360px_360px] px-3 py-2 scrollbar-hide md:px-12"
@@ -240,6 +381,7 @@ export function MessageThread({
                     onDiscard={onDiscardMessage}
                     onReply={onReplyMessage}
                     retryPending={retryingMessageId === item.message.id}
+                    highlightQuery={searchOpen ? searchQuery : undefined}
                   />
                   </div>
                 )}

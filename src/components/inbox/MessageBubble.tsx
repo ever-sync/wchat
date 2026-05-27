@@ -6,6 +6,7 @@ import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import type { BubbleGroupPosition } from "@/lib/inboxMessageGroups";
 import { getInboxMessageFailureReason } from "@/lib/inboxMessageFailure";
 import { getInboxMessagePreviewText } from "@/lib/inboxMessageBody";
+import { highlightTextMatches } from "@/lib/inboxTextHighlight";
 import { resolveInboxAttachmentPresentation } from "@/lib/inboxMessageMedia";
 import { isMetaCdnLikelyToBlockInlineEmbed } from "@/lib/restricted-media-hosts";
 import { cn } from "@/lib/utils";
@@ -168,6 +169,8 @@ type MessageBubbleProps = {
   /** Clique no botão "Responder" da bolha. */
   onReply?: (message: WhatsappMessage) => void;
   retryPending?: boolean;
+  /** Quando setado, ocorrências dessa query no body são envolvidas em &lt;mark&gt;. */
+  highlightQuery?: string;
 };
 
 /** Mini bloco de citação renderizado no topo de uma bolha que responde a outra. */
@@ -293,6 +296,7 @@ function MessageBubbleImpl({
   onDiscard,
   onReply,
   retryPending = false,
+  highlightQuery,
 }: MessageBubbleProps) {
   const isOutbound = message.direction === "outbound";
   const timestamp = message.createdAt ?? message.sentAt ?? message.receivedAt ?? null;
@@ -380,7 +384,7 @@ function MessageBubbleImpl({
               {bodyText ? (
                 <div className="flex flex-wrap items-end gap-x-1">
                   <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[14.2px] leading-[1.42]">
-                    {bodyText}
+                    {highlightQuery ? highlightTextMatches(bodyText, highlightQuery) : bodyText}
                   </p>
                   <MessageMeta
                     timestamp={timestamp}
@@ -477,6 +481,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps) {
   if (prev.onDiscard !== next.onDiscard) return false;
   if (prev.onReply !== next.onReply) return false;
   if (prev.retryPending !== next.retryPending) return false;
+  if ((prev.highlightQuery ?? "") !== (next.highlightQuery ?? "")) return false;
   // Identidade do quoted basta — o conteúdo dele não muda em runtime; chega novo objeto = re-render.
   if (prev.quotedMessage?.id !== next.quotedMessage?.id) return false;
   const a = prev.message;
