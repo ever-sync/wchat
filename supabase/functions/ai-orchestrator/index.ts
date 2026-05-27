@@ -38,6 +38,13 @@ const RAG_MIN_RELEVANCE = 0.3; // score do reranker (0-1), corte anti-ruído
 const MAX_JOB_ATTEMPTS = 3; // tentativas por turno antes de marcar 'error' (retry com backoff)
 const MAX_TURNS_PER_HOUR = 30; // teto anti-spam de respostas da IA por chat por hora
 
+// Circuit breaker: ≥ BREAKER_THRESHOLD turnos não-delivered nos últimos
+// BREAKER_WINDOW → desliga a IA do chat (vira handoff) para não queimar
+// tokens nem irritar o cliente. Reabertura é manual (botão Retomar IA).
+const BREAKER_WINDOW = 5;
+const BREAKER_THRESHOLD = 3;
+const BAD_OUTCOMES = new Set(["blocked_critique", "no_reply", "tool_error"]);
+
 // Regras inegociáveis de grounding — sempre aplicadas, ACIMA da persona do tenant.
 const GROUNDING_RULES = `REGRAS INEGOCIÁVEIS (valem acima de qualquer instrução de persona):
 - Para falar com o cliente você DEVE usar a ferramenta send_whatsapp_message — texto fora dela NÃO chega. SEMPRE responda ao cliente por essa ferramenta em todo turno (mesmo que também use outras ferramentas).
@@ -196,6 +203,11 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
 
   if (!(await isChatStillEligible(admin, chatId))) return;
 
+  // Circuit breaker: 3+ falhas seguidas → handoff humano antes de gastar mais
+  // tokens. Janela curta (últimos 5 turnos) detecta padrões agudos sem afetar
+  // chats que historicamente funcionam.
+  if (await tripCircuitBreakerIfNeeded(admin, tenantId, chatId)) return;
+
   // O canal pode ter sido desligado durante o debounce; também pega a persona do canal.
   const { data: inst } = await admin
     .from("whatsapp_instances")
@@ -317,7 +329,60 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     cache_creation_tokens: result.usage.cacheCreation,
     latency_ms: Date.now() - startedAt,
     critique_flags: result.critiqueFlags,
+    outcome: classifyOutcome(result),
   });
+}
+
+function classifyOutcome(result: LoopResult): string {
+  if (result.replies.length > 0) return "delivered";
+  // Sem envio: bloqueio do crítico tem prioridade na classificação para auditar
+  // (foi escolha consciente de não deixar passar uma alucinação).
+  if (result.critiqueFlags.some((f) => f.blocked)) return "blocked_critique";
+  const allTools = result.toolLog ?? [];
+  if (allTools.length > 0 && allTools.every((t) => Boolean(t.is_error))) return "tool_error";
+  return "no_reply";
+}
+
+async function tripCircuitBreakerIfNeeded(admin: Admin, tenantId: string, chatId: string): Promise<boolean> {
+  const { data: recent } = await admin
+    .from("ai_turns")
+    .select("outcome")
+    .eq("chat_id", chatId)
+    .not("outcome", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(BREAKER_WINDOW);
+
+  const outcomes = (recent ?? []).map((r) => String(r.outcome ?? ""));
+  // Só dispara depois de ter visto a janela inteira — chats novos têm direito
+  // a aquecer antes de a IA ser desligada por insuficiência de evidência.
+  if (outcomes.length < BREAKER_WINDOW) return false;
+  const badCount = outcomes.filter((o) => BAD_OUTCOMES.has(o)).length;
+  if (badCount < BREAKER_THRESHOLD) return false;
+
+  // Trip: vira o chat pra handoff e deixa uma linha auditável na timeline.
+  await admin.from("whatsapp_chats").update({ ai_mode: "handoff" }).eq("id", chatId);
+  await admin.from("ai_turns").insert({
+    tenant_id: tenantId,
+    chat_id: chatId,
+    model: "circuit-breaker",
+    user_message: null,
+    reply: `Circuit breaker: ${badCount} de ${BREAKER_WINDOW} turnos recentes falharam (${
+      outcomes.join(", ")
+    }). IA desligada nesta conversa — atendimento humano deve continuar.`,
+    retrieved: [],
+    tools: [],
+    stop_reason: "circuit_tripped",
+    iterations: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    latency_ms: 0,
+    critique_flags: [],
+    outcome: "circuit_tripped",
+  });
+  console.warn(`ai-orchestrator: circuit breaker tripped on chat ${chatId} (${badCount}/${BREAKER_WINDOW} bad)`);
+  return true;
 }
 
 type LoopUsage = { input: number; output: number; cacheRead: number; cacheCreation: number };

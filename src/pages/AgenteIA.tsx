@@ -19,6 +19,7 @@ import {
   type AiProvider,
   type AiTurn,
   type AiTurnCritiqueFlag,
+  type AiTurnOutcome,
   type LlmProvider,
   type PlaygroundMessage,
   type TenantAiConfig,
@@ -920,6 +921,7 @@ function shortModelName(model: string | null): string {
   if (!model) return "—";
   // claude-haiku-4-5-20251001 → "Haiku 4.5"; claude-sonnet-4-6 → "Sonnet 4.6"
   const m = model.toLowerCase();
+  if (m === "circuit-breaker") return "Breaker";
   if (m.includes("haiku")) return "Haiku 4.5";
   if (m.includes("sonnet-4-7")) return "Sonnet 4.7";
   if (m.includes("sonnet")) return "Sonnet 4.6";
@@ -927,6 +929,14 @@ function shortModelName(model: string | null): string {
   if (m.startsWith("gpt-")) return model;
   return model;
 }
+
+const OUTCOME_META: Record<AiTurnOutcome, { label: string; tone: "ok" | "warn" | "fail" }> = {
+  delivered: { label: "entregue", tone: "ok" },
+  blocked_critique: { label: "bloqueado pela auditoria", tone: "warn" },
+  no_reply: { label: "sem resposta", tone: "warn" },
+  tool_error: { label: "ferramentas falharam", tone: "fail" },
+  circuit_tripped: { label: "breaker disparado", tone: "fail" },
+};
 
 function TurnRow({ turn }: { turn: AiTurn }) {
   const [expanded, setExpanded] = useState(false);
@@ -944,6 +954,19 @@ function TurnRow({ turn }: { turn: AiTurn }) {
           <Badge variant="outline" className="font-normal text-muted-foreground">
             {shortModelName(turn.model)}
           </Badge>
+          {turn.outcome ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                "font-normal",
+                OUTCOME_META[turn.outcome].tone === "ok" && "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
+                OUTCOME_META[turn.outcome].tone === "warn" && "border-amber-500/50 text-amber-700 dark:text-amber-300",
+                OUTCOME_META[turn.outcome].tone === "fail" && "border-destructive text-destructive",
+              )}
+            >
+              {OUTCOME_META[turn.outcome].label}
+            </Badge>
+          ) : null}
           {hasRetrieved ? (
             <Badge variant="secondary" className="font-normal">
               base: {turn.retrieved.length} trecho(s) · top {topSimilarity}%

@@ -265,6 +265,13 @@ export type AiTurnCritiqueFlag = {
   error?: string;
 };
 
+export type AiTurnOutcome =
+  | "delivered"
+  | "blocked_critique"
+  | "no_reply"
+  | "tool_error"
+  | "circuit_tripped";
+
 export type AiTurn = {
   id: string;
   created_at: string;
@@ -277,6 +284,7 @@ export type AiTurn = {
   input_tokens: number;
   output_tokens: number;
   critique_flags: AiTurnCritiqueFlag[];
+  outcome: AiTurnOutcome | null;
 };
 
 export async function fetchAiTurns(): Promise<AiTurn[]> {
@@ -285,7 +293,7 @@ export async function fetchAiTurns(): Promise<AiTurn[]> {
   const tenantId = await getCurrentTenantId();
   const { data, error } = await supabase
     .from("ai_turns")
-    .select("id, created_at, model, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens, critique_flags")
+    .select("id, created_at, model, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens, critique_flags, outcome")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(20);
