@@ -1,5 +1,5 @@
 import { ChevronDown, ListFilter, Search, Smartphone, SquarePen, Tag, X } from "lucide-react";
-import { useRef, useState, type RefObject } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,11 @@ export type ConversationListProps = {
   /** Gestor: atalho para fila sem responsável. */
   managerUnassignedCount?: number;
   onOpenUnassignedQueue?: () => void;
+  /** Índice de follow-ups por customer/negotiation. Derivamos status por linha. */
+  followupIndex?: {
+    overdue: { customerIds: ReadonlySet<string>; negotiationIds: ReadonlySet<string> };
+    soon: { customerIds: ReadonlySet<string>; negotiationIds: ReadonlySet<string> };
+  };
 };
 
 type FilterSelectsProps = {
@@ -215,6 +220,7 @@ export function ConversationList({
   assigneeFilterOptions,
   managerUnassignedCount,
   onOpenUnassignedQueue,
+  followupIndex,
 }: ConversationListProps) {
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
@@ -242,6 +248,32 @@ export function ConversationList({
     getItemKey: (index) => chats[index]?.id ?? index,
     overscan: 8,
   });
+
+  /**
+   * Para cada chat, deriva o status de follow-up (overdue / soon / null) a
+   * partir dos Sets de customer/negotiation. Mapa por chatId facilita o memo
+   * do ConversationRow — passamos só uma string primitiva por linha.
+   */
+  const followupStatusByChatId = useMemo(() => {
+    if (!followupIndex) return new Map<string, "overdue" | "soon">();
+    const out = new Map<string, "overdue" | "soon">();
+    for (const chat of chats) {
+      const cId = chat.customerId ?? null;
+      const nId = chat.primaryNegotiationId ?? null;
+      const overdue =
+        (cId && followupIndex.overdue.customerIds.has(cId)) ||
+        (nId && followupIndex.overdue.negotiationIds.has(nId));
+      if (overdue) {
+        out.set(chat.id, "overdue");
+        continue;
+      }
+      const soon =
+        (cId && followupIndex.soon.customerIds.has(cId)) ||
+        (nId && followupIndex.soon.negotiationIds.has(nId));
+      if (soon) out.set(chat.id, "soon");
+    }
+    return out;
+  }, [chats, followupIndex]);
 
   return (
     <aside className="flex h-full min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r border-border bg-card md:max-w-[336px] lg:max-w-none">
@@ -492,6 +524,7 @@ export function ConversationList({
                       onSelect={onSelectChat}
                       onPrefetch={onPrefetchChat}
                       viewerRole={viewerRole}
+                      followupStatus={followupStatusByChatId.get(chat.id) ?? null}
                     />
                   </div>
                 );

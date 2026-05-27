@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlarmClock, Clock, Lock } from "lucide-react";
+import { AlarmClock, CalendarClock, Clock, Lock } from "lucide-react";
 import { isChatSlaBreached, isChatSnoozed, slaMinutesRemaining } from "@/lib/inbox-chat-rules";
 import { mustAssumeUnassignedChatToView } from "@/lib/crm/negotiation-assignee";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,7 @@ export const ConversationRow = memo(function ConversationRow({
   onSelect,
   onPrefetch,
   viewerRole,
+  followupStatus,
 }: {
   chat: InboxChat;
   active: boolean;
@@ -96,6 +97,8 @@ export const ConversationRow = memo(function ConversationRow({
   onPrefetch?: (chatId: string) => void;
   /** Papel do usuário logado: atendimento não vê o preview de chats do pool até assumir. */
   viewerRole?: UserRole;
+  /** Sinaliza follow-up no chat: 'overdue' (vermelho) ou 'soon' (amber). */
+  followupStatus?: "overdue" | "soon" | null;
 }) {
   const subtitle =
     chat.customerName && chat.customerName.trim() !== "" && chat.customerName !== chat.displayName
@@ -171,6 +174,23 @@ export const ConversationRow = memo(function ConversationRow({
               )}
             </p>
             <div className="flex shrink-0 items-center gap-1">
+              {followupStatus === "overdue" ? (
+                <span
+                  title="Lembrete vencido"
+                  aria-label="Lembrete vencido"
+                  className="inline-flex h-5 items-center rounded-full bg-[var(--crm-danger-tint)] px-1.5 text-[9px] font-semibold text-[var(--crm-danger-strong)]"
+                >
+                  <CalendarClock className="h-3 w-3" />
+                </span>
+              ) : followupStatus === "soon" ? (
+                <span
+                  title="Lembrete próximo (até 1h)"
+                  aria-label="Lembrete próximo"
+                  className="inline-flex h-5 items-center rounded-full bg-[var(--crm-amber-tint)] px-1.5 text-[9px] font-semibold text-[var(--crm-amber-ink)]"
+                >
+                  <CalendarClock className="h-3 w-3" />
+                </span>
+              ) : null}
               {snoozed ? (
                 <span
                   title={`Adiada até ${format(new Date(chat.snoozeUntil!), "dd/MM HH:mm", { locale: ptBR })}`}

@@ -84,7 +84,7 @@ import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { useInboxComposer } from "@/hooks/useInboxComposer";
 import { useFollowupsForChat } from "@/hooks/useFollowupsForChat";
-import { useOverdueFollowupsForTenant } from "@/hooks/useOverdueFollowupsForTenant";
+import { useFollowupsIndexForTenant } from "@/hooks/useFollowupsIndexForTenant";
 import { useRunPlayground } from "@/lib/api/ai-agent";
 import { buildCopilotPromptFromThread } from "@/lib/inboxAiCopilot";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
@@ -257,11 +257,9 @@ export default function Inbox() {
     ).length;
   }, [isManagerInbox, chats]);
 
-  // Quando "Lembretes vencidos" está ativo, um único fetch traz as tarefas
-  // abertas do tenant pra cruzar client-side com a lista lateral.
-  const overdueFollowupsIndex = useOverdueFollowupsForTenant({
-    enabled: quickFilter === "overdue_followup",
-  });
+  // Índice de follow-ups do tenant — 1 fetch único alimenta tanto o filtro
+  // "Lembretes vencidos" quanto os chips nas linhas da ConversationList.
+  const followupsIndex = useFollowupsIndexForTenant();
 
   /**
    * Lista efetivamente exibida na barra lateral. Os filtros "Aguardando cliente"
@@ -273,7 +271,7 @@ export default function Inbox() {
       return chats.filter((c) => isChatWaitingForCustomer(c));
     }
     if (quickFilter === "overdue_followup") {
-      const { customerIds, negotiationIds } = overdueFollowupsIndex;
+      const { customerIds, negotiationIds } = followupsIndex.overdue;
       if (customerIds.size === 0 && negotiationIds.size === 0) return [];
       return chats.filter(
         (c) =>
@@ -282,7 +280,7 @@ export default function Inbox() {
       );
     }
     return chats;
-  }, [chats, quickFilter, overdueFollowupsIndex]);
+  }, [chats, quickFilter, followupsIndex]);
   // Badge "(N) Distribui Bot" no titulo da aba enquanto em background.
   const totalUnread = useMemo(
     () => chats.reduce((acc, chat) => acc + (chat.unreadCount ?? 0), 0),
@@ -792,6 +790,7 @@ export default function Inbox() {
             setAssigneeFilter("unassigned");
             setSnoozedFilter("active");
           }}
+          followupIndex={followupsIndex}
         />
 
         <section className="relative flex min-h-0 flex-col overflow-hidden border-l border-border bg-background">
