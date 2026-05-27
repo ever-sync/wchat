@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatBRL } from "@/lib/format";
 import { Briefcase, Hand } from "lucide-react";
@@ -126,6 +126,47 @@ export default function Inbox() {
   const [jumpToLatestVisible, setJumpToLatestVisible] = useState(false);
   const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
+  // Largura customizada da lista de conversas (px). Persistida em localStorage.
+  // null = usa o tamanho padrão do CSS (responsivo).
+  const [listWidthPx, setListWidthPx] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem("inbox-list-width");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 260 && n <= 720 ? n : null;
+  });
+  const resizingRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const startListResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startWidth = listWidthPx ?? 336;
+    resizingRef.current = { startX: event.clientX, startWidth };
+    function onMove(e: MouseEvent) {
+      const ctx = resizingRef.current;
+      if (!ctx) return;
+      const delta = e.clientX - ctx.startX;
+      const next = Math.min(720, Math.max(260, ctx.startWidth + delta));
+      setListWidthPx(next);
+    }
+    function onUp() {
+      const ctx = resizingRef.current;
+      resizingRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (ctx) {
+        setListWidthPx((current) => {
+          if (current != null && typeof window !== "undefined") {
+            window.localStorage.setItem("inbox-list-width", String(current));
+          }
+          return current;
+        });
+      }
+    }
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [listWidthPx]);
   const requestedChatId = searchParams.get("chatId");
   const requestedCustomerId = searchParams.get("customerId");
 
@@ -747,7 +788,14 @@ export default function Inbox() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="grid min-h-0 flex-1 grid-rows-[1fr] gap-0 lg:grid-cols-[minmax(260px,min(100%,336px))_1fr]">
+      <div
+        className="grid min-h-0 flex-1 grid-rows-[1fr] gap-0 lg:grid-cols-[var(--inbox-list-col,minmax(260px,min(100%,336px)))_1fr]"
+        style={
+          listWidthPx != null
+            ? ({ ["--inbox-list-col" as string]: `${listWidthPx}px` } as React.CSSProperties)
+            : undefined
+        }
+      >
         <ConversationList
           search={search}
           onSearchChange={setSearch}
@@ -837,6 +885,19 @@ export default function Inbox() {
         />
 
         <section className="relative flex min-h-0 flex-col overflow-hidden border-l border-border bg-background">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Redimensionar lista de conversas (duplo clique para resetar)"
+            onMouseDown={startListResize}
+            onDoubleClick={() => {
+              setListWidthPx(null);
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem("inbox-list-width");
+              }
+            }}
+            className="absolute left-0 top-0 z-30 hidden h-full w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 lg:block"
+          />
           {activeChat && mustAssumeChatToView ? (
             <div
               className="flex min-h-0 flex-1 flex-col items-center justify-center bg-background p-6"

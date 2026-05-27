@@ -59,14 +59,18 @@ function ConversationTagBadges({ tags }: { tags: InboxChat["tags"] }) {
       {visible.map((tag) => (
         <span
           key={tag.tagId}
-          className="inline-flex max-w-[8rem] shrink-0 items-center truncate rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
-          style={{ backgroundColor: `${tag.color}24`, color: tag.color }}
+          className="inline-flex max-w-[8rem] shrink-0 items-center truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-tight"
+          style={{
+            backgroundColor: `${tag.color}33`,
+            borderColor: `${tag.color}66`,
+            color: tag.color,
+          }}
         >
           {tag.name}
         </span>
       ))}
       {overflow > 0 ? (
-        <span className="text-[9px] font-medium leading-none text-muted-foreground">+{overflow}</span>
+        <span className="text-[10px] font-semibold leading-none text-muted-foreground">+{overflow}</span>
       ) : null}
     </span>
   );
@@ -151,16 +155,21 @@ export const ConversationRow = memo(function ConversationRow({
       )}
     >
       <div className="flex min-w-0 max-w-full items-start gap-2">
-        {selectionMode ? (
+        {onSelectionToggle ? (
           <span
-            className="mt-2 shrink-0"
+            className={cn(
+              "mt-2 shrink-0 transition-opacity",
+              selectionMode || selected
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+            )}
             onClick={(event) => {
               event.stopPropagation();
             }}
           >
             <Checkbox
               checked={selected}
-              onCheckedChange={() => onSelectionToggle?.(chat.id)}
+              onCheckedChange={() => onSelectionToggle(chat.id)}
               aria-label={`Selecionar conversa ${chat.displayName}`}
             />
           </span>

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -11,7 +11,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlignJustify,
   ArrowDownUp,
@@ -40,8 +40,12 @@ import {
   User,
   Users,
   AlertTriangle,
+  Bookmark,
   CalendarX2,
   Filter,
+  Flame,
+  Snowflake,
+  Target,
   X,
 } from "lucide-react";
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
@@ -199,6 +203,39 @@ const SORT_OPTIONS: { id: SortId; label: string }[] = [
   { id: "value_asc", label: "Menor valor total" },
   { id: "interaction_recent", label: "Interação mais recente" },
   { id: "interaction_oldest", label: "Interação mais antiga" },
+];
+
+const STATUS_FILTER_IDS = new Set<string>(STATUS_OPTIONS.map((s) => s.id));
+const SORT_FILTER_IDS = new Set<string>(SORT_OPTIONS.map((s) => s.id));
+const ALERTS_FILTER_IDS = new Set<CrmAlertsFilterMode>(["off", "any", "stale", "no_future_task"]);
+const OWNER_MODE_IDS = new Set<AppliedOwner["mode"]>(["all", "mine", "pool", "custom"]);
+
+type SavedViewId = "hot" | "closing" | "cold";
+
+const SAVED_VIEWS: {
+  id: SavedViewId;
+  label: string;
+  description: string;
+  icon: typeof Bookmark;
+}[] = [
+  {
+    id: "hot",
+    label: "Minhas quentes",
+    description: "Em andamento, comigo, qualif. alta primeiro",
+    icon: Flame,
+  },
+  {
+    id: "closing",
+    label: "Fechando logo",
+    description: "Em andamento, previsão de fechamento mais próxima",
+    icon: Target,
+  },
+  {
+    id: "cold",
+    label: "Negócios frios",
+    description: "Parados há tempo demais — reanime",
+    icon: Snowflake,
+  },
 ];
 
 const BASE_ATTENDANTS = [
@@ -408,12 +445,43 @@ export default function Crm() {
     [tenantSettings?.staleNegotiationDays],
   );
 
-  const [funnelId, setFunnelId] = useState(DEFAULT_CRM_FUNNELS[0].id);
-  const [appliedOwner, setAppliedOwner] = useState<AppliedOwner>({ mode: "all" });
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]["id"]>("all");
-  const [alertsFilter, setAlertsFilter] = useState<CrmAlertsFilterMode>("off");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [funnelId, setFunnelId] = useState<string>(
+    () => searchParams.get("funnel")?.trim() || DEFAULT_CRM_FUNNELS[0].id,
+  );
+  const [appliedOwner, setAppliedOwner] = useState<AppliedOwner>(() => {
+    const mode = searchParams.get("owner");
+    if (mode && OWNER_MODE_IDS.has(mode as AppliedOwner["mode"])) {
+      if (mode === "all") return { mode: "all" };
+      if (mode === "mine") return { mode: "mine" };
+      if (mode === "pool") return { mode: "pool" };
+      const ids = (searchParams.get("owners") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return { mode: "custom", ids };
+    }
+    return { mode: "all" };
+  });
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]["id"]>(() => {
+    const v = searchParams.get("status");
+    return v && STATUS_FILTER_IDS.has(v) ? (v as (typeof STATUS_OPTIONS)[number]["id"]) : "all";
+  });
+  const [alertsFilter, setAlertsFilter] = useState<CrmAlertsFilterMode>(() => {
+    const v = searchParams.get("alerts");
+    return v && ALERTS_FILTER_IDS.has(v as CrmAlertsFilterMode) ? (v as CrmAlertsFilterMode) : "off";
+  });
   const [alertsFilterOpen, setAlertsFilterOpen] = useState(false);
-  const [creationDateFilter, setCreationDateFilter] = useState<CreationDateRangeIso | null>(null);
+  const [creationDateFilter, setCreationDateFilter] = useState<CreationDateRangeIso | null>(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (!from || !to) return null;
+    return { from, to };
+  });
+  const [searchTerm, setSearchTerm] = useState<string>(() => searchParams.get("q") ?? "");
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [savedViewsOpen, setSavedViewsOpen] = useState(false);
 
   useEffect(() => {
     if (funnels.some((f) => f.id === funnelId)) {
@@ -583,8 +651,14 @@ export default function Crm() {
     return attendants;
   }, [attendants, collaborators, isSupabaseConfigured]);
 
-  const [view, setView] = useState<"board" | "list">("board");
-  const [sortId, setSortId] = useState<SortId>("created_desc");
+  const [view, setView] = useState<"board" | "list">(() => {
+    const v = searchParams.get("view");
+    return v === "list" ? "list" : "board";
+  });
+  const [sortId, setSortId] = useState<SortId>(() => {
+    const v = searchParams.get("sort");
+    return v && SORT_FILTER_IDS.has(v) ? (v as SortId) : "created_desc";
+  });
 
   const [funnelOpen, setFunnelOpen] = useState(false);
   const [filtersPopoverOpen, setFiltersPopoverOpen] = useState(false);

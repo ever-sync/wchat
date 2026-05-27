@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CallButton } from "@/components/crm/CallButton";
+import { ChatTagsHeaderButton } from "@/components/inbox/ChatTagsHeaderButton";
 import { useClearChatSnooze, useSetChatAiMode } from "@/lib/api/chat-tags";
 import {
   chatAssignedToOtherAttendantMessage,
@@ -240,6 +241,11 @@ export function ChatHeaderActions({
           <Search className="h-4 w-4" />
         </button>
       </IconTip>
+      <ChatTagsHeaderButton
+        chatId={chat.id}
+        tags={chat.tags ?? []}
+        disabled={!canEditInbox}
+      />
       {offerClaimBoth && negotiation ? (
         <IconTip label="Assumir ambos">
           <button
