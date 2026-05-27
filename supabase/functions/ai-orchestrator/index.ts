@@ -18,6 +18,7 @@ import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from
 import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
 import { redactPii } from "../_shared/pii-redaction.ts";
 import { assessGrounding, type CritiqueResult } from "../_shared/ai-critique.ts";
+import { emitAiWebhook } from "../_shared/ai-webhooks.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
 import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
@@ -338,6 +339,24 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     critique_flags: result.critiqueFlags,
     outcome: classifyOutcome(result),
   });
+
+  // Webhook out: turno concluído (delivered/blocked/etc.). Integrações usam
+  // pra analytics, sync de CRM externo, alerta interno, etc.
+  await emitAiWebhook(admin, tenantId, "ai.turn_completed", {
+    chat_id: chatId,
+    customer_id: customerId,
+    model: effectiveModel,
+    outcome: classifyOutcome(result),
+    reply: result.replies.join("\n\n") || null,
+    tools_called: (result.toolLog ?? []).map((t) => t.name).filter(Boolean),
+    retrieved_count: retrieved.length,
+    critique_flags_count: result.critiqueFlags.length,
+    critique_blocked_count: result.critiqueFlags.filter((f) => f.blocked).length,
+    input_tokens: result.usage.input,
+    output_tokens: result.usage.output,
+    iterations: result.iterations,
+    latency_ms: Date.now() - startedAt,
+  });
 }
 
 function classifyOutcome(result: LoopResult): string {
@@ -389,6 +408,12 @@ async function tripCircuitBreakerIfNeeded(admin: Admin, tenantId: string, chatId
     outcome: "circuit_tripped",
   });
   console.warn(`ai-orchestrator: circuit breaker tripped on chat ${chatId} (${badCount}/${BREAKER_WINDOW} bad)`);
+  await emitAiWebhook(admin, tenantId, "ai.circuit_tripped", {
+    chat_id: chatId,
+    bad_outcomes: badCount,
+    window: BREAKER_WINDOW,
+    recent_outcomes: outcomes,
+  });
   return true;
 }
 
@@ -501,6 +526,12 @@ async function runAnthropicLoop(
             result.critiqueFlags.push({ blocked: true, text, issues: verdict.issues });
             result.toolLog.push({ name, input: input ?? {}, result: blockedMsg, is_error: true, critique_blocked: true });
             toolResults.push({ type: "tool_result", tool_use_id: block.id, content: blockedMsg, is_error: true });
+            await emitAiWebhook(ctx.admin, ctx.tenantId, "ai.critique_blocked", {
+              chat_id: String(ctx.chat.id),
+              customer_id: ctx.customerId,
+              blocked_text: text,
+              issues: verdict.issues,
+            });
             continue;
           }
           // Loga aprovados também (auditoria + análise de falso negativo).

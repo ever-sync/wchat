@@ -17,6 +17,7 @@ import {
 } from "./domain.ts";
 import { createAdminClient } from "./supabase.ts";
 import { sendMessageViaUazapi } from "./uazapi.ts";
+import { emitAiWebhook } from "./ai-webhooks.ts";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -375,6 +376,11 @@ export async function rememberCustomerFact(
     }
     throw new Error(error.message);
   }
+  await emitAiWebhook(admin, tenantId, "ai.fact_remembered", {
+    customer_id: customerId,
+    chat_id: chatId,
+    fact,
+  });
   return "Fato salvo na memória do cliente.";
 }
 
@@ -382,7 +388,7 @@ export async function handoffChat(
   admin: Admin,
   tenantId: string,
   chatId: string,
-  opts: { summary?: string; negotiationId?: string | null; customerId?: string | null } = {},
+  opts: { summary?: string; negotiationId?: string | null; customerId?: string | null; reason?: string } = {},
 ): Promise<void> {
   await admin.from("whatsapp_chats").update({ ai_mode: "handoff" }).eq("id", chatId);
   await admin.rpc("auto_assign_chat_system", { p_chat_id: chatId });
@@ -395,6 +401,13 @@ export async function handoffChat(
       notes: opts.summary,
     });
   }
+  await emitAiWebhook(admin, tenantId, "ai.handoff", {
+    chat_id: chatId,
+    customer_id: opts.customerId ?? null,
+    negotiation_id: opts.negotiationId ?? null,
+    reason: opts.reason ?? null,
+    summary: opts.summary ?? null,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +529,9 @@ export async function executeTool(
       }
       case "handoff": {
         const summary = input?.summary ? String(input.summary) : undefined;
+        const reason = input?.reason ? String(input.reason) : undefined;
         await handoffChat(ctx.admin, ctx.tenantId, String(ctx.chat.id), {
+          reason,
           summary,
           negotiationId: ctx.negotiationId,
           customerId: ctx.customerId,
