@@ -35,6 +35,8 @@ const CHAT_RESOLUTION_VALUES = new Set<ChatResolution>([
   "lost",
 ]);
 
+const DEFAULT_INBOX_CHATS_LIMIT = 500;
+
 export function inboxChatFiltersFromListScope(
   scope: InboxListScope,
 ): Pick<InboxChatFilters, "status" | "resolution" | "hideLost"> {
@@ -423,7 +425,8 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
       whatsapp_chat_tags(tag_id, tagged_by, tagged_at, chat_tags(name, color, scope))
     `)
     .eq("tenant_id", tenantId)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(filters.limit ?? DEFAULT_INBOX_CHATS_LIMIT);
 
   if (filters.instanceId) {
     query = query.eq("instance_id", filters.instanceId);

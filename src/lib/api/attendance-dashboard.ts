@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+import { getCurrentTenantId } from "@/lib/api/tenant";
 
 export type AttendanceDashboardAttendant = {
   id: string;
@@ -88,9 +89,10 @@ export function useAttendanceDashboard() {
     queryKey: attendanceDashboardQueryKey,
     queryFn: fetchAttendanceDashboard,
     enabled: isSupabaseConfigured,
-    // Métricas dependem do tempo (contagem de SLA, espera no pool) → revalida sozinho.
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: true,
+    // Métricas dependem do tempo (SLA, espera no pool) → revalida em 60s.
+    // Realtime cobre mudanças por evento; window focus seria redundante.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -100,15 +102,39 @@ export function useAttendanceDashboardRealtime() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const supabase = requireSupabase();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
     const invalidate = () =>
       void queryClient.invalidateQueries({ queryKey: attendanceDashboardQueryKey });
-    const channel = supabase
-      .channel("attendance-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_chats" }, invalidate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, invalidate)
-      .subscribe();
+
+    void getCurrentTenantId()
+      .then((tenantId) => {
+        if (cancelled) return;
+        const filter = `tenant_id=eq.${tenantId}`;
+        channel = supabase
+          .channel(`attendance-dashboard:${tenantId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "whatsapp_chats", filter },
+            invalidate,
+          )
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "profiles", filter },
+            invalidate,
+          )
+          .subscribe();
+      })
+      .catch(() => {
+        // Sem tenant/sessão (ex.: rota não autenticada): ignora.
+      });
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [queryClient]);
 }

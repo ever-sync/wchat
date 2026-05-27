@@ -793,6 +793,8 @@ export interface InboxChatFilters {
   tagIds?: string[];
   snoozedOnly?: boolean;
   hideSnoozed?: boolean;
+  /** Limite de chats retornados pelo servidor (default 500). */
+  limit?: number;
 }
 
 export interface WhatsappMessage {

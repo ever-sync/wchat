@@ -68,8 +68,10 @@ export function useTenantRolePermissions(options?: { enabled?: boolean }) {
     queryKey: ["tenant-role-permissions"],
     queryFn: fetchTenantRolePermissions,
     enabled: (options?.enabled ?? true) && isSupabaseConfigured,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    // Permissões mudam raramente (config de admin). useSaveTenantRolePermissions
+    // já invalida em onSuccess, então não há ganho em refetchar a cada focus.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
