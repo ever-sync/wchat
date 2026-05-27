@@ -5,7 +5,9 @@ import {
   Loader2,
   Mic,
   Paperclip,
+  Pause,
   PenLine,
+  Play,
   Reply,
   Send,
   Smile,
@@ -57,8 +59,10 @@ export type MessageInputProps = {
   attachmentProgress?: number | null;
   microphoneState: "idle" | "requesting" | "granted" | "denied";
   isRecording?: boolean;
+  isRecordingPaused?: boolean;
   recordingDurationSec?: number;
   onMicrophoneClick: () => void;
+  onRecordingPauseToggle?: () => void;
   quickReplies?: QuickReply[];
   quickReplyOpen?: boolean;
   onQuickReplyOpenChange?: (open: boolean) => void;
@@ -112,8 +116,10 @@ export function MessageInput({
   attachmentProgress = null,
   microphoneState,
   isRecording = false,
+  isRecordingPaused = false,
   recordingDurationSec = 0,
   onMicrophoneClick,
+  onRecordingPauseToggle,
   quickReplies = [],
   quickReplyOpen = false,
   onQuickReplyOpenChange,
@@ -487,8 +493,22 @@ export function MessageInput({
               <Mic className="h-4 w-4" />
             )}
           </button>
+          {isRecording && onRecordingPauseToggle ? (
+            <button
+              type="button"
+              onClick={onRecordingPauseToggle}
+              disabled={composerActionsDisabled}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-wchat-100 text-muted-foreground transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              title={isRecordingPaused ? "Continuar gravação" : "Pausar gravação"}
+              aria-label={isRecordingPaused ? "Continuar gravação" : "Pausar gravação"}
+            >
+              {isRecordingPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+            </button>
+          ) : null}
           {isRecording ? (
-            <span className="hidden text-xs tabular-nums text-red-600 sm:inline">{recordingDurationSec}s</span>
+            <span className="hidden text-xs tabular-nums text-red-600 sm:inline">
+              {isRecordingPaused ? "Pausado" : `${recordingDurationSec}s`}
+            </span>
           ) : null}
           <Button
             className={cn(

@@ -42,8 +42,14 @@ import {
   AlertTriangle,
   Bookmark,
   CalendarX2,
+  CheckSquare,
+  Download,
   Filter,
   Flame,
+  Globe2,
+  Lock,
+  Pencil,
+  Plus,
   Snowflake,
   Target,
   X,
@@ -90,7 +96,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CrmOrphanNegotiationsBanner } from "@/components/crm/CrmOrphanNegotiationsBanner";
 import {
+  type CrmNegotiationPatch,
   type ListCrmNegotiationsFilters,
+  updateCrmNegotiation as updateCrmNegotiationDirect,
   useClaimCrmNegotiation,
   useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
@@ -99,6 +107,16 @@ import {
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
+import {
+  type CrmSavedView,
+  type CrmSavedViewFilters,
+  type CrmSavedViewScope,
+  useCrmSavedViews,
+  useCrmSavedViewsRealtime,
+  useCreateCrmSavedView,
+  useDeleteCrmSavedView,
+  useUpdateCrmSavedView,
+} from "@/lib/api/crm-saved-views";
 import { createStageTemplateTask } from "@/lib/api/crm-tasks";
 import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import { useTenantSettings } from "@/lib/api/integrations";
@@ -421,6 +439,14 @@ export default function Crm() {
   const deleteCrmNegotiation = useDeleteCrmNegotiation();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
   const canDeleteNegotiation = profile?.role === "admin";
+  const canCreateSharedView = profile?.role !== "atendimento";
+
+  // Vistas salvas customizadas (DB-backed) — Pacote 6.
+  useCrmSavedViewsRealtime();
+  const { data: dbSavedViews = [] } = useCrmSavedViews();
+  const createCrmSavedView = useCreateCrmSavedView();
+  const updateCrmSavedViewMut = useUpdateCrmSavedView();
+  const deleteCrmSavedViewMut = useDeleteCrmSavedView();
 
   const openChatInbox = useCallback(
     (chatId: string) => {
@@ -482,6 +508,19 @@ export default function Crm() {
   const [searchTerm, setSearchTerm] = useState<string>(() => searchParams.get("q") ?? "");
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const [savedViewsOpen, setSavedViewsOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [savedViewDialog, setSavedViewDialog] = useState<
+    | { mode: "create"; name: string; scope: CrmSavedViewScope }
+    | { mode: "edit"; id: string; name: string; scope: CrmSavedViewScope }
+    | null
+  >(null);
+  const [savedViewDeleteTarget, setSavedViewDeleteTarget] = useState<CrmSavedView | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(() => new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkStageOpen, setBulkStageOpen] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkAssignSearch, setBulkAssignSearch] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (funnels.some((f) => f.id === funnelId)) {
@@ -712,6 +751,21 @@ export default function Crm() {
     view,
   ]);
 
+  // Atalho "/" foca a busca quando o usuário não está digitando em outro input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Realtime para crm_negotiations / tenant_crm_funnel_config é tratado
   // globalmente em useCrmRealtimeSync, montado via CrmNotificationListener.
 
@@ -764,6 +818,135 @@ export default function Crm() {
     },
     [profileId, toast],
   );
+
+  // Coleta o estado atual de filtros num objeto serializável (omitindo defaults).
+  const getCurrentSavedFilters = useCallback((): CrmSavedViewFilters => {
+    const f: CrmSavedViewFilters = {};
+    if (funnelId !== DEFAULT_CRM_FUNNELS[0].id) f.funnel = funnelId;
+    if (searchTerm.trim()) f.q = searchTerm.trim();
+    if (appliedOwner.mode !== "all") f.owner = appliedOwner.mode;
+    if (appliedOwner.mode === "custom" && appliedOwner.ids.length > 0) {
+      f.owners = appliedOwner.ids;
+    }
+    if (statusFilter !== "all") f.status = statusFilter;
+    if (alertsFilter !== "off") f.alerts = alertsFilter;
+    if (creationDateFilter?.from && creationDateFilter?.to) {
+      f.from = creationDateFilter.from;
+      f.to = creationDateFilter.to;
+    }
+    if (sortId !== "created_desc") f.sort = sortId;
+    if (view !== "board") f.view = view;
+    return f;
+  }, [
+    alertsFilter,
+    appliedOwner,
+    creationDateFilter,
+    funnelId,
+    searchTerm,
+    sortId,
+    statusFilter,
+    view,
+  ]);
+
+  // Aplica os filtros de uma vista DB-backed (resetando o que não está definido).
+  const applyDbSavedView = useCallback(
+    (saved: CrmSavedView) => {
+      const f = saved.filters ?? {};
+      setFunnelId(f.funnel || DEFAULT_CRM_FUNNELS[0].id);
+      setSearchTerm(f.q ?? "");
+      if (f.owner === "mine") setAppliedOwner({ mode: "mine" });
+      else if (f.owner === "pool") setAppliedOwner({ mode: "pool" });
+      else if (f.owner === "custom" && f.owners && f.owners.length > 0)
+        setAppliedOwner({ mode: "custom", ids: f.owners });
+      else setAppliedOwner({ mode: "all" });
+      setStatusFilter(
+        f.status && STATUS_FILTER_IDS.has(f.status)
+          ? (f.status as (typeof STATUS_OPTIONS)[number]["id"])
+          : "all",
+      );
+      setAlertsFilter(
+        f.alerts && ALERTS_FILTER_IDS.has(f.alerts as CrmAlertsFilterMode)
+          ? (f.alerts as CrmAlertsFilterMode)
+          : "off",
+      );
+      if (f.from && f.to) {
+        setCreationDateFilter({ from: f.from, to: f.to });
+      } else {
+        setCreationDateFilter(null);
+      }
+      setSortId(f.sort && SORT_FILTER_IDS.has(f.sort) ? (f.sort as SortId) : "created_desc");
+      setView(f.view === "list" ? "list" : "board");
+      setSavedViewsOpen(false);
+      toast({ title: `Vista aplicada: ${saved.name}` });
+    },
+    [toast],
+  );
+
+  const openCreateSavedViewDialog = useCallback(() => {
+    setSavedViewDialog({ mode: "create", name: "", scope: "private" });
+    setSavedViewsOpen(false);
+  }, []);
+
+  const openRenameSavedViewDialog = useCallback((view: CrmSavedView) => {
+    setSavedViewDialog({
+      mode: "edit",
+      id: view.id,
+      name: view.name,
+      scope: view.scope,
+    });
+  }, []);
+
+  const handleSavedViewSubmit = useCallback(async () => {
+    if (!savedViewDialog) return;
+    const name = savedViewDialog.name.trim();
+    if (!name) {
+      toast({
+        title: "Dê um nome para a vista",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      if (savedViewDialog.mode === "create") {
+        await createCrmSavedView.mutateAsync({
+          name,
+          scope: savedViewDialog.scope,
+          filters: getCurrentSavedFilters(),
+        });
+        toast({ title: `Vista "${name}" salva.` });
+      } else {
+        await updateCrmSavedViewMut.mutateAsync({
+          id: savedViewDialog.id,
+          name,
+          scope: savedViewDialog.scope,
+        });
+        toast({ title: `Vista renomeada.` });
+      }
+      setSavedViewDialog(null);
+    } catch (err) {
+      toast({
+        title: "Não foi possível salvar",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }, [createCrmSavedView, getCurrentSavedFilters, savedViewDialog, toast, updateCrmSavedViewMut]);
+
+  const handleConfirmDeleteSavedView = useCallback(async () => {
+    const target = savedViewDeleteTarget;
+    setSavedViewDeleteTarget(null);
+    if (!target) return;
+    try {
+      await deleteCrmSavedViewMut.mutateAsync(target.id);
+      toast({ title: `Vista "${target.name}" excluída.` });
+    } catch (err) {
+      toast({
+        title: "Não foi possível excluir",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  }, [deleteCrmSavedViewMut, savedViewDeleteTarget, toast]);
 
   const negotiationsBeforeAlertsFilter = useMemo(() => {
     let list: CrmNegotiation[];
@@ -1061,6 +1244,156 @@ export default function Crm() {
     },
     [canEditCrm, toast, updateCrmNegotiation],
   );
+
+  // === Ações em lote (vista lista) ============================================
+  const selectableBulkRows = useMemo(
+    () => filteredNegotiations.filter((n) => isPersistedCrmNegotiationId(n.id)),
+    [filteredNegotiations],
+  );
+  const selectableBulkIdSet = useMemo(
+    () => new Set(selectableBulkRows.map((n) => n.id)),
+    [selectableBulkRows],
+  );
+  const allBulkSelected =
+    selectableBulkRows.length > 0 &&
+    selectableBulkRows.every((n) => bulkSelected.has(n.id));
+  const someBulkSelected = bulkSelected.size > 0 && !allBulkSelected;
+  const canBulkAct = canEditCrm && profile?.role !== "atendimento";
+
+  // Limpa seleção quando troca de funil/vista (rows visíveis mudam).
+  useEffect(() => {
+    setBulkSelected(new Set());
+  }, [funnelId, view]);
+
+  // Mantém na seleção só IDs ainda visíveis após filtros (evita ações fantasma).
+  useEffect(() => {
+    setBulkSelected((prev) => {
+      if (prev.size === 0) return prev;
+      let dirty = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (selectableBulkIdSet.has(id)) {
+          next.add(id);
+        } else {
+          dirty = true;
+        }
+      }
+      return dirty ? next : prev;
+    });
+  }, [selectableBulkIdSet]);
+
+  const toggleBulkRow = useCallback((id: string, checked: boolean) => {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const toggleBulkAll = useCallback(
+    (checked: boolean) => {
+      setBulkSelected(checked ? new Set(selectableBulkRows.map((n) => n.id)) : new Set());
+    },
+    [selectableBulkRows],
+  );
+
+  const clearBulkSelection = useCallback(() => {
+    setBulkSelected(new Set());
+    setBulkAssignOpen(false);
+    setBulkStageOpen(false);
+    setBulkStatusOpen(false);
+    setBulkAssignSearch("");
+  }, []);
+
+  const runBulkPatch = useCallback(
+    async (label: string, patch: CrmNegotiationPatch) => {
+      if (bulkSelected.size === 0) return;
+      if (!canBulkAct) {
+        toast({
+          title: "Ação indisponível",
+          description: "Seu papel não pode aplicar ações em lote.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const ids = Array.from(bulkSelected);
+      setBulkBusy(true);
+      // Roda em paralelo + invalida uma vez no fim (mais barato que `mutateAsync` por linha).
+      const results = await Promise.allSettled(
+        ids.map((id) => updateCrmNegotiationDirect(id, patch)),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = ids.length - ok;
+      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      setBulkBusy(false);
+      setBulkAssignOpen(false);
+      setBulkStageOpen(false);
+      setBulkStatusOpen(false);
+      setBulkAssignSearch("");
+      if (failed === 0) {
+        setBulkSelected(new Set());
+        toast({
+          title: `${label}: ${ok} negócio${ok === 1 ? "" : "s"} atualizado${ok === 1 ? "" : "s"}.`,
+        });
+      } else {
+        toast({
+          title: `${label}: ${ok} concluído${ok === 1 ? "" : "s"}, ${failed} falharam.`,
+          variant: "destructive",
+        });
+      }
+    },
+    [bulkSelected, canBulkAct, queryClient, toast],
+  );
+
+  const handleBulkExport = useCallback(() => {
+    if (bulkSelected.size === 0) return;
+    const rows = filteredNegotiations.filter((n) => bulkSelected.has(n.id));
+    if (rows.length === 0) return;
+    const headers = [
+      "Titulo",
+      "Etapa",
+      "Status",
+      "Valor",
+      "Qualificacao",
+      "Responsavel",
+      "Criada em",
+      "Proxima tarefa",
+    ];
+    const esc = (v: string | number | null | undefined): string => {
+      const s = v == null ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.join(",")];
+    for (const n of rows) {
+      const assignee =
+        attendants.find((a) => a.id === n.assigneeId)?.name?.trim() ||
+        (isNegotiationUnassigned(n.assigneeId) ? "Pool" : "");
+      lines.push(
+        [
+          esc(n.title),
+          esc(stageTitleForNegotiation(n, funnels)),
+          esc(n.status),
+          esc(n.totalValue),
+          esc(n.qualification),
+          esc(assignee),
+          esc(n.createdAt),
+          esc(n.nextTaskAt ?? ""),
+        ].join(","),
+      );
+    }
+    const csv = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `negociacoes-${funnelId}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: `${rows.length} negociações exportadas` });
+  }, [attendants, bulkSelected, filteredNegotiations, funnelId, funnels, toast]);
 
   const negotiationsWithAlertsCount = alertCountsInView.any;
 
@@ -1932,10 +2265,11 @@ export default function Crm() {
             aria-hidden
           />
           <Input
+            ref={searchInputRef}
             type="search"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar negócio, cliente ou telefone"
+            placeholder="Buscar negócio, cliente ou telefone   ( / )"
             aria-label="Buscar negociações"
             className="h-9 border-[var(--crm-border-2)] bg-card pl-9 pr-8 text-sm"
           />
@@ -1965,10 +2299,10 @@ export default function Crm() {
           </PopoverTrigger>
           <PopoverContent
             align="end"
-            className="w-72 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+            className="w-80 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
           >
             <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
-              Vistas salvas
+              Sugeridas
             </div>
             <Separator />
             <ul className="py-1">
@@ -1991,8 +2325,284 @@ export default function Crm() {
                 );
               })}
             </ul>
+            {dbSavedViews.length > 0 ? (
+              <>
+                <Separator />
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
+                  Suas vistas salvas
+                </div>
+                <Separator />
+                <ul className="max-h-64 overflow-y-auto py-1">
+                  {dbSavedViews.map((v) => {
+                    const isOwner = v.createdBy === profileId;
+                    const canManage =
+                      isOwner ||
+                      (v.scope === "shared" && profile?.role !== "atendimento");
+                    return (
+                      <li key={v.id} className="group flex items-center gap-1 px-1">
+                        <button
+                          type="button"
+                          onClick={() => applyDbSavedView(v)}
+                          className="flex flex-1 items-center gap-2 rounded px-2 py-2 text-left hover:bg-[var(--crm-surface)]"
+                        >
+                          {v.scope === "shared" ? (
+                            <Globe2
+                              className="h-4 w-4 shrink-0 text-[var(--crm-brand-2)]"
+                              aria-label="Compartilhada"
+                            />
+                          ) : (
+                            <Lock
+                              className="h-4 w-4 shrink-0 text-[var(--crm-ink-3)]"
+                              aria-label="Privada"
+                            />
+                          )}
+                          <span className="min-w-0 truncate text-sm font-medium text-[var(--crm-ink)]">
+                            {v.name}
+                          </span>
+                        </button>
+                        {canManage ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label={`Mais ações em ${v.name}`}
+                                className="rounded p-1 text-[var(--crm-ink-3)] opacity-60 transition-opacity hover:bg-[var(--crm-surface-2)] hover:opacity-100 group-hover:opacity-100"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem
+                                onClick={() => openRenameSavedViewDialog(v)}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Renomear
+                              </DropdownMenuItem>
+                              {isOwner ? (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    void updateCrmSavedViewMut.mutateAsync({
+                                      id: v.id,
+                                      filters: getCurrentSavedFilters(),
+                                    }).then(
+                                      () =>
+                                        toast({
+                                          title: `"${v.name}" atualizada com os filtros atuais.`,
+                                        }),
+                                      (err) =>
+                                        toast({
+                                          title: "Não foi possível atualizar",
+                                          description:
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Tente novamente.",
+                                          variant: "destructive",
+                                        }),
+                                    )
+                                  }
+                                >
+                                  <Bookmark className="mr-2 h-4 w-4" />
+                                  Atualizar com filtros atuais
+                                </DropdownMenuItem>
+                              ) : null}
+                              {isOwner && canCreateSharedView ? (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    void updateCrmSavedViewMut.mutateAsync({
+                                      id: v.id,
+                                      scope: v.scope === "shared" ? "private" : "shared",
+                                    }).then(
+                                      () =>
+                                        toast({
+                                          title:
+                                            v.scope === "shared"
+                                              ? `"${v.name}" agora é privada.`
+                                              : `"${v.name}" compartilhada com o time.`,
+                                        }),
+                                      (err) =>
+                                        toast({
+                                          title: "Não foi possível mudar",
+                                          description:
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Tente novamente.",
+                                          variant: "destructive",
+                                        }),
+                                    )
+                                  }
+                                >
+                                  {v.scope === "shared" ? (
+                                    <>
+                                      <Lock className="mr-2 h-4 w-4" />
+                                      Tornar privada
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Globe2 className="mr-2 h-4 w-4" />
+                                      Compartilhar com o time
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                              ) : null}
+                              <DropdownMenuItem
+                                onClick={() => setSavedViewDeleteTarget(v)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : null}
+            <Separator />
+            <button
+              type="button"
+              onClick={openCreateSavedViewDialog}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Salvar visão atual…
+            </button>
           </PopoverContent>
         </Popover>
+
+        {/* Dialog: salvar/renomear vista */}
+        <Dialog
+          open={savedViewDialog !== null}
+          onOpenChange={(open) => {
+            if (!open) setSavedViewDialog(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>
+                {savedViewDialog?.mode === "edit" ? "Renomear vista" : "Salvar visão atual"}
+              </DialogTitle>
+              <DialogDescription>
+                {savedViewDialog?.mode === "edit"
+                  ? "Atualize o nome e o compartilhamento."
+                  : "Os filtros, ordenação e modo (quadro/lista) ficam guardados."}
+              </DialogDescription>
+            </DialogHeader>
+            {savedViewDialog ? (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="saved-view-name" className="text-xs">
+                    Nome
+                  </Label>
+                  <Input
+                    id="saved-view-name"
+                    autoFocus
+                    value={savedViewDialog.name}
+                    onChange={(e) =>
+                      setSavedViewDialog((prev) =>
+                        prev ? { ...prev, name: e.target.value } : prev,
+                      )
+                    }
+                    placeholder="Ex.: Quentes do Lucas — fechando em maio"
+                    maxLength={80}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleSavedViewSubmit();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Compartilhamento</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant={savedViewDialog.scope === "private" ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 gap-2"
+                      onClick={() =>
+                        setSavedViewDialog((prev) =>
+                          prev ? { ...prev, scope: "private" } : prev,
+                        )
+                      }
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      Só pra mim
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={savedViewDialog.scope === "shared" ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 gap-2"
+                      disabled={!canCreateSharedView}
+                      title={
+                        canCreateSharedView
+                          ? undefined
+                          : "Apenas gestores podem compartilhar vistas"
+                      }
+                      onClick={() =>
+                        setSavedViewDialog((prev) =>
+                          prev ? { ...prev, scope: "shared" } : prev,
+                        )
+                      }
+                    >
+                      <Globe2 className="h-3.5 w-3.5" />
+                      Compartilhar com o time
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSavedViewDialog(null)}
+                disabled={createCrmSavedView.isPending || updateCrmSavedViewMut.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleSavedViewSubmit()}
+                disabled={createCrmSavedView.isPending || updateCrmSavedViewMut.isPending}
+              >
+                {savedViewDialog?.mode === "edit" ? "Salvar" : "Criar vista"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* AlertDialog: confirmar exclusão de vista */}
+        <AlertDialog
+          open={savedViewDeleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setSavedViewDeleteTarget(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir vista?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {savedViewDeleteTarget?.scope === "shared"
+                  ? `"${savedViewDeleteTarget?.name}" é compartilhada — todo o time perde o acesso. Não dá pra desfazer.`
+                  : `"${savedViewDeleteTarget?.name}" será removida.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => void handleConfirmDeleteSavedView()}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div>
           <Popover open={filtersPopoverOpen} onOpenChange={setFiltersPopoverOpen}>
@@ -2224,6 +2834,16 @@ export default function Crm() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-[var(--crm-surface)] hover:bg-[var(--crm-surface)]">
+                  {canBulkAct ? (
+                    <TableHead className="w-[40px] pr-0">
+                      <Checkbox
+                        aria-label={allBulkSelected ? "Limpar seleção" : "Selecionar todas"}
+                        checked={allBulkSelected ? true : someBulkSelected ? "indeterminate" : false}
+                        onCheckedChange={(c) => toggleBulkAll(Boolean(c))}
+                        disabled={selectableBulkRows.length === 0}
+                      />
+                    </TableHead>
+                  ) : null}
                   <TableHead className="w-[28%] font-semibold text-[var(--crm-ink-2)]">
                     <button
                       type="button"
@@ -2280,7 +2900,10 @@ export default function Crm() {
               <TableBody>
                 {filteredNegotiations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center text-sm text-[var(--crm-ink-3)]">
+                    <TableCell
+                      colSpan={canBulkAct ? 9 : 8}
+                      className="py-12 text-center text-sm text-[var(--crm-ink-3)]"
+                    >
                       Nenhuma negociação neste funil com os filtros atuais.
                     </TableCell>
                   </TableRow>
@@ -2303,6 +2926,19 @@ export default function Crm() {
                         className="cursor-pointer"
                         onClick={() => openNegotiationCard(row)}
                       >
+                        {canBulkAct ? (
+                          <TableCell
+                            className="w-[40px] pr-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              aria-label={`Selecionar ${row.title}`}
+                              checked={bulkSelected.has(row.id)}
+                              disabled={!isPersistedCrmNegotiationId(row.id)}
+                              onCheckedChange={(c) => toggleBulkRow(row.id, Boolean(c))}
+                            />
+                          </TableCell>
+                        ) : null}
                         <TableCell className="font-medium text-[var(--crm-ink)]">
                           <div className="flex flex-col gap-1.5">
                             <div className="flex flex-wrap items-center gap-2">
@@ -2404,6 +3040,184 @@ export default function Crm() {
           <p className="mt-3 text-center text-xs text-[var(--crm-ink-3)]">
             Ordenação ativa: {sortTriggerLabel}. Arraste cards apenas na visualização em quadro.
           </p>
+          {canBulkAct && bulkSelected.size > 0 ? (
+            <div
+              className="pointer-events-none sticky bottom-4 z-30 mt-4 flex justify-center"
+              role="region"
+              aria-label="Ações em lote"
+            >
+              <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-full border border-[var(--crm-border)] bg-card px-4 py-2 shadow-lg">
+                <span className="inline-flex items-center gap-2 pr-2 text-sm font-semibold text-[var(--crm-ink)]">
+                  <CheckSquare className="h-4 w-4 text-[var(--crm-brand)]" aria-hidden />
+                  {bulkSelected.size} selecionada{bulkSelected.size === 1 ? "" : "s"}
+                </span>
+                <Separator orientation="vertical" className="h-6" />
+                <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={bulkBusy}
+                      className="h-8 gap-2 border-[var(--crm-border-2)] text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface)]"
+                    >
+                      <Users className="h-4 w-4" aria-hidden />
+                      Atribuir
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="center"
+                    side="top"
+                    className="w-64 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+                  >
+                    <div className="border-b border-[var(--crm-border)] p-2">
+                      <div className="relative">
+                        <Search
+                          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--crm-ink-3)]"
+                          aria-hidden
+                        />
+                        <Input
+                          autoFocus
+                          value={bulkAssignSearch}
+                          onChange={(e) => setBulkAssignSearch(e.target.value)}
+                          placeholder="Atribuir a..."
+                          className="h-8 border-[var(--crm-border-2)] pl-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <ul className="max-h-56 overflow-y-auto py-1">
+                      {attendants
+                        .filter((a) =>
+                          a.name.toLowerCase().includes(bulkAssignSearch.trim().toLowerCase()),
+                        )
+                        .map((a) => (
+                          <li key={a.id}>
+                            <button
+                              type="button"
+                              className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
+                              onClick={() =>
+                                void runBulkPatch("Atribuir", { assigneeId: a.id })
+                              }
+                            >
+                              {a.name}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                <Popover open={bulkStageOpen} onOpenChange={setBulkStageOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={bulkBusy}
+                      className="h-8 gap-2 border-[var(--crm-border-2)] text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface)]"
+                    >
+                      <ArrowDownUp className="h-4 w-4" aria-hidden />
+                      Mudar etapa
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="center"
+                    side="top"
+                    className="w-64 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+                  >
+                    <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--crm-ink-3)]">
+                      Etapas de {funnel.listName}
+                    </div>
+                    <Separator />
+                    <ul className="max-h-64 overflow-y-auto py-1">
+                      {funnel.stages.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
+                            onClick={() =>
+                              void runBulkPatch("Mudar etapa", {
+                                funnelId: funnel.id,
+                                stageId: s.id,
+                              })
+                            }
+                          >
+                            {s.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                <Popover open={bulkStatusOpen} onOpenChange={setBulkStatusOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={bulkBusy}
+                      className="h-8 gap-2 border-[var(--crm-border-2)] text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface)]"
+                    >
+                      <ClipboardCheck className="h-4 w-4" aria-hidden />
+                      Status
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="center"
+                    side="top"
+                    className="w-56 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+                  >
+                    <ul className="py-1">
+                      {/* Em vendido/perdido em lote é arriscado (precisa motivo, items, etc) — fica fora */}
+                      {STATUS_OPTIONS.filter(
+                        (s) =>
+                          s.id !== "all" && s.id !== "vendido" && s.id !== "perdido",
+                      ).map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
+                            onClick={() =>
+                              void runBulkPatch("Mudar status", {
+                                status: s.id as CrmNegotiationStatus,
+                              })
+                            }
+                          >
+                            {s.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="border-t border-[var(--crm-border)] px-3 py-2 text-[10px] text-[var(--crm-ink-3)]">
+                      Marcar venda/perda em lote não é permitido — exige confirmação por negócio.
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkBusy}
+                  className="h-8 gap-2 border-[var(--crm-border-2)] text-[var(--crm-ink-2)] hover:bg-[var(--crm-surface)]"
+                  onClick={handleBulkExport}
+                >
+                  <Download className="h-4 w-4" aria-hidden />
+                  CSV
+                </Button>
+                <Separator orientation="vertical" className="h-6" />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={bulkBusy}
+                  className="h-8 gap-1 text-[var(--crm-ink-3)] hover:text-[var(--crm-ink)]"
+                  onClick={clearBulkSelection}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                  Limpar
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 

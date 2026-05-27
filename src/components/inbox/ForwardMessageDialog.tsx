@@ -12,15 +12,19 @@ import { Input } from "@/components/ui/input";
 import { useInboxChats, useSendWhatsappMessage } from "@/lib/api/whatsapp";
 import { useToast } from "@/hooks/use-toast";
 import { ConversationAvatar } from "./ConversationAvatar";
-import type { InboxChat, WhatsappMessage } from "@/types/domain";
+import type { InboxChat, SendWhatsappMessageInput, WhatsappMessage } from "@/types/domain";
 
-function buildForwardInput(message: WhatsappMessage, dest: InboxChat) {
+function buildForwardInput(message: WhatsappMessage, dest: InboxChat): SendWhatsappMessageInput {
+  if (message.messageType === "system") {
+    throw new Error("Mensagens de sistema não podem ser encaminhadas.");
+  }
+
   const base = {
     instanceId: dest.instanceId,
     chatId: dest.id,
     remoteJid: dest.remoteJid,
     messageType: message.messageType,
-  } as const;
+  } satisfies Pick<SendWhatsappMessageInput, "instanceId" | "chatId" | "remoteJid" | "messageType">;
 
   if (message.messageType === "text") {
     return { ...base, bodyText: message.bodyText ?? "" };

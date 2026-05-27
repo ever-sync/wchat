@@ -53,6 +53,7 @@ export type UseInboxComposerResult = {
   noteMode: boolean;
   microphoneState: ComposerMicrophoneState;
   isRecording: boolean;
+  isRecordingPaused: boolean;
   recordingDurationSec: number;
   quickReplyOpen: boolean;
   selectedAttachmentName: string | null;
@@ -93,6 +94,7 @@ export type UseInboxComposerResult = {
   handleDiscardMessage: (failed: WhatsappMessage) => void;
   handleAttachmentSelection: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleMicrophoneClick: () => Promise<void>;
+  handleRecordingPauseToggle: () => void;
 };
 
 /**
@@ -126,6 +128,7 @@ export function useInboxComposer({
   const [microphoneState, setMicrophoneState] =
     useState<ComposerMicrophoneState>("idle");
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
   const [recordingDurationSec, setRecordingDurationSec] = useState(0);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
   const [selectedAttachmentName, setSelectedAttachmentName] = useState<string | null>(null);
@@ -177,6 +180,7 @@ export function useInboxComposer({
       microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
       microphoneStreamRef.current = null;
       setIsRecording(false);
+      setIsRecordingPaused(false);
       setRecordingDurationSec(0);
     };
   }, [chat?.id]);
@@ -232,6 +236,13 @@ export function useInboxComposer({
       window.clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
+  }
+
+  function startRecordingTimer() {
+    clearRecordingTimer();
+    recordingTimerRef.current = window.setInterval(() => {
+      setRecordingDurationSec((seconds) => seconds + 1);
+    }, 1000);
   }
 
   // -------- Anexo (arquivo) --------
@@ -410,6 +421,7 @@ export function useInboxComposer({
         mediaRecorderRef.current = null;
         clearRecordingTimer();
         setIsRecording(false);
+        setIsRecordingPaused(false);
         setRecordingDurationSec(0);
 
         microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -548,11 +560,9 @@ export function useInboxComposer({
       recorder.start(250);
       setMessageType("audio");
       setIsRecording(true);
+      setIsRecordingPaused(false);
       setRecordingDurationSec(0);
-      clearRecordingTimer();
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordingDurationSec((seconds) => seconds + 1);
-      }, 1000);
+      startRecordingTimer();
     } catch (error) {
       setMicrophoneState("denied");
       microphoneStreamRef.current = null;
@@ -563,6 +573,24 @@ export function useInboxComposer({
         titulo: "Permissao de microfone negada",
         descricao: permMsg,
       });
+    }
+  }
+
+  function handleRecordingPauseToggle() {
+    const rec = mediaRecorderRef.current;
+    if (!isRecording || !rec || rec.state === "inactive") return;
+
+    if (rec.state === "recording") {
+      rec.pause();
+      clearRecordingTimer();
+      setIsRecordingPaused(true);
+      return;
+    }
+
+    if (rec.state === "paused") {
+      rec.resume();
+      startRecordingTimer();
+      setIsRecordingPaused(false);
     }
   }
 
@@ -766,6 +794,7 @@ export function useInboxComposer({
     noteMode,
     microphoneState,
     isRecording,
+    isRecordingPaused,
     recordingDurationSec,
     quickReplyOpen,
     selectedAttachmentName,
@@ -795,5 +824,6 @@ export function useInboxComposer({
     handleDiscardMessage,
     handleAttachmentSelection,
     handleMicrophoneClick,
+    handleRecordingPauseToggle,
   };
 }

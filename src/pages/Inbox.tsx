@@ -1208,8 +1208,10 @@ export default function Inbox() {
             attachmentProgress={composer.attachmentProgress}
             microphoneState={composer.microphoneState}
             isRecording={composer.isRecording}
+            isRecordingPaused={composer.isRecordingPaused}
             recordingDurationSec={composer.recordingDurationSec}
             onMicrophoneClick={composer.handleMicrophoneClick}
+            onRecordingPauseToggle={composer.handleRecordingPauseToggle}
             quickReplies={quickReplies}
             quickReplyOpen={composer.quickReplyOpen}
             onQuickReplyOpenChange={composer.setQuickReplyOpen}
