@@ -390,3 +390,26 @@ export function useClearChatSnooze(
     },
   });
 }
+
+async function setPinChat(chatId: string, isPinned: boolean): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase
+    .from("whatsapp_chats")
+    .update({ is_pinned: isPinned })
+    .eq("id", chatId);
+  if (error) throw new Error(error.message);
+}
+
+export function usePinChat(
+  options?: UseMutationOptions<void, Error, { chatId: string; isPinned: boolean }>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, isPinned }) => setPinChat(chatId, isPinned),
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}

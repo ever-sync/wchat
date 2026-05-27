@@ -8,6 +8,8 @@ import {
   CalendarClock,
   Hand,
   Pause,
+  Pin,
+  PinOff,
   Play,
   Search,
   ShoppingCart,
@@ -18,7 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CallButton } from "@/components/crm/CallButton";
 import { ChatTagsHeaderButton } from "@/components/inbox/ChatTagsHeaderButton";
-import { useClearChatSnooze, useSetChatAiMode } from "@/lib/api/chat-tags";
+import { useClearChatSnooze, usePinChat, useSetChatAiMode } from "@/lib/api/chat-tags";
 import {
   chatAssignedToOtherAttendantMessage,
   chatAssigneeBlockedMessage,
@@ -79,6 +81,8 @@ export type ChatHeaderActionsProps = {
   /** Notificações desktop (vêm do hook do pai) */
   notificationSettings: NotificationSettings;
 
+  onPinChat?: () => void;
+
   /** Triggers de dialogs/sheets do pai */
   onOpenSnoozeDialog: () => void;
   onOpenAssignDialog: () => void;
@@ -110,6 +114,7 @@ export function ChatHeaderActions({
   onReleaseNegotiation,
   onClaimChatAndNegotiation,
   notificationSettings,
+  onPinChat,
   onOpenSnoozeDialog,
   onOpenAssignDialog,
   onOpenProfile,
@@ -118,6 +123,7 @@ export function ChatHeaderActions({
   onOpenFollowUp,
 }: ChatHeaderActionsProps) {
   const { toast } = useToast();
+  const pinChat = usePinChat();
   const setAiMode = useSetChatAiMode({
     onError: (error) =>
       toast({
@@ -239,6 +245,28 @@ export function ChatHeaderActions({
           aria-label="Buscar na conversa"
         >
           <Search className="h-4 w-4" />
+        </button>
+      </IconTip>
+      <IconTip label={chat.isPinned ? "Desafixar conversa" : "Fixar conversa"}>
+        <button
+          type="button"
+          onClick={() => {
+            if (onPinChat) {
+              onPinChat();
+            } else {
+              pinChat.mutate({ chatId: chat.id, isPinned: !chat.isPinned });
+            }
+          }}
+          disabled={pinChat.isPending}
+          className={cn(
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-45",
+            chat.isPinned
+              ? "bg-wchat-100 text-primary hover:bg-wchat-200"
+              : "text-muted-foreground hover:bg-wchat-100 hover:text-foreground",
+          )}
+          aria-label={chat.isPinned ? "Desafixar conversa" : "Fixar conversa"}
+        >
+          {chat.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
         </button>
       </IconTip>
       <ChatTagsHeaderButton

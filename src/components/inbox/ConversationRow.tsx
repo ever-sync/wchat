@@ -1,7 +1,7 @@
 import { memo, type MouseEvent } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlarmClock, CalendarClock, Check, Clock, Lock } from "lucide-react";
+import { AlarmClock, CalendarClock, Check, Clock, Lock, Pin } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isChatSlaBreached, isChatSnoozed, slaMinutesRemaining } from "@/lib/inbox-chat-rules";
 import { mustAssumeUnassignedChatToView } from "@/lib/crm/negotiation-assignee";
@@ -196,14 +196,19 @@ export const ConversationRow = memo(function ConversationRow({
                 <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">{subtitle}</p>
               ) : null}
             </div>
-            <p
-              className={cn(
-                "shrink-0 pt-0.5 text-[10px] tabular-nums leading-snug",
-                active ? "text-muted-foreground" : chat.unreadCount > 0 ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              {formatConversationTime(chat.lastMessageAt)}
-            </p>
+            <div className="flex shrink-0 items-center gap-1 pt-0.5">
+              {chat.isPinned ? (
+                <Pin className="h-3 w-3 text-muted-foreground" aria-label="Fixada" />
+              ) : null}
+              <p
+                className={cn(
+                  "text-[10px] tabular-nums leading-snug",
+                  active ? "text-muted-foreground" : chat.unreadCount > 0 ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                {formatConversationTime(chat.lastMessageAt)}
+              </p>
+            </div>
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <p

@@ -51,6 +51,7 @@ export type ConversationListProps = {
   onClearChatSelection?: () => void;
   onApplyTagToChats?: (chatIds: string[], tagId: string) => void;
   applyingTagToChats?: boolean;
+  onPinChat?: (chatId: string, isPinned: boolean) => void;
   /** Índice de follow-ups por customer/negotiation. Derivamos status por linha. */
   followupIndex?: {
     overdue: { customerIds: ReadonlySet<string>; negotiationIds: ReadonlySet<string> };
@@ -232,6 +233,7 @@ export function ConversationList({
   onClearChatSelection,
   onApplyTagToChats,
   applyingTagToChats = false,
+  onPinChat,
   followupIndex,
 }: ConversationListProps) {
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -284,6 +286,8 @@ export function ConversationList({
       : contextMenu
         ? [contextMenu.chatId]
         : [];
+
+  const contextMenuChat = contextMenu ? chats.find((c) => c.id === contextMenu.chatId) : null;
 
   /**
    * Para cada chat, deriva o status de follow-up (overdue / soon / null) a
@@ -684,6 +688,18 @@ export function ConversationList({
             >
               {selectedChatSet.has(contextMenu.chatId) ? "Remover da seleção" : "Selecionar conversa"}
             </button>
+            {onPinChat ? (
+              <button
+                type="button"
+                className="w-full rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-wchat-50"
+                onClick={() => {
+                  onPinChat(contextMenu.chatId, !contextMenuChat?.isPinned);
+                  setContextMenu(null);
+                }}
+              >
+                {contextMenuChat?.isPinned ? "Desafixar conversa" : "Fixar conversa"}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

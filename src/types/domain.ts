@@ -776,6 +776,7 @@ export interface InboxChat {
   firstResponseAt?: string | null;
   slaFirstResponseDueAt?: string | null;
   snoozeUntil?: string | null;
+  isPinned?: boolean;
   tags?: ChatTagOnChat[];
 }
 

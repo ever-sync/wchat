@@ -103,6 +103,7 @@ type ChatRow = {
   first_response_at?: string | null;
   sla_first_response_due_at?: string | null;
   snooze_until?: string | null;
+  is_pinned?: boolean | null;
   whatsapp_instances?: { display_name: string; archived_at?: string | null } | null;
   customers?: { nome: string } | null;
   assignee?: { nome: string } | null;
@@ -197,6 +198,7 @@ function mapChat(row: ChatRow): InboxChat {
     firstResponseAt: row.first_response_at ?? null,
     slaFirstResponseDueAt: row.sla_first_response_due_at ?? null,
     snoozeUntil: row.snooze_until ?? null,
+    isPinned: row.is_pinned ?? false,
     tags,
   };
 }
@@ -419,6 +421,7 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
       first_response_at,
       sla_first_response_due_at,
       snooze_until,
+      is_pinned,
       whatsapp_instances(display_name, archived_at),
       customers(nome),
       assignee:profiles!whatsapp_chats_assignee_id_fkey(nome),
@@ -516,6 +519,11 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     .filter((row) => !row.whatsapp_instances?.archived_at)
     .map((row) => mapChat(row))
     .sort((left, right) => {
+      // Fixadas sempre no topo, independente de snoozed.
+      if (Boolean(left.isPinned) !== Boolean(right.isPinned)) {
+        return left.isPinned ? -1 : 1;
+      }
+
       const leftSnoozed = left.snoozeUntil && new Date(left.snoozeUntil).getTime() > now;
       const rightSnoozed = right.snoozeUntil && new Date(right.snoozeUntil).getTime() > now;
       if (leftSnoozed !== rightSnoozed) {
@@ -1205,6 +1213,9 @@ export function useInboxChats(
  */
 function sortInboxChatsSidebar(chats: InboxChat[]): InboxChat[] {
   return [...chats].sort((left, right) => {
+    if (Boolean(left.isPinned) !== Boolean(right.isPinned)) {
+      return left.isPinned ? -1 : 1;
+    }
     const rightTime = new Date(right.lastMessageAt ?? 0).getTime();
     const leftTime = new Date(left.lastMessageAt ?? 0).getTime();
     if (rightTime !== leftTime) {

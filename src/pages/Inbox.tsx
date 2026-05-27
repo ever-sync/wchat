@@ -52,6 +52,7 @@ import {
   useAtendimentoUsers,
   useAddTagToChats,
   useChatTags,
+  usePinChat,
   useSnoozeChat,
 } from "@/lib/api/chat-tags";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
@@ -198,6 +199,7 @@ export default function Inbox() {
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
   const snoozeChatMutation = useSnoozeChat();
+  const pinChatMutation = usePinChat();
   const addTagToChatsMutation = useAddTagToChats({
     onSuccess: (_data, variables) => {
       const tag = availableTags.find((t) => t.id === variables.tagId);
@@ -881,6 +883,7 @@ export default function Inbox() {
           onClearChatSelection={() => setSelectedChatIds([])}
           onApplyTagToChats={applyTagToChats}
           applyingTagToChats={addTagToChatsMutation.isPending}
+          onPinChat={(chatId, isPinned) => pinChatMutation.mutate({ chatId, isPinned })}
           followupIndex={followupsIndex}
         />
 
