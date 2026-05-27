@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Loader2, Plus, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,18 +16,25 @@ import {
   useCreateChatTag,
   useRemoveTagFromChat,
 } from "@/lib/api/chat-tags";
+import { useRunPlayground } from "@/lib/api/ai-agent";
 import { CHAT_TAG_COLOR_PRESETS, DEFAULT_CHAT_TAG_COLOR } from "@/lib/chat-tag-colors";
+import {
+  buildIntentClassifierPrompt,
+  parseIntentClassifierReply,
+} from "@/lib/inboxIntentClassifier";
 import { cn } from "@/lib/utils";
-import type { ChatTagOnChat } from "@/types/domain";
+import type { ChatTag, ChatTagOnChat, WhatsappMessage } from "@/types/domain";
 import { useToast } from "@/hooks/use-toast";
 
 type ChatTagsPickerProps = {
   chatId: string;
   tags: ChatTagOnChat[];
   disabled?: boolean;
+  /** Mensagens da thread — quando passadas, libera o botão "Sugerir com IA". */
+  messages?: WhatsappMessage[];
 };
 
-export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPickerProps) {
+export function ChatTagsPicker({ chatId, tags, disabled = false, messages }: ChatTagsPickerProps) {
   const { toast } = useToast();
   const { data: catalog = [], isLoading: catalogLoading } = useChatTags();
   const createTag = useCreateChatTag();
@@ -36,6 +43,8 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
 
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState<string>(DEFAULT_CHAT_TAG_COLOR);
+  const [aiSuggestions, setAiSuggestions] = useState<ChatTag[]>([]);
+  const [aiNoSuggestion, setAiNoSuggestion] = useState(false);
 
   const appliedIds = useMemo(() => new Set(tags.map((t) => t.tagId)), [tags]);
 
@@ -43,6 +52,47 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
     () => catalog.filter((t) => !appliedIds.has(t.id)),
     [appliedIds, catalog],
   );
+
+  const suggestIntent = useRunPlayground({
+    onSuccess: (data) => {
+      const { matched } = parseIntentClassifierReply(data.reply ?? "", catalog);
+      // Filtra sugestões já aplicadas.
+      const fresh = matched.filter((t) => !appliedIds.has(t.id));
+      setAiSuggestions(fresh);
+      setAiNoSuggestion(fresh.length === 0);
+    },
+    onError: (error) => {
+      toast({
+        title: "Não foi possível sugerir etiquetas",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const canSuggest = Array.isArray(messages) && messages.length > 0 && catalog.length > 0;
+
+  const handleSuggestIntent = () => {
+    if (!canSuggest || !messages) return;
+    setAiSuggestions([]);
+    setAiNoSuggestion(false);
+    suggestIntent.mutate(buildIntentClassifierPrompt(messages, catalog));
+  };
+
+  const applySuggestion = async (tag: ChatTag) => {
+    setAiSuggestions((prev) => prev.filter((t) => t.id !== tag.id));
+    try {
+      await addTag.mutateAsync({ chatId, tagId: tag.id });
+    } catch (e) {
+      // Rollback visual: devolve a sugestão à lista.
+      setAiSuggestions((prev) => [tag, ...prev]);
+      toast({
+        title: "Erro ao aplicar sugestão",
+        description: e instanceof Error ? e.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const isBusy = disabled || createTag.isPending || addTag.isPending || removeTag.isPending;
 
@@ -109,7 +159,51 @@ export function ChatTagsPicker({ chatId, tags, disabled = false }: ChatTagsPicke
 
   return (
     <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Etiquetas</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Etiquetas</p>
+        {canSuggest ? (
+          <button
+            type="button"
+            disabled={isBusy || suggestIntent.isPending}
+            onClick={handleSuggestIntent}
+            data-testid="chat-tags-suggest"
+            className="inline-flex items-center gap-1 rounded-full bg-wchat-50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            title="Sugerir etiquetas com base na conversa"
+          >
+            {suggestIntent.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            Sugerir com IA
+          </button>
+        ) : null}
+      </div>
+
+      {aiSuggestions.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground">Sugeridas:</span>
+          {aiSuggestions.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              disabled={isBusy}
+              onClick={() => void applySuggestion(tag)}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ borderColor: tag.color, color: tag.color, backgroundColor: `${tag.color}11` }}
+              title={`Aplicar "${tag.name}"`}
+            >
+              <Plus className="h-3 w-3" />
+              {tag.name}
+            </button>
+          ))}
+        </div>
+      ) : aiNoSuggestion ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Sem sugestão automática — adicione manualmente abaixo.
+        </p>
+      ) : null}
+
       <div className="mt-2 flex min-h-[36px] flex-wrap gap-2">
         {tags.map((t) => (
           <span

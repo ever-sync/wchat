@@ -1232,7 +1232,7 @@ export function CustomerProfileSheet({
 
                 <TabsContent value="etiquetas" className="mt-0 focus-visible:outline-none">
                   {isSupabaseConfigured ? (
-                    <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} />
+                    <ChatTagsPicker chatId={chat.id} tags={chat.tags ?? []} disabled={crmActionsLocked} messages={messages} />
                   ) : customer ? (
                     <ProfileTagsPicker
                       customer={customer}
