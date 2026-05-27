@@ -465,6 +465,54 @@ export function useClaimCrmNegotiation(
   });
 }
 
+export type AutoAssignPoolResult = {
+  assigned_count: number;
+  skipped_no_attendant: number;
+  total_pool: number;
+};
+
+export async function autoAssignPoolNegotiations(input: {
+  limit?: number;
+  funnelId?: string | null;
+}): Promise<AutoAssignPoolResult> {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase não configurado.");
+  }
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc("auto_assign_pool_negotiations", {
+    p_limit: input.limit ?? 50,
+    p_funnel_id: input.funnelId ?? null,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const row = ((data ?? []) as Array<Record<string, unknown>>)[0] ?? {};
+  return {
+    assigned_count: Number(row.assigned_count ?? 0),
+    skipped_no_attendant: Number(row.skipped_no_attendant ?? 0),
+    total_pool: Number(row.total_pool ?? 0),
+  };
+}
+
+export function useAutoAssignPoolNegotiations(
+  options?: UseMutationOptions<
+    AutoAssignPoolResult,
+    Error,
+    { limit?: number; funnelId?: string | null }
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: autoAssignPoolNegotiations,
+    ...options,
+    onSuccess: async (data, variables, ctx) => {
+      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
 export async function releaseCrmNegotiationToPool(negotiationId: string): Promise<void> {
   if (!isSupabaseConfigured) {
     throw new Error("Supabase não configurado.");

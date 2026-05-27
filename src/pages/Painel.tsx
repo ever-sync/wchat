@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PainelGoalsCard } from "@/components/painel/PainelGoalsCard";
 import {
   useAttendanceDashboard,
   useAttendanceDashboardRealtime,
@@ -219,6 +220,9 @@ export function PainelAoVivo() {
               <MetricTile label="Enviadas" value={data.today.messagesOutbound} icon={ArrowUpRight} accent="emerald" />
             </div>
           </section>
+
+          {/* Metas do mês */}
+          <PainelGoalsCard />
 
           {/* Equipe */}
           <Card>

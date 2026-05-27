@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NegotiationSuggestMessageButton } from "@/components/crm/NegotiationAiSummary";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WHATSAPP_MEDIA_MAX_BYTES } from "@/lib/api/whatsapp-media";
@@ -83,6 +84,13 @@ export type MessageInputProps = {
   isSuggestingReply?: boolean;
   /** Desabilita o botão (sem thread, composer com texto, sem permissão, etc.). */
   suggestReplyDisabled?: boolean;
+  /**
+   * Quando o chat tem uma negociação CRM vinculada, expõe um segundo botão de
+   * sugestão que usa o contexto completo da negociação (tarefas, comentários,
+   * atividades) — render só quando ID + handler de aplicar forem fornecidos.
+   */
+  crmSuggestNegotiationId?: string | null;
+  onCrmSuggestApply?: (text: string) => void;
 };
 
 export function MessageInput({
@@ -134,6 +142,8 @@ export function MessageInput({
   onSuggestReply,
   isSuggestingReply = false,
   suggestReplyDisabled = false,
+  crmSuggestNegotiationId,
+  onCrmSuggestApply,
 }: MessageInputProps) {
   const { openCalculadora } = useCalculadora();
   const previewKind = resolveComposerAttachmentPreview(
@@ -424,6 +434,21 @@ export function MessageInput({
                 <Sparkles className="h-4 w-4" />
               )}
             </button>
+          ) : null}
+          {crmSuggestNegotiationId && onCrmSuggestApply ? (
+            <div
+              className="flex items-center"
+              data-testid="composer-suggest-crm-message"
+            >
+              <NegotiationSuggestMessageButton
+                negotiationId={crmSuggestNegotiationId}
+                variant="ghost"
+                iconOnly
+                buttonTitle="Sugerir com contexto do CRM (negócio + tarefas + comentários)"
+                buttonClassName="h-10 w-10 rounded-full p-0 hover:bg-wchat-200 hover:text-foreground"
+                onApplyToCurrent={onCrmSuggestApply}
+              />
+            </div>
           ) : null}
         </div>
 

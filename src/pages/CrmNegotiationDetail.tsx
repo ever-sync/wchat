@@ -8,6 +8,11 @@ import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsE
 import { CallButton } from "@/components/crm/CallButton";
 import { CallLogsPanel } from "@/components/crm/CallLogsPanel";
 import { NegotiationCommentsPanel } from "@/components/crm/NegotiationCommentsPanel";
+import { NegotiationChangeHistoryPanel } from "@/components/crm/NegotiationChangeHistory";
+import { NegotiationHeroStrip } from "@/components/crm/NegotiationHeroStrip";
+import { buildScoringContext, computeLeadScore } from "@/lib/crm/lead-score";
+import { useTenantSettings } from "@/lib/api/integrations";
+import { normalizeStaleNegotiationDays } from "@/lib/crm/negotiation-alerts";
 import { useNegotiationProducts } from "@/lib/api/crm-negotiation-products";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -38,6 +43,7 @@ import {
   type CrmNegotiationPatch,
   useClaimCrmNegotiation,
   useCrmNegotiation,
+  useCrmNegotiations,
   useReleaseCrmNegotiationToPool,
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
@@ -270,6 +276,24 @@ function CrmNegotiationDetailContent({
     () => (negotiationFunnel?.stages ?? []).map((s) => ({ key: s.id, label: s.title })),
     [negotiationFunnel],
   );
+
+  // Lead score com contexto do funil real (mediana + probabilidade da etapa).
+  // Mesma cache do Kanban — geralmente já está aquecida ao chegar no detalhe.
+  const { data: funnelNegRecords = [] } = useCrmNegotiations(
+    { funnelId: negotiation.funnelId },
+    { enabled: isPersistedRow && isSupabaseConfigured },
+  );
+  const leadScoreResult = useMemo(() => {
+    const stages = negotiationFunnel?.stages ?? [];
+    const ctx = buildScoringContext(
+      funnelNegRecords.map((r) => ({ totalValue: r.totalValue, status: r.status })),
+      stages,
+    );
+    return computeLeadScore(negotiation, {
+      funnelMedianValue: ctx.funnelMedianValue,
+      stageProbabilityPct: ctx.stageProbabilities.get(negotiation.stageId) ?? null,
+    });
+  }, [funnelNegRecords, negotiation, negotiationFunnel]);
 
   const resolvedPipelineIndex = useMemo(() => {
     const stages = negotiationFunnel?.stages ?? [];
@@ -555,8 +579,30 @@ function CrmNegotiationDetailContent({
     });
   };
 
+  const heroStageTitle = useMemo(() => {
+    const stages = negotiationFunnel?.stages ?? [];
+    return stages.find((s) => s.id === negotiation.stageId)?.title ?? negotiation.stageId;
+  }, [negotiation.stageId, negotiationFunnel]);
+
+  const { data: tenantSettingsForHero } = useTenantSettings();
+  const heroStaleDays = useMemo(
+    () => normalizeStaleNegotiationDays(tenantSettingsForHero?.staleNegotiationDays),
+    [tenantSettingsForHero?.staleNegotiationDays],
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {isPersistedRow && isSupabaseConfigured ? (
+        <NegotiationHeroStrip
+          negotiation={negotiation}
+          leadScore={leadScoreResult}
+          stageTitle={heroStageTitle}
+          funnelLabel={negotiationFunnel?.listName}
+          hasChat={Boolean(sourceChatId)}
+          onOpenChat={openCustomerInbox}
+          staleNegotiationDays={heroStaleDays}
+        />
+      ) : null}
       <ClienteRdPerfilView
         cliente={displayCustomer}
         daysContact={daysContact}
@@ -949,6 +995,22 @@ function CrmNegotiationDetailContent({
             <NegotiationCommentsPanel
               negotiationId={negotiation.id}
               attendants={commentMentionAttendants}
+              leadScore={leadScoreResult}
+              changeHistorySlot={
+                <NegotiationChangeHistoryPanel
+                  negotiationId={negotiation.id}
+                  attendants={commentMentionAttendants}
+                  customers={
+                    linkedCustomer
+                      ? [{ id: linkedCustomer.id, nome: linkedCustomer.nome ?? "" }]
+                      : []
+                  }
+                  stages={(negotiationFunnel?.stages ?? []).map((s) => ({
+                    id: s.id,
+                    title: s.title,
+                  }))}
+                />
+              }
             />
           ) : undefined
         }

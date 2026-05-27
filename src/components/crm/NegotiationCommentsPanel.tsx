@@ -7,11 +7,17 @@ import {
   type KeyboardEvent,
 } from "react";
 import { AtSign, MessageSquare, Send, Trash2 } from "lucide-react";
+import type { LeadScoreResult } from "@/lib/crm/lead-score";
 import { Button } from "@/components/ui/button";
-import { NegotiationAiSummaryButton } from "@/components/crm/NegotiationAiSummary";
+import {
+  NegotiationAiSummaryButton,
+  NegotiationSuggestMessageButton,
+} from "@/components/crm/NegotiationAiSummary";
+import { NegotiationScoreCard } from "@/components/crm/NegotiationScoreCard";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import type { ReactNode } from "react";
 import {
   type CrmNegotiationComment,
   useCreateCrmNegotiationComment,
@@ -97,9 +103,14 @@ function renderBody(body: string, attendantsByName: Map<string, string>) {
 export function NegotiationCommentsPanel({
   negotiationId,
   attendants,
+  leadScore,
+  changeHistorySlot,
 }: {
   negotiationId: string;
   attendants: AttendantOption[];
+  leadScore?: LeadScoreResult;
+  /** Painel opcional renderizado abaixo da thread (ex.: histórico de mudanças). */
+  changeHistorySlot?: ReactNode;
 }) {
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -262,13 +273,15 @@ export function NegotiationCommentsPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {leadScore ? <NegotiationScoreCard score={leadScore} /> : null}
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--crm-ink)]">
           <MessageSquare className="h-4 w-4 text-[var(--crm-brand)]" aria-hidden />
           Comentários da negociação
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <NegotiationAiSummaryButton negotiationId={negotiationId} variant="outline" />
+          <NegotiationSuggestMessageButton negotiationId={negotiationId} variant="outline" />
           <span className="text-xs text-[var(--crm-ink-3)]">
             {comments.length} {comments.length === 1 ? "comentário" : "comentários"}
           </span>
@@ -395,6 +408,7 @@ export function NegotiationCommentsPanel({
           </Button>
         </div>
       </div>
+      {changeHistorySlot}
     </div>
   );
 }

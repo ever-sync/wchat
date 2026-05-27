@@ -20,6 +20,7 @@ export type AuditLog = {
 
 export type AuditLogFilters = {
   entityType?: string | null;
+  entityId?: string | null;
   action?: string | null;
   limit?: number;
 };
@@ -81,6 +82,7 @@ export async function fetchAuditLogs(filters: AuditLogFilters = {}): Promise<Aud
     .limit(filters.limit ?? 200);
 
   if (filters.entityType) query = query.eq("entity_type", filters.entityType);
+  if (filters.entityId) query = query.eq("entity_id", filters.entityId);
   if (filters.action) query = query.eq("action", filters.action);
 
   const { data, error } = await query;
@@ -90,7 +92,13 @@ export async function fetchAuditLogs(filters: AuditLogFilters = {}): Promise<Aud
 
 export function useAuditLogs(filters: AuditLogFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ["audit-logs", filters.entityType ?? null, filters.action ?? null, filters.limit ?? 200],
+    queryKey: [
+      "audit-logs",
+      filters.entityType ?? null,
+      filters.entityId ?? null,
+      filters.action ?? null,
+      filters.limit ?? 200,
+    ],
     queryFn: () => fetchAuditLogs(filters),
     enabled: (options?.enabled ?? true) && isSupabaseConfigured,
     staleTime: 15_000,

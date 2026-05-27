@@ -1505,6 +1505,27 @@ const MEDIA_BUCKET = "whatsapp-media";
 
 const STORAGE_PUBLIC_MARKER = `/storage/v1/object/public/${MEDIA_BUCKET}/`;
 
+function externalizeStoragePublicUrl(publicUrl: string): string {
+  const externalBase =
+    Deno.env.get("SUPABASE_PUBLIC_URL") ??
+    Deno.env.get("PUBLIC_SUPABASE_URL") ??
+    Deno.env.get("API_EXTERNAL_URL") ??
+    "";
+  const cleanBase = externalBase.replace(/\/+$/, "");
+  if (!cleanBase) return publicUrl;
+
+  try {
+    const current = new URL(publicUrl);
+    const external = new URL(cleanBase);
+    current.protocol = external.protocol;
+    current.hostname = external.hostname;
+    current.port = external.port;
+    return current.toString();
+  } catch {
+    return publicUrl;
+  }
+}
+
 /** URL de CDN da Meta (foto de perfil do WhatsApp): expira e dá 403 em <img>. */
 function isMetaCdnAvatarUrl(url: string): boolean {
   try {
@@ -1600,11 +1621,11 @@ async function mirrorAvatarToStorage(
     }
     // `?v=` = versão da foto: muda quando o lead troca a imagem → fura cache.
     try {
-      const out = new URL(data.publicUrl);
+      const out = new URL(externalizeStoragePublicUrl(data.publicUrl));
       out.searchParams.set("v", version);
       return out.toString();
     } catch {
-      return `${data.publicUrl}?v=${version}`;
+      return `${externalizeStoragePublicUrl(data.publicUrl)}?v=${version}`;
     }
   } catch (error) {
     console.error("mirrorAvatarToStorage: erro", error);
@@ -1751,7 +1772,7 @@ async function mirrorIncomingMediaToStorage(
   }
 
   return {
-    publicUrl: data.publicUrl,
+    publicUrl: externalizeStoragePublicUrl(data.publicUrl),
     mimeType: mime,
     fileName: resolvedFileName,
   };

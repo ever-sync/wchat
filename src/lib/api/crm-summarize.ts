@@ -37,3 +37,38 @@ export function useSummarizeCrmNegotiation(
     ...options,
   });
 }
+
+// ─── Sugerir próxima mensagem ─────────────────────────────────────────────────
+
+export type SuggestNextMessageTone = "cordial" | "direto" | "urgente";
+
+export type SuggestNextMessageResponse = {
+  message: string;
+  tone: SuggestNextMessageTone;
+  usage: SummarizeNegotiationResponse["usage"];
+  model: string;
+  chatId: string | null;
+};
+
+export async function suggestNextMessage(input: {
+  negotiationId: string;
+  tone: SuggestNextMessageTone;
+}): Promise<SuggestNextMessageResponse> {
+  return invokeAuthedFunction<SuggestNextMessageResponse>(
+    "crm-suggest-next-message",
+    input,
+  );
+}
+
+export function useSuggestNextMessage(
+  options?: UseMutationOptions<
+    SuggestNextMessageResponse,
+    Error,
+    { negotiationId: string; tone: SuggestNextMessageTone }
+  >,
+) {
+  return useMutation({
+    mutationFn: suggestNextMessage,
+    ...options,
+  });
+}

@@ -66,3 +66,7 @@ verify_jwt = false
 # Resumo IA de negociação (CRM): JWT do tenant; gate crm/view via requireTenantPermission.
 [functions.crm-summarize-negotiation]
 verify_jwt = false
+
+# Sugestão de próxima mensagem (CRM): JWT do tenant; gate crm/edit.
+[functions.crm-suggest-next-message]
+verify_jwt = false

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useDeferredValue, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useToast } from "@/hooks/use-toast";
 import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import { useCustomers } from "@/lib/api/customers";
+import { useLeadDuplicates } from "@/lib/api/crm-lead-duplicates";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import {
   customFieldValueToString,
@@ -154,12 +156,38 @@ export function CustomerLeadSheet({
   disabled = false,
 }: CustomerLeadSheetProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const isEdit = Boolean(customer);
   const { data: customers = [] } = useCustomers({}, { enabled: open });
   const { data: fieldDefs = [] } = useCustomerCustomFields({ enabled: open });
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
+
+  // Dedup: roda enquanto o usuário digita telefone/email. excludeCustomerId
+  // garante que, ao editar, o próprio registro não aparece como duplicata.
+  const deferredPhone = useDeferredValue(telefone);
+  const deferredEmail = useDeferredValue(email);
+  const phoneDigitsLen = deferredPhone.replace(/\D/g, "").length;
+  const dupQuery = useLeadDuplicates(
+    {
+      phone: phoneDigitsLen >= 8 ? deferredPhone : null,
+      email: deferredEmail.trim() ? deferredEmail : null,
+      cpf: null,
+      excludeCustomerId: customer?.id ?? null,
+    },
+    { enabled: open && (phoneDigitsLen >= 8 || deferredEmail.trim().length > 0) },
+  );
+  const duplicateRows = dupQuery.data ?? [];
+  // De-dup por customer id, mantendo o motivo já priorizado pelo RPC (cpf > email > phone).
+  const uniqueDuplicates = (() => {
+    const seen = new Set<string>();
+    return duplicateRows.filter((d) => {
+      if (seen.has(d.customerId)) return false;
+      seen.add(d.customerId);
+      return true;
+    });
+  })();
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false);
   const [savingCustomFields, setSavingCustomFields] = useState(false);
@@ -364,6 +392,57 @@ export function CustomerLeadSheet({
                   autoComplete="tel"
                 />
               </div>
+
+              {uniqueDuplicates.length > 0 ? (
+                <div className="space-y-2 rounded-md border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)]/60 p-3">
+                  <div className="flex items-start gap-2 text-sm font-semibold text-[var(--crm-orange)]">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    {isEdit
+                      ? "Outros contatos compartilham telefone/e-mail"
+                      : "Contato com esses dados já existe"}
+                  </div>
+                  <ul className="space-y-1.5 text-xs text-[var(--crm-ink-2)]">
+                    {uniqueDuplicates.slice(0, 4).map((d) => (
+                      <li
+                        key={d.customerId}
+                        className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-[var(--crm-ink)]">
+                            {d.customerName || d.customerPhone || "(sem nome)"}
+                          </div>
+                          <div className="truncate text-[10px] text-[var(--crm-ink-3)]">
+                            {(d.customerPhone || d.customerEmail || "—")}
+                            {` · ${d.matchReason === "phone" ? "telefone" : d.matchReason === "email" ? "e-mail" : "CPF"}`}
+                            {d.openNegotiationId ? " · negócio aberto" : ""}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onOpenChange(false);
+                            navigate(`/clientes/${d.customerId}`);
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--crm-amber-border)] bg-card px-2 py-1 text-[11px] font-semibold text-[var(--crm-orange)] hover:bg-[var(--crm-amber-tint)]"
+                        >
+                          Abrir
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </li>
+                    ))}
+                    {uniqueDuplicates.length > 4 ? (
+                      <li className="text-[10px] text-[var(--crm-ink-3)]">
+                        +{uniqueDuplicates.length - 4} outros contatos
+                      </li>
+                    ) : null}
+                  </ul>
+                  <p className="text-[10px] text-[var(--crm-ink-3)]">
+                    {isEdit
+                      ? "Pode ser intencional (mesma família/empresa). Ajuste se for duplicata real."
+                      : "Salve mesmo assim só se for um contato realmente diferente."}
+                  </p>
+                </div>
+              ) : null}
 
               {hasCustomFields ? (
                 <div className="space-y-4 border-t border-[#eeeeee] pt-4">

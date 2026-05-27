@@ -60,6 +60,7 @@ import {
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
 import { AdvancedFilterDialog } from "@/components/crm/AdvancedFilterDialog";
 import { LeadScoreBadge } from "@/components/crm/LeadScoreBadge";
+import { NegotiationScoreCard } from "@/components/crm/NegotiationScoreCard";
 import {
   decodeAdvancedFilter,
   encodeAdvancedFilter,
@@ -116,6 +117,7 @@ import {
   type CrmNegotiationPatch,
   type ListCrmNegotiationsFilters,
   updateCrmNegotiation as updateCrmNegotiationDirect,
+  useAutoAssignPoolNegotiations,
   useClaimCrmNegotiation,
   useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
@@ -504,9 +506,11 @@ export default function Crm() {
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
   const deleteCrmNegotiation = useDeleteCrmNegotiation();
+  const autoAssignPool = useAutoAssignPoolNegotiations();
   const canReleaseToPool = canReleaseCrmNegotiationToPool(profile?.role);
   const canDeleteNegotiation = profile?.role === "admin";
   const canCreateSharedView = profile?.role !== "atendimento";
+  const canAutoAssignPool = canEditCrm && profile?.role !== "atendimento";
 
   // Vistas salvas customizadas (DB-backed) — Pacote 6.
   useCrmSavedViewsRealtime();
@@ -3017,6 +3021,48 @@ export default function Crm() {
             Reanimar {alertCountsInView.stale}
           </Link>
         ) : null}
+        {canAutoAssignPool && poolCountInFunnel > 0 ? (
+          <button
+            type="button"
+            disabled={autoAssignPool.isPending}
+            onClick={async () => {
+              try {
+                const res = await autoAssignPool.mutateAsync({ funnelId });
+                if (res.assigned_count === 0 && res.skipped_no_attendant === 0) {
+                  toast({ title: "Pool já vazio neste funil." });
+                } else if (res.assigned_count === 0) {
+                  toast({
+                    title: "Nenhum atendente disponível",
+                    description:
+                      "Verifique status (disponível) e cadastro no pool de atendimento.",
+                    variant: "destructive",
+                  });
+                } else {
+                  toast({
+                    title: `${res.assigned_count} negócio${res.assigned_count === 1 ? "" : "s"} atribuído${res.assigned_count === 1 ? "" : "s"}`,
+                    description:
+                      res.skipped_no_attendant > 0
+                        ? `${res.skipped_no_attendant} ficou${res.skipped_no_attendant === 1 ? "" : "ram"} no pool (sem capacidade).`
+                        : `Round-robin pela menor carga + disponibilidade.`,
+                  });
+                }
+              } catch (err) {
+                toast({
+                  title: "Falha ao distribuir o pool",
+                  description: err instanceof Error ? err.message : "Tente novamente.",
+                  variant: "destructive",
+                });
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-semibold text-[var(--crm-brand)] transition-colors hover:bg-[var(--crm-brand-tint-hover)] disabled:opacity-60"
+            title="Round-robin entre atendentes disponíveis, pela menor carga de CRM"
+          >
+            <Users className="h-3.5 w-3.5" aria-hidden />
+            {autoAssignPool.isPending
+              ? "Distribuindo…"
+              : `Distribuir pool (${poolCountInFunnel})`}
+          </button>
+        ) : null}
         {appliedOwner.mode === "pool" ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-medium text-[var(--crm-brand)]">
             Pool (sem responsável)
@@ -3775,6 +3821,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   const isExpanded = densityMode === "expanded";
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignSearch, setReassignSearch] = useState("");
+  const [scoreInfoOpen, setScoreInfoOpen] = useState(false);
   const canReassignChip =
     Boolean(canReassign) &&
     Boolean(onUpdateInline) &&
@@ -3800,6 +3847,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
     canClaim && isPersistedCrmNegotiationId(card.id) && isInPool;
   const showRelease =
     canReleaseToPool && isPersistedCrmNegotiationId(card.id) && !isInPool;
+  const showChatAction = Boolean(card.sourceChatId && onOpenChat);
   const showDelete = canDelete && isPersistedCrmNegotiationId(card.id);
   const assigneeBusy = isClaimPending || isReleasePending;
 
@@ -3993,7 +4041,27 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       )}
       {!isCompact && leadScore ? (
         <div className="mb-2">
-          <LeadScoreBadge score={leadScore} variant="compact" />
+          <Popover open={scoreInfoOpen} onOpenChange={setScoreInfoOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Lead score ${leadScore.total} de 100 — abrir detalhes`}
+                className="rounded transition-opacity hover:opacity-80"
+              >
+                <LeadScoreBadge score={leadScore} variant="compact" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[340px] border-[var(--crm-border)] bg-card p-0 shadow-lg"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <NegotiationScoreCard score={leadScore} className="border-0 shadow-none" />
+            </PopoverContent>
+          </Popover>
         </div>
       ) : null}
       <div className="mb-2 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
@@ -4009,61 +4077,22 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
         />
       </div>
       {isCompact ? null : (
-      <div className="mb-3 flex items-center justify-between gap-2 text-[var(--crm-ink-3)]">
-        <span className="inline-flex items-center gap-2 text-xs">
-          {card.starCount > 0 ? (
-            <span
-              className="inline-flex items-center gap-1"
-              title={`Pontos: ${card.starCount}`}
-            >
-              <Star className="h-3.5 w-3.5 fill-[var(--crm-amber)] text-[var(--crm-amber)]" aria-hidden />
-              {card.starCount}
-            </span>
-          ) : null}
-          <CrmKanbanCardTaskBadge card={card} />
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
-          {card.sourceChatId && onOpenChat ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs font-medium text-[var(--crm-wa-teal)] hover:bg-[var(--crm-success-tint)]"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenChat(card.sourceChatId!);
-              }}
-            >
-              <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-              WhatsApp
-              {(card.sourceChatUnread ?? 0) > 0 ? (
-                <span className="rounded-full bg-[var(--crm-wa-green)] px-1.5 text-[10px] font-bold text-white">
-                  {card.sourceChatUnread}
+        <div className="mb-3 space-y-2">
+          <div className="flex min-h-8 items-center gap-2 rounded-md bg-[var(--crm-surface)] px-2.5 py-1.5 text-xs text-[var(--crm-ink-3)]">
+            <span className="inline-flex min-w-0 items-center gap-2">
+              {card.starCount > 0 ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 font-medium text-[var(--crm-ink-2)]"
+                  title={`Pontos: ${card.starCount}`}
+                >
+                  <Star className="h-3.5 w-3.5 fill-[var(--crm-amber)] text-[var(--crm-amber)]" aria-hidden />
+                  {card.starCount}
                 </span>
               ) : null}
-            </Button>
-          ) : null}
-          {onOpenCustomer && isPersistedCrmNegotiationId(card.id) && card.customerId ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 shrink-0 gap-1 px-2 text-xs font-medium text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenCustomer(card.customerId!);
-              }}
-            >
-              <User className="h-3.5 w-3.5" aria-hidden />
-              Cliente
-            </Button>
-          ) : (
-            <User className="h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden />
-          )}
+              <CrmKanbanCardTaskBadge card={card} />
+            </span>
+          </div>
         </div>
-      </div>
       )}
       {isExpanded ? (
         <div className="mb-3 flex flex-col gap-0.5 border-t border-[var(--crm-surface-2)] pt-2 text-[10px] text-[var(--crm-ink-3)]">
@@ -4088,7 +4117,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
           ) : null}
         </div>
       ) : null}
-      <div className={cn("flex flex-col", isCompact ? "gap-1" : "gap-2")}>
+      <div className={cn("flex flex-col border-t border-[var(--crm-surface-2)] pt-2", isCompact ? "gap-1" : "gap-2")}>
         {showClaim ? (
           <Button
             type="button"
@@ -4105,27 +4134,54 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
             }}
           >
             <Hand className="h-4 w-4 shrink-0" aria-hidden />
-            {isCompact ? "Assumir" : "Assumir negócio"}
+            ASSUMIR
           </Button>
         ) : null}
-        {showRelease ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={cn(
-              "w-full gap-2 border-[var(--crm-brand-border)] bg-card font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]",
-              isCompact ? "h-8 text-xs" : "h-9 text-sm",
-            )}
-            disabled={assigneeBusy}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onReleaseNegotiation(card);
-            }}
-          >
-            <Users className="h-4 w-4 shrink-0" aria-hidden />
-            {isCompact ? "Pool" : "Devolver ao pool"}
-          </Button>
+        {showChatAction || showRelease ? (
+          <div className={cn("grid gap-2", showChatAction && showRelease ? "grid-cols-2" : "grid-cols-1")}>
+            {showChatAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "gap-2 border-[var(--crm-success-border)] bg-card font-medium text-[var(--crm-wa-teal)] shadow-none hover:bg-[var(--crm-success-tint)]",
+                  isCompact ? "h-8 text-xs" : "h-9 text-sm",
+                )}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenChat?.(card.sourceChatId!);
+                }}
+              >
+                <MessageCircle className="h-4 w-4 shrink-0" aria-hidden />
+                WhatsApp
+                {(card.sourceChatUnread ?? 0) > 0 ? (
+                  <span className="rounded-full bg-[var(--crm-wa-green)] px-1.5 text-[10px] font-bold leading-5 text-white">
+                    {card.sourceChatUnread}
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
+            {showRelease ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "gap-2 border-[var(--crm-brand-border)] bg-card font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]",
+                  isCompact ? "h-8 text-xs" : "h-9 text-sm",
+                )}
+                disabled={assigneeBusy}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReleaseNegotiation(card);
+                }}
+              >
+                <Users className="h-4 w-4 shrink-0" aria-hidden />
+                DEVOLVER
+              </Button>
+            ) : null}
+          </div>
         ) : null}
         {showDelete && !isCompact ? (
           <Button

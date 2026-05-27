@@ -554,6 +554,32 @@ export default function Inbox() {
     hasLinkedNegotiation: Boolean(linkedNegotiation),
   });
 
+  // Deep link: `?draft=<base64>` pré-preenche o composer ao abrir o chat (usado
+  // por "Sugerir próxima mensagem" no detalhe do CRM). Aplica uma vez por
+  // chatId + draft (ref previne re-aplicação durante navegação interna).
+  const appliedDraftRef = useRef<string>("");
+  useEffect(() => {
+    const draftParam = searchParams.get("draft");
+    if (!draftParam || !activeChat?.id) return;
+    const signature = `${activeChat.id}:${draftParam}`;
+    if (appliedDraftRef.current === signature) return;
+    try {
+      const b64 = draftParam.replace(/-/g, "+").replace(/_/g, "/");
+      const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+      const text = decodeURIComponent(escape(atob(b64 + pad)));
+      if (text.trim()) {
+        composer.setBodyText(text);
+        appliedDraftRef.current = signature;
+        requestAnimationFrame(() => composer.bodyTextareaRef.current?.focus());
+      }
+    } catch {
+      // Decode inválido: ignora silenciosamente.
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("draft");
+    setSearchParams(next, { replace: true });
+  }, [activeChat?.id, composer, searchParams, setSearchParams]);
+
   const suggestReplyMutation = useRunPlayground({
     onSuccess: (data) => {
       const text = data.reply?.trim();
@@ -1229,6 +1255,11 @@ export default function Inbox() {
             onSuggestReply={handleSuggestReply}
             isSuggestingReply={suggestReplyMutation.isPending}
             suggestReplyDisabled={composer.bodyText.trim().length > 0 || messages.length === 0}
+            crmSuggestNegotiationId={linkedNegotiation?.id ?? null}
+            onCrmSuggestApply={(text) => {
+              composer.setBodyText(text);
+              requestAnimationFrame(() => composer.bodyTextareaRef.current?.focus());
+            }}
           />
             </>
           )}
