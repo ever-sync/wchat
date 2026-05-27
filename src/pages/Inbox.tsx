@@ -22,6 +22,7 @@ import { ConversationList } from "@/components/inbox/ConversationList";
 import { CustomerLocalTime } from "@/components/inbox/CustomerLocalTime";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
 import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
+import { FollowUpDialog } from "@/components/inbox/FollowUpDialog";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
 import { CustomerProfileSheet } from "@/components/inbox/CustomerProfileSheet";
 import { MarkWinDialog } from "@/components/crm/MarkWinDialog";
@@ -107,6 +108,7 @@ export default function Inbox() {
   const threadAtBottomRef = useRef(true);
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
+  const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(() => searchParams.get("chatId"));
@@ -940,6 +942,7 @@ export default function Inbox() {
                   }}
                   onOpenProfile={() => setProfileOpen(true)}
                   onOpenSaleFlow={handleOpenSaleFlow}
+                  onOpenFollowUp={() => setFollowUpDialogOpen(true)}
                 />
               </>
             ) : (
@@ -1122,6 +1125,12 @@ export default function Inbox() {
             onOpenChange={setCreateLeadOpen}
             canEditCrm={canEditCrm}
             canActOnChat={canActOnChat}
+          />
+          <FollowUpDialog
+            chat={activeChat}
+            open={followUpDialogOpen}
+            onOpenChange={setFollowUpDialogOpen}
+            profileId={profileId}
           />
         </>
       ) : null}

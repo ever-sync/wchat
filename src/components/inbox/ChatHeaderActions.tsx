@@ -5,6 +5,7 @@ import {
   Bell,
   BellOff,
   Briefcase,
+  CalendarClock,
   Hand,
   Pause,
   Play,
@@ -80,6 +81,7 @@ export type ChatHeaderActionsProps = {
   onOpenAssignDialog: () => void;
   onOpenProfile: () => void;
   onOpenSaleFlow: () => void;
+  onOpenFollowUp: () => void;
 };
 
 export function ChatHeaderActions({
@@ -108,6 +110,7 @@ export function ChatHeaderActions({
   onOpenAssignDialog,
   onOpenProfile,
   onOpenSaleFlow,
+  onOpenFollowUp,
 }: ChatHeaderActionsProps) {
   const { toast } = useToast();
   const setAiMode = useSetChatAiMode({
@@ -319,6 +322,18 @@ export function ChatHeaderActions({
           </button>
         </IconTip>
       ) : null}
+      <IconTip label="Lembrete (follow-up)">
+        <button
+          type="button"
+          onClick={onOpenFollowUp}
+          disabled={!canEditInbox}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
+          aria-label="Lembrete (follow-up)"
+          data-testid="inbox-followup"
+        >
+          <CalendarClock className="h-4 w-4" />
+        </button>
+      </IconTip>
       {snoozed ? (
         <IconTip label="Remover adiamento">
           <button
