@@ -60,7 +60,36 @@ type TenantAiConfig = {
   monthlyTokenLimit: number | null;
   disclosureEnabled: boolean;
   disclosureMessage: string | null;
+  enableModelRouting: boolean;
 };
+
+// Modelo "barato" pra turnos triviais — Haiku 4.5 vs Sonnet 4.6 são ~5× mais
+// baratos em input e ~6× em output, mantendo qualidade alta para ack/cumprimento.
+const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const SHORT_TURN_CHARS = 40;
+
+/**
+ * Decide entre modelo barato (Haiku) e o configurado (default Sonnet) por turno.
+ * Roteia pro Haiku quando o sinal é fraco (greeting, ack curto, "ok", "obrigado")
+ * E não há contexto de RAG nem imagem. Caso contrário, fica no modelo configurado.
+ *
+ * Cache: cada modelo mantém o próprio cache no provedor — alternar invalida
+ * a entrada do outro, mas para chats com muitos turnos curtos o ganho de custo
+ * supera a perda de cache (Haiku é tão barato que perder cache nele é peanuts).
+ */
+function pickEffectiveModel(
+  config: TenantAiConfig,
+  signals: { lastUserChars: number; hasImage: boolean; knowledgeCount: number },
+): string {
+  if (!config.enableModelRouting) return config.model;
+  // Só desce pro Haiku se for explicitamente trivial. Default conservador: Sonnet.
+  const isTrivial =
+    signals.lastUserChars > 0 &&
+    signals.lastUserChars <= SHORT_TURN_CHARS &&
+    !signals.hasImage &&
+    signals.knowledgeCount === 0;
+  return isTrivial ? HAIKU_MODEL : config.model;
+}
 
 // Aviso de transparência (LGPD): enviado uma vez por chat na primeira atuação da IA.
 const DEFAULT_DISCLOSURE =
@@ -242,15 +271,27 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     await admin.from("whatsapp_chats").update({ ai_disclosure_sent: true }).eq("id", chatId);
   }
 
+  // Model routing: turno trivial vai pro Haiku, complexo fica no modelo configurado.
+  // Só roteia o Anthropic — o OpenAI mantém comportamento atual.
+  const hasImage = conversation.some((m) => Boolean(m.imageUrl));
+  const effectiveModel = config.llmProvider === "anthropic"
+    ? pickEffectiveModel(config, {
+      lastUserChars: userMessage.length,
+      hasImage,
+      knowledgeCount: retrieved.length,
+    })
+    : config.model;
+  const effectiveConfig = { ...config, model: effectiveModel };
+
   // Roda o loop de tool-use no provedor de LLM configurado (Anthropic ou OpenAI).
-  const result = config.llmProvider === "openai"
-    ? await runOpenAiLoop(ctx, config, system, conversation, tools)
-    : await runAnthropicLoop(ctx, config, system, conversation, tools);
+  const result = effectiveConfig.llmProvider === "openai"
+    ? await runOpenAiLoop(ctx, effectiveConfig, system, conversation, tools)
+    : await runAnthropicLoop(ctx, effectiveConfig, system, conversation, tools);
 
   await admin.from("ai_usage").insert({
     tenant_id: tenantId,
     chat_id: chatId,
-    model: config.model,
+    model: effectiveModel,
     input_tokens: result.usage.input,
     output_tokens: result.usage.output,
     cache_read_tokens: result.usage.cacheRead,
@@ -261,7 +302,7 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   await admin.from("ai_turns").insert({
     tenant_id: tenantId,
     chat_id: chatId,
-    model: config.model,
+    model: effectiveModel,
     user_message: userMessage || null,
     retrieved,
     reply: result.replies.join("\n\n") || null,
@@ -538,7 +579,7 @@ async function loadCustomFieldNames(admin: Admin, tenantId: string): Promise<str
 async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<TenantAiConfig> {
   const { data } = await admin
     .from("tenant_ai_config")
-    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message")
+    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   return {
@@ -549,6 +590,7 @@ async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<Tenant
     monthlyTokenLimit: data?.monthly_token_limit ?? null,
     disclosureEnabled: data?.ai_disclosure_enabled ?? true,
     disclosureMessage: data?.ai_disclosure_message ?? null,
+    enableModelRouting: data?.enable_model_routing ?? true,
   };
 }
 
