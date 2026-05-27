@@ -428,7 +428,9 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(filters.limit ?? DEFAULT_INBOX_CHATS_LIMIT);
 
-  if (filters.instanceId) {
+  if (filters.instanceIds && filters.instanceIds.length > 0) {
+    query = query.in("instance_id", filters.instanceIds);
+  } else if (filters.instanceId) {
     query = query.eq("instance_id", filters.instanceId);
   }
 

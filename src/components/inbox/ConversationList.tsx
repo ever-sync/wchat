@@ -1,5 +1,5 @@
 import { ChevronDown, ListFilter, Search, Smartphone, SquarePen, Tag, X } from "lucide-react";
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,9 @@ import { ConversationRow } from "./ConversationRow";
 export type ConversationListProps = {
   search: string;
   onSearchChange: (value: string) => void;
-  instanceId: string;
-  onInstanceChange: (value: string) => void;
+  selectedInstanceIds: string[];
+  onInstanceToggle: (instanceId: string) => void;
+  onClearInstances: () => void;
   /** Alinhado aos estados do seletor de resolução no cabeçalho do chat (InboxListScope). */
   listScope: InboxListScope;
   onListScopeChange: (value: InboxListScope) => void;
@@ -45,6 +46,11 @@ export type ConversationListProps = {
   /** Gestor: atalho para fila sem responsável. */
   managerUnassignedCount?: number;
   onOpenUnassignedQueue?: () => void;
+  selectedChatIds?: string[];
+  onChatSelectionToggle?: (chatId: string) => void;
+  onClearChatSelection?: () => void;
+  onApplyTagToChats?: (chatIds: string[], tagId: string) => void;
+  applyingTagToChats?: boolean;
   /** Índice de follow-ups por customer/negotiation. Derivamos status por linha. */
   followupIndex?: {
     overdue: { customerIds: ReadonlySet<string>; negotiationIds: ReadonlySet<string> };
@@ -194,8 +200,9 @@ function ConversationTagFilterList({
 export function ConversationList({
   search,
   onSearchChange,
-  instanceId,
-  onInstanceChange,
+  selectedInstanceIds,
+  onInstanceToggle,
+  onClearInstances,
   listScope,
   onListScopeChange,
   assigneeFilter,
@@ -220,20 +227,37 @@ export function ConversationList({
   assigneeFilterOptions,
   managerUnassignedCount,
   onOpenUnassignedQueue,
+  selectedChatIds = [],
+  onChatSelectionToggle,
+  onClearChatSelection,
+  onApplyTagToChats,
+  applyingTagToChats = false,
   followupIndex,
 }: ConversationListProps) {
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ chatId: string; x: number; y: number } | null>(null);
   const activeTagCount = selectedTagIds.length;
+  const selectedChatCount = selectedChatIds.length;
+  const selectionMode = selectedChatCount > 0;
+  const selectedChatSet = useMemo(() => new Set(selectedChatIds), [selectedChatIds]);
   const tagFilterLabel =
     activeTagCount > 0
       ? `${activeTagCount} etiqueta${activeTagCount > 1 ? "s" : ""}`
       : "Etiquetas";
 
+  const selectedInstanceLabel = useMemo(() => {
+    if (selectedInstanceIds.length === 0) return "Todas";
+    if (selectedInstanceIds.length === 1) {
+      return instances.find((i) => i.id === selectedInstanceIds[0])?.displayName ?? "1 instância";
+    }
+    return `${selectedInstanceIds.length} instâncias`;
+  }, [instances, selectedInstanceIds]);
+
   const listHeading = inboxQuickFilterLabel(quickFilter);
 
   const hasCustomFilters =
-    instanceId !== "all" ||
+    selectedInstanceIds.length > 0 ||
     listScope !== "open" ||
     assigneeFilter !== "all" ||
     snoozedFilter !== "active" ||
@@ -248,6 +272,18 @@ export function ConversationList({
     getItemKey: (index) => chats[index]?.id ?? index,
     overscan: 8,
   });
+
+  function openContextMenu(chatId: string, event: MouseEvent) {
+    event.preventDefault();
+    setContextMenu({ chatId, x: event.clientX, y: event.clientY });
+  }
+
+  const contextTargetIds =
+    contextMenu && selectedChatSet.has(contextMenu.chatId) && selectedChatIds.length > 0
+      ? selectedChatIds
+      : contextMenu
+        ? [contextMenu.chatId]
+        : [];
 
   /**
    * Para cada chat, deriva o status de follow-up (overdue / soon / null) a
@@ -362,28 +398,54 @@ export function ConversationList({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Select value={instanceId} onValueChange={onInstanceChange}>
-              <SelectTrigger
-                aria-label="Filtrar por instância"
-                className={cn(
-                  "h-8 flex-1 min-w-0 rounded-lg border-0 bg-wchat-50 px-2.5 text-[11px] text-foreground shadow-none focus:ring-1 focus:ring-primary [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:opacity-100 [&>svg]:text-muted-foreground",
-                  instanceId !== "all" && "ring-1 ring-primary/35",
-                )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Filtrar por instâncias"
+                  className={cn(
+                    "flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-lg bg-wchat-50 px-2.5 text-[11px] text-foreground transition-colors hover:bg-wchat-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                    selectedInstanceIds.length > 0 && "ring-1 ring-primary/35",
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{selectedInstanceLabel}</span>
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] border-border bg-card p-1.5 text-foreground"
               >
-                <span className="!flex min-w-0 flex-1 items-center gap-1.5 truncate">
-                  <Smartphone className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  <SelectValue placeholder="Instância" />
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as instâncias</SelectItem>
-                {instances.map((instance) => (
-                  <SelectItem key={instance.id} value={instance.id}>
-                    {instance.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <button
+                  type="button"
+                  onClick={onClearInstances}
+                  className="mb-1 w-full rounded-md px-2 py-2 text-left text-xs font-medium hover:bg-wchat-50"
+                >
+                  Todas as instâncias
+                </button>
+                <div className="max-h-56 space-y-0.5 overflow-y-auto">
+                  {instances.map((instance) => {
+                    const checked = selectedInstanceIds.includes(instance.id);
+                    return (
+                      <label
+                        key={instance.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-wchat-50"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => onInstanceToggle(instance.id)}
+                          aria-label={instance.displayName}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{instance.displayName}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
               <PopoverTrigger asChild>
@@ -419,7 +481,7 @@ export function ConversationList({
           </div>
 
           <div
-            className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide"
+            className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
             role="tablist"
             aria-label="Filtros rápidos de conversas"
           >
@@ -500,8 +562,53 @@ export function ConversationList({
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {listHeading}
             </p>
-            <span className="text-[11px] tabular-nums text-muted-foreground">{chats.length}</span>
+            <div className="flex items-center gap-2">
+              {selectionMode ? (
+                <button
+                  type="button"
+                  onClick={onClearChatSelection}
+                  className="text-[11px] font-semibold text-primary hover:underline"
+                >
+                  {selectedChatCount} selecionada{selectedChatCount > 1 ? "s" : ""}
+                </button>
+              ) : null}
+              <span className="text-[11px] tabular-nums text-muted-foreground">{chats.length}</span>
+            </div>
           </div>
+          {selectionMode ? (
+            <div className="mx-1.5 mb-1 flex shrink-0 items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                {selectedChatCount} conversa{selectedChatCount > 1 ? "s" : ""} selecionada{selectedChatCount > 1 ? "s" : ""}
+              </span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={applyingTagToChats}
+                    className="inline-flex h-7 items-center gap-1 rounded-full bg-primary px-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+                  >
+                    <Tag className="h-3 w-3" />
+                    Etiquetar
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-56 border-border bg-card p-1.5">
+                  <ConversationTagActionList
+                    tags={availableTags}
+                    disabled={applyingTagToChats}
+                    onSelect={(tagId) => onApplyTagToChats?.(selectedChatIds, tagId)}
+                  />
+                </PopoverContent>
+              </Popover>
+              <button
+                type="button"
+                onClick={onClearChatSelection}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-wchat-100"
+                aria-label="Limpar seleção"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
           <div
             ref={scrollRef}
             className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-1.5 pb-1.5 scrollbar-hide"
@@ -525,6 +632,10 @@ export function ConversationList({
                       onPrefetch={onPrefetchChat}
                       viewerRole={viewerRole}
                       followupStatus={followupStatusByChatId.get(chat.id) ?? null}
+                      selected={selectedChatSet.has(chat.id)}
+                      selectionMode={selectionMode}
+                      onSelectionToggle={onChatSelectionToggle}
+                      onContextMenu={openContextMenu}
                     />
                   </div>
                 );
@@ -533,6 +644,76 @@ export function ConversationList({
           </div>
         </div>
       )}
+      {contextMenu ? (
+        <div
+          className="fixed inset-0 z-40 cursor-default bg-transparent"
+          role="presentation"
+          onClick={() => setContextMenu(null)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setContextMenu(null);
+          }}
+        >
+          <div
+            className="fixed z-50 w-60 rounded-lg border border-border bg-card p-1.5 text-left shadow-xl"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Etiquetar conversa{contextTargetIds.length > 1 ? "s" : ""}
+            </p>
+            <ConversationTagActionList
+              tags={availableTags}
+              disabled={applyingTagToChats}
+              onSelect={(tagId) => {
+                onApplyTagToChats?.(contextTargetIds, tagId);
+                setContextMenu(null);
+              }}
+            />
+            <button
+              type="button"
+              className="mt-1 w-full rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-wchat-50"
+              onClick={() => {
+                onChatSelectionToggle?.(contextMenu.chatId);
+                setContextMenu(null);
+              }}
+            >
+              {selectedChatSet.has(contextMenu.chatId) ? "Remover da seleção" : "Selecionar conversa"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </aside>
+  );
+}
+
+function ConversationTagActionList({
+  tags,
+  disabled,
+  onSelect,
+}: {
+  tags: ChatTag[];
+  disabled?: boolean;
+  onSelect: (tagId: string) => void;
+}) {
+  if (tags.length === 0) {
+    return <p className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhuma etiqueta cadastrada.</p>;
+  }
+
+  return (
+    <div className="max-h-56 overflow-y-auto">
+      {tags.map((tag) => (
+        <button
+          key={tag.id}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect(tag.id)}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-wchat-50 disabled:opacity-60"
+        >
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
+          <span className="min-w-0 flex-1 truncate font-medium">{tag.name}</span>
+        </button>
+      ))}
+    </div>
   );
 }

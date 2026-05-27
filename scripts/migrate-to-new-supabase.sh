@@ -118,6 +118,7 @@ if run_step functions; then
   for fn in supabase/functions/*/; do
     name="$(basename "$fn")"
     [[ "$name" == _* ]] && continue   # diretórios privados (_shared)
+    [[ "$name" == main ]] && continue # roteador usado apenas no self-hosted
     echo "  ▸ $name"
     npx supabase functions deploy "$name" --project-ref "$NEW_PROJECT_REF" --no-verify-jwt 2>&1 | tail -5
   done

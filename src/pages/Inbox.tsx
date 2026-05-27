@@ -22,6 +22,7 @@ import { ConversationList } from "@/components/inbox/ConversationList";
 import { ChatFollowupBadge } from "@/components/inbox/ChatFollowupBadge";
 import { CustomerLocalTime } from "@/components/inbox/CustomerLocalTime";
 import { ChatCrmHeader } from "@/components/inbox/ChatCrmHeader";
+import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CreateLeadDialog } from "@/components/inbox/CreateLeadDialog";
 import { FollowUpDialog } from "@/components/inbox/FollowUpDialog";
 import { SnoozeChatDialog } from "@/components/inbox/SnoozeChatDialog";
@@ -49,6 +50,7 @@ import {
 } from "@/lib/api/whatsapp";
 import {
   useAtendimentoUsers,
+  useAddTagToChats,
   useChatTags,
   useSnoozeChat,
 } from "@/lib/api/chat-tags";
@@ -112,6 +114,7 @@ export default function Inbox() {
   const [snoozeDialogOpen, setSnoozeDialogOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
   const [followUpDialogOpen, setFollowUpDialogOpen] = useState(false);
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   // O `activeChat` ainda não está disponível neste ponto — usaremos abaixo.
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
@@ -122,6 +125,7 @@ export default function Inbox() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [jumpToLatestVisible, setJumpToLatestVisible] = useState(false);
   const [markQuickSaleDialogOpen, setMarkQuickSaleDialogOpen] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const requestedChatId = searchParams.get("chatId");
   const requestedCustomerId = searchParams.get("customerId");
 
@@ -153,6 +157,23 @@ export default function Inbox() {
   const { data: atendimentoUsers = [] } = useAtendimentoUsers();
   const { data: quickReplies = [] } = useQuickReplies();
   const snoozeChatMutation = useSnoozeChat();
+  const addTagToChatsMutation = useAddTagToChats({
+    onSuccess: (_data, variables) => {
+      const tag = availableTags.find((t) => t.id === variables.tagId);
+      toast({
+        title: "Etiqueta aplicada",
+        description: `${tag?.name ?? "Etiqueta"} em ${variables.chatIds.length} conversa${variables.chatIds.length > 1 ? "s" : ""}.`,
+      });
+      setSelectedChatIds([]);
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao etiquetar",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
@@ -160,14 +181,14 @@ export default function Inbox() {
 
   const {
     search,
-    instanceId,
+    instanceIds,
     listScope,
     assigneeFilter,
     snoozedFilter,
     quickFilter,
     selectedTagIds,
     setSearch,
-    setInstanceId,
+    setInstanceIds,
     setListScope,
     setAssigneeFilter,
     setSnoozedFilter,
@@ -638,6 +659,18 @@ export default function Inbox() {
   }
   selectChatRef.current = handleSelectChat;
 
+  function toggleSelectedChat(chatId: string) {
+    setSelectedChatIds((prev) =>
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId],
+    );
+  }
+
+  function applyTagToChats(chatIds: string[], tagId: string) {
+    const uniqueChatIds = Array.from(new Set(chatIds));
+    if (uniqueChatIds.length === 0) return;
+    addTagToChatsMutation.mutate({ chatIds: uniqueChatIds, tagId });
+  }
+
   const handleLoadOlderMessages = useCallback(async () => {
     if (!hasNextPage || isFetchingNextPage) {
       return;
@@ -718,8 +751,13 @@ export default function Inbox() {
         <ConversationList
           search={search}
           onSearchChange={setSearch}
-          instanceId={instanceId}
-          onInstanceChange={setInstanceId}
+          selectedInstanceIds={instanceIds}
+          onInstanceToggle={(nextId) =>
+            setInstanceIds((prev) =>
+              prev.includes(nextId) ? prev.filter((id) => id !== nextId) : [...prev, nextId],
+            )
+          }
+          onClearInstances={() => setInstanceIds([])}
           listScope={listScope}
           onListScopeChange={setListScope}
           assigneeFilter={assigneeFilter}
@@ -790,6 +828,11 @@ export default function Inbox() {
             setAssigneeFilter("unassigned");
             setSnoozedFilter("active");
           }}
+          selectedChatIds={selectedChatIds}
+          onChatSelectionToggle={toggleSelectedChat}
+          onClearChatSelection={() => setSelectedChatIds([])}
+          onApplyTagToChats={applyTagToChats}
+          applyingTagToChats={addTagToChatsMutation.isPending}
           followupIndex={followupsIndex}
         />
 
@@ -969,6 +1012,7 @@ export default function Inbox() {
                     setAssignDialogOpen(true);
                   }}
                   onOpenProfile={() => setProfileOpen(true)}
+                  onOpenTags={() => setTagsDialogOpen(true)}
                   onOpenSaleFlow={handleOpenSaleFlow}
                   onOpenFollowUp={() => setFollowUpDialogOpen(true)}
                 />
@@ -1160,6 +1204,22 @@ export default function Inbox() {
             onOpenChange={setFollowUpDialogOpen}
             profileId={profileId}
           />
+          <Dialog open={tagsDialogOpen} onOpenChange={setTagsDialogOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Etiquetas da conversa</DialogTitle>
+                <DialogDescription>
+                  Aplique ou crie etiquetas sem abrir o perfil do cliente.
+                </DialogDescription>
+              </DialogHeader>
+              <ChatTagsPicker
+                chatId={activeChat.id}
+                tags={activeChat.tags ?? []}
+                disabled={inboxLeadLocked || !canEditInbox}
+                messages={messages}
+              />
+            </DialogContent>
+          </Dialog>
         </>
       ) : null}
 

@@ -1,5 +1,36 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, BookOpen, Bot, CheckCircle2, ChevronDown, ChevronRight, Circle, MessageSquare, Radio, Send, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  MessageSquare,
+  Radio,
+  Send,
+  SlidersHorizontal,
+  Trash2,
+  Check,
+  Coins,
+  Copy,
+  FileText,
+  Globe,
+  HelpCircle,
+  Info,
+  Layers,
+  Plus,
+  Search,
+  Sparkles,
+  Clock,
+  ArrowRight,
+  UploadCloud,
+  Cpu,
+  AlertCircle,
+  ExternalLink,
+  ShieldAlert,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,58 +111,128 @@ function nf(n: number): string {
 
 export default function AgenteIA() {
   const [tab, setTab] = useState("configuracao");
+
+  // Hooking up state for header info
+  const { data: channels = [] } = useAiChannels();
+  const { data: sub } = useAiSubscription();
+  const { data: usage } = useAiUsageThisMonth();
+  const { data: config } = useTenantAiConfig();
+
+  const isAiActive = channels.some((c) => c.ai_enabled);
+
+  const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
+  const planQuota = sub?.active && sub.monthlyTokenQuota > 0 && !sub.overageAllowed ? sub.monthlyTokenQuota : null;
+  const selfLimit = config?.monthlyTokenLimit && config.monthlyTokenLimit > 0 ? config.monthlyTokenLimit : null;
+  const candidates = [planQuota, selfLimit].filter((v): v is number => v != null);
+  const limit = candidates.length > 0 ? Math.min(...candidates) : null;
+  const quotaPct = limit ? Math.min(100, Math.round((totalTokens / limit) * 100)) : null;
+
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Bot className="h-5 w-5" aria-hidden />
+      {/* Premium Header Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card/60 via-card to-primary/5 p-6 shadow-sm backdrop-blur-sm">
+        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-48 w-48 rounded-full bg-primary/5 blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner">
+              <Bot className="h-6 w-6" aria-hidden />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Agente IA</h1>
+                {isAiActive ? (
+                  <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 font-medium flex items-center gap-1">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                    </span>
+                    Ativo nos canais
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border/60">
+                    Inativo nos canais
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Configure e personalize a inteligência artificial para automatizar seus atendimentos.
+              </p>
+            </div>
+          </div>
+
+          {limit && limit > 0 ? (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border/40 bg-card/60 p-3 sm:text-right backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Coins className="h-3.5 w-3.5 text-primary/80" />
+                  Limite Mensal:
+                </span>
+                <span className="font-semibold text-foreground">
+                  {nf(totalTokens)} / {nf(limit)} tokens
+                </span>
+              </div>
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted sm:w-48">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    quotaPct && quotaPct >= 95 ? "bg-destructive animate-pulse" : quotaPct && quotaPct >= 80 ? "bg-amber-500" : "bg-primary"
+                  )}
+                  style={{ width: `${quotaPct ?? 0}%` }}
+                />
+              </div>
+              {quotaPct !== null && (
+                <span className="text-[10px] text-muted-foreground sm:text-right">
+                  {quotaPct}% utilizado da cota disponível
+                </span>
+              )}
+            </div>
+          ) : null}
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">Agente IA</h1>
       </div>
 
       <OnboardingChecklist onGo={setTab} />
 
       <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-5">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl bg-muted/60 p-1 sm:w-auto">
-          <TabsTrigger value="configuracao" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-border/40 bg-muted/30 p-1 sm:w-auto">
+          <TabsTrigger value="configuracao" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <SlidersHorizontal className="h-4 w-4" />
             Configuração
           </TabsTrigger>
-          <TabsTrigger value="conhecimento" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="conhecimento" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <BookOpen className="h-4 w-4" />
             Base de conhecimento
           </TabsTrigger>
-          <TabsTrigger value="canais" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="canais" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Radio className="h-4 w-4" />
             Canais
           </TabsTrigger>
-          <TabsTrigger value="atividade" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="atividade" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Activity className="h-4 w-4" />
             Atividade
           </TabsTrigger>
-          <TabsTrigger value="testar" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="testar" className="gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <MessageSquare className="h-4 w-4" />
             Testar
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="configuracao" className="mt-0">
+        <TabsContent value="configuracao" className="mt-0 focus-visible:outline-none">
           <ConfiguracaoTab />
         </TabsContent>
 
-        <TabsContent value="conhecimento" className="mt-0">
+        <TabsContent value="conhecimento" className="mt-0 focus-visible:outline-none">
           <ConhecimentoTab />
         </TabsContent>
 
-        <TabsContent value="canais" className="mt-0">
+        <TabsContent value="canais" className="mt-0 focus-visible:outline-none">
           <CanaisTab />
         </TabsContent>
 
-        <TabsContent value="atividade" className="mt-0">
+        <TabsContent value="atividade" className="mt-0 focus-visible:outline-none">
           <AtividadeTab />
         </TabsContent>
 
-        <TabsContent value="testar" className="mt-0">
+        <TabsContent value="testar" className="mt-0 focus-visible:outline-none">
           <TestarTab />
         </TabsContent>
       </Tabs>
@@ -145,6 +246,10 @@ function TestarTab() {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
+  
+  const { data: config } = useTenantAiConfig();
+  const { data: sources = [] } = useKnowledgeSources();
+
   const run = useRunPlayground({
     onError: (e) => toast({ title: "Falha ao testar", description: e.message, variant: "destructive" }),
   });
@@ -162,81 +267,189 @@ function TestarTab() {
         { role: "assistant", text: res.reply || "(a IA não retornou texto)", knowledgeCount: res.knowledge_count },
       ]);
     } catch {
-      // erro já tratado no onError
+      // erro já tratado
     }
   }
 
+  const activeModelName = config ? shortModelName(config.model) : "—";
+  const systemPromptPreview = config?.systemPrompt 
+    ? config.systemPrompt.slice(0, 160) + (config.systemPrompt.length > 160 ? "..." : "")
+    : "Persona padrão da plataforma.";
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">Testar a IA</CardTitle>
-            <CardDescription>
-              Conversa de teste com a persona e a base atuais. Não envia WhatsApp nem consome cota.
-            </CardDescription>
-          </div>
-          {messages.length > 0 ? (
-            <Button variant="ghost" size="sm" onClick={() => setMessages([])}>
-              Limpar
-            </Button>
-          ) : null}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex max-h-[420px] min-h-[220px] flex-col gap-2 overflow-y-auto rounded-md border border-border bg-muted/30 p-3">
-          {messages.length === 0 ? (
-            <p className="m-auto text-sm text-muted-foreground">Escreva como se fosse o cliente para começar.</p>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-                <div
-                  className={cn(
-                    "max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm",
-                    m.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-card text-foreground",
-                  )}
-                >
-                  {m.text}
+    <div className="grid gap-6 lg:grid-cols-3">
+      {/* Lado Esquerdo: Simulador de Chat (2/3) */}
+      <div className="lg:col-span-2 space-y-4">
+        <Card className="border-border/80 shadow-sm overflow-hidden flex flex-col h-[520px]">
+          {/* Cabeçalho do Chat */}
+          <div className="border-b border-border/40 bg-muted/20 px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/15 shadow-inner">
+                  <Bot className="h-4.5 w-4.5" />
                 </div>
-                {m.role === "assistant" && m.knowledgeCount !== undefined ? (
-                  <span className="mt-0.5 px-1 text-[10px] text-muted-foreground">
-                    {m.knowledgeCount > 0
-                      ? `base: ${m.knowledgeCount} trecho${m.knowledgeCount > 1 ? "s" : ""}`
-                      : "sem base"}
-                  </span>
-                ) : null}
+                <span className="absolute bottom-0 right-0 flex h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-500" />
               </div>
-            ))
-          )}
-          {run.isPending ? (
-            <div className="flex justify-start">
-              <div className="rounded-2xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-                digitando…
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground">Simulador do Agente IA</p>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  {run.isPending ? "digitando..." : "online"}
+                </p>
               </div>
             </div>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            placeholder="Escreva como se fosse o cliente…"
-            disabled={run.isPending}
-          />
-          <Button onClick={() => void send()} disabled={!input.trim() || run.isPending} aria-label="Enviar">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMessages([])}
+                className="text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-md hover:bg-muted/50"
+              >
+                Limpar conversa
+              </Button>
+            )}
+          </div>
+
+          {/* Área de Mensagens */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/[0.05]">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-3">
+                <div className="h-10 w-10 rounded-full border border-border/60 bg-muted/30 flex items-center justify-center text-muted-foreground">
+                  <MessageSquare className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-foreground">Inicie o Teste</p>
+                  <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
+                    Escreva uma mensagem simulando ser o seu cliente. A IA responderá com base na persona e documentos configurados.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              messages.map((m, i) => (
+                <div key={i} className={cn("flex flex-col max-w-[85%]", m.role === "user" ? "ml-auto items-end" : "mr-auto items-start")}>
+                  <div
+                    className={cn(
+                      "rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm",
+                      m.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                        : "bg-card border border-border/80 text-foreground rounded-tl-none"
+                    )}
+                  >
+                    {m.text}
+                  </div>
+                  {m.role === "assistant" && m.knowledgeCount !== undefined ? (
+                    <span className="mt-1 px-1.5 text-[9px] text-muted-foreground font-medium bg-muted/30 rounded px-1.5 py-0.5">
+                      {m.knowledgeCount > 0
+                        ? `Consultou a base: ${m.knowledgeCount} trecho${m.knowledgeCount > 1 ? "s" : ""}`
+                        : "Sem consulta à base"}
+                    </span>
+                  ) : null}
+                </div>
+              ))
+            )}
+            {run.isPending && (
+              <div className="flex items-center gap-2.5 max-w-[80%] mr-auto">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/15 text-[10px] font-semibold animate-bounce">
+                  AI
+                </div>
+                <div className="rounded-2xl rounded-tl-none bg-muted/20 border border-border/40 px-3.5 py-2 text-xs text-muted-foreground italic flex items-center gap-1">
+                  <span className="animate-pulse">escrevendo...</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rodapé: Input */}
+          <div className="border-t border-border/40 bg-card p-3 shrink-0 flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="Digite aqui para testar..."
+              disabled={run.isPending}
+              className="flex-1 focus-visible:ring-primary/20 bg-background text-xs h-9.5"
+            />
+            <Button
+              onClick={() => void send()}
+              disabled={!input.trim() || run.isPending}
+              className="h-9.5 w-9.5 shrink-0 bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm"
+              size="icon"
+              aria-label="Enviar"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      {/* Lado Direito: Contexto Técnico de Depuração (1/3) */}
+      <div className="space-y-6">
+        <Card className="border-border/80 shadow-sm h-full">
+          <CardHeader className="pb-3 border-b border-border/40">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Cpu className="h-4.5 w-4.5 text-primary" />
+              Contexto do Agente
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Configurações ativas que regem o comportamento da IA neste simulador.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-4 text-xs">
+            <div className="space-y-1.5">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Modelo Ativo</span>
+              <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
+                <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 h-4 border-primary/20 text-primary bg-primary/5">
+                  {config?.llmProvider === "openai" ? "OpenAI" : "Anthropic"}
+                </Badge>
+                <span className="font-semibold font-mono text-xs">{activeModelName}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Persona e Tom de Voz</span>
+              <div className="rounded-lg border border-border/40 bg-muted/10 p-3 leading-relaxed text-muted-foreground italic font-sans text-xs">
+                "{systemPromptPreview}"
+              </div>
+              <p className="text-[10px] text-muted-foreground text-right">
+                Ajuste na aba <span className="font-medium text-primary">Configuração</span>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Treinamento / Base de Dados</span>
+              <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/10 px-3 py-2.5">
+                <span className="font-medium">Fontes ativas no sistema:</span>
+                <Badge className="bg-primary/10 hover:bg-primary/10 text-primary border-primary/15 font-semibold text-xs px-2.5">
+                  {sources.length} documento(s)
+                </Badge>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 border-t border-border/20 pt-3">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Recursos Avançados</span>
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between text-[11px] bg-muted/5 p-2 rounded-lg border">
+                  <span className="text-muted-foreground">Roteamento Inteligente:</span>
+                  <Badge variant="outline" className={cn("text-[9px] h-4 font-semibold", config?.enableModelRouting ? "bg-emerald-500/5 text-emerald-600 border-emerald-500/10" : "bg-muted text-muted-foreground")}>
+                    {config?.enableModelRouting ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-[11px] bg-muted/5 p-2 rounded-lg border">
+                  <span className="text-muted-foreground">Thinking (Pensamento):</span>
+                  <Badge variant="outline" className={cn("text-[9px] h-4 font-semibold", config?.enableThinking ? "bg-emerald-500/5 text-emerald-600 border-emerald-500/10" : "bg-muted text-muted-foreground")}>
+                    {config?.enableThinking ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
@@ -253,64 +466,120 @@ function OnboardingChecklist({ onGo }: { onGo: (tab: string) => void }) {
     {
       key: "persona",
       label: "Personalize a IA",
-      desc: "Defina a persona — tom de voz, o que ela faz e quando passar para um humano.",
+      desc: "Defina o tom de voz e as regras de negócio da IA.",
       done: Boolean(config?.systemPrompt?.trim()),
       tab: "configuracao",
+      icon: Sparkles,
     },
     {
       key: "kb",
       label: "Alimente a base de conhecimento",
-      desc: "Cole textos, importe uma página ou suba um PDF — é com isso que a IA responde com precisão.",
+      desc: "Envie textos, links ou PDFs para a IA responder com precisão.",
       done: sources.length > 0,
       tab: "conhecimento",
+      icon: BookOpen,
     },
     {
       key: "channel",
       label: "Ligue a IA num canal",
-      desc: "Sem isso a IA não atende. Ative no canal que quiser.",
+      desc: "Ative a IA no canal de WhatsApp para iniciar o atendimento.",
       done: channels.some((c) => c.ai_enabled),
       tab: "canais",
+      icon: Radio,
     },
   ];
   const allDone = steps.every((s) => s.done);
+  const doneCount = steps.filter((s) => s.done).length;
 
-  // Tudo pronto e add-on ok → não polui a tela.
   if (allDone && !addonInactive) return null;
 
   return (
-    <Card className={addonInactive ? "border-destructive/40" : undefined}>
-      <CardHeader>
-        <CardTitle className="text-base">Primeiros passos</CardTitle>
-        <CardDescription>Deixe a IA pronta para atender em 3 passos.</CardDescription>
+    <Card className={cn("overflow-hidden border border-border/80 shadow-sm", addonInactive ? "border-destructive/40 bg-destructive/5" : "bg-card")}>
+      <CardHeader className="pb-3 border-b border-border/40">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Layers className="h-4.5 w-4.5 text-primary" />
+              Primeiros Passos de Configuração
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Deixe sua Inteligência Artificial pronta para atuar em 3 passos simples.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium bg-muted/55 rounded-lg px-2.5 py-1 w-fit">
+            <span className="text-primary font-semibold">{doneCount} de 3</span>
+            <span className="text-muted-foreground">concluídos</span>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="pt-5 space-y-4">
         {addonInactive ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            Seu add-on de IA está inativo{trialExpired ? " (trial expirado)" : ""}. Fale com o suporte para ativar.
-          </p>
+          <div className="flex items-start gap-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold">Seu add-on de IA está inativo{trialExpired ? " (trial expirado)" : ""}.</p>
+              <p className="text-destructive/80">Por favor, entre em contato com o suporte para ativar o faturamento e restabelecer o serviço.</p>
+            </div>
+          </div>
         ) : null}
-        <ul className="space-y-2">
-          {steps.map((step) => (
-            <li key={step.key} className="flex items-start gap-3 rounded-md border border-border p-3">
-              {step.done ? (
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-              ) : (
-                <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className={cn("text-sm font-medium", step.done ? "text-muted-foreground line-through" : "text-foreground")}>
-                  {step.label}
-                </p>
-                <p className="text-xs text-muted-foreground">{step.desc}</p>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {steps.map((step, i) => {
+            const Icon = step.icon;
+            return (
+              <div
+                key={step.key}
+                className={cn(
+                  "relative flex flex-col justify-between rounded-xl border p-4 transition-all duration-300",
+                  step.done
+                    ? "border-border/60 bg-muted/20 opacity-80"
+                    : "border-primary/20 bg-primary/[0.01] hover:bg-primary/[0.03] shadow-sm hover:border-primary/35"
+                )}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg shadow-sm border", 
+                      step.done 
+                        ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/10" 
+                        : "bg-primary/10 text-primary border-primary/10"
+                    )}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    {step.done ? (
+                      <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px] px-1.5 py-0">
+                        Pronto
+                      </Badge>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-primary/80 uppercase tracking-wider">Passo {i + 1}</span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className={cn("text-xs font-semibold tracking-tight", step.done ? "text-muted-foreground line-through" : "text-foreground")}>
+                      {step.label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">{step.desc}</p>
+                  </div>
+                </div>
+                
+                {!step.done ? (
+                  <Button
+                    size="sm"
+                    className="mt-4 w-full text-xs font-medium flex items-center justify-center gap-1 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm h-8"
+                    onClick={() => onGo(step.tab)}
+                  >
+                    Configurar
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                ) : (
+                  <div className="mt-4 h-8 flex items-center text-xs font-medium text-emerald-600 gap-1 pl-1">
+                    <Check className="h-3.5 w-3.5" />
+                    Etapa concluída
+                  </div>
+                )}
               </div>
-              {!step.done ? (
-                <Button size="sm" variant="outline" className="shrink-0" onClick={() => onGo(step.tab)}>
-                  Ir
-                </Button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
@@ -320,7 +589,7 @@ function ConfiguracaoTab() {
   const { toast } = useToast();
   const { data, isLoading } = useTenantAiConfig();
   const upsert = useUpsertTenantAiConfig({
-    onSuccess: () => toast({ title: "Configuração salva." }),
+    onSuccess: () => toast({ title: "Configuração salva com sucesso!" }),
     onError: (error) =>
       toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" }),
   });
@@ -336,182 +605,321 @@ function ConfiguracaoTab() {
 
   const set = (patch: Partial<TenantAiConfig>) => setForm((prev) => (prev ? { ...prev, ...patch } : prev));
 
+  const TEMPLATES = {
+    geral: "Você é o assistente virtual cordial e profissional da nossa empresa. Responda às perguntas dos clientes de forma objetiva, simpática e profissional. Utilize apenas as informações da base de conhecimento para responder. Se não souber a resposta ou se o cliente solicitar um atendente humano, informe que irá encaminhá-lo para a nossa equipe de suporte.",
+    vendas: "Você é um especialista em vendas engajador. Ajude o cliente a encontrar o produto perfeito na nossa loja, explique as vantagens e formas de pagamento. Seja persuasivo, cordial e use emojis moderadamente para criar conexão. Conduza o cliente até o link de checkout de maneira natural.",
+    suporte: "Você é o agente de suporte técnico de nível 1. Ajude o cliente a resolver problemas com paciência e clareza, orientando-o passo a passo. Faça perguntas de esclarecimento se necessário e consulte sempre as políticas e manuais da base de conhecimento.",
+  };
+
+  const currentLength = form.systemPrompt?.length ?? 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Configuração do agente</CardTitle>
-        <CardDescription>Modo de atuação, persona e limites de cada conversa.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="grid gap-2">
-          <Label>Modo de atuação</Label>
-          <Select value={form.provider} onValueChange={(v) => set({ provider: v as AiProvider })}>
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="off">{PROVIDER_LABELS.off}</SelectItem>
-              <SelectItem value="native">{PROVIDER_LABELS.native}</SelectItem>
-              <SelectItem value="n8n">{PROVIDER_LABELS.n8n}</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            <strong>Nativa</strong> usa o orquestrador do WChat (responde, qualifica, transfere).{" "}
-            <strong>Externa</strong> envia os atendimentos para o seu fluxo no N8N. <strong>Desligada</strong> não
-            responde automaticamente.
-          </p>
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Coluna Principal: Persona e LGPD (2/3 da tela) */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Card Persona */}
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Sparkles className="h-4.5 w-4.5 text-primary" />
+                    Persona / Instruções do Agente
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Molde o tom de voz, regras de atendimento e como a IA deve se comportar.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
+                    onClick={() => set({ systemPrompt: TEMPLATES.geral })}
+                  >
+                    Geral
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
+                    onClick={() => set({ systemPrompt: TEMPLATES.vendas })}
+                  >
+                    Vendas
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
+                    onClick={() => set({ systemPrompt: TEMPLATES.suporte })}
+                  >
+                    Suporte
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Textarea
+                  id="ai-persona"
+                  value={form.systemPrompt}
+                  onChange={(e) => set({ systemPrompt: e.target.value })}
+                  placeholder="Ex.: Você é a Ana, atendente virtual da nossa loja. Responda sempre com cordialidade e simplicidade..."
+                  className="min-h-[220px] font-sans text-sm resize-y leading-relaxed border-border focus-visible:ring-primary/30"
+                />
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span>Em branco usará a persona padrão da plataforma.</span>
+                  <span className={cn("font-medium", currentLength > 4000 ? "text-destructive" : "text-muted-foreground")}>
+                    {currentLength} caracteres
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card Transparência (LGPD) */}
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Info className="h-4.5 w-4.5 text-primary" />
+                Transparência e Avisos (LGPD)
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Notifique o cliente de forma clara que ele está interagindo com um robô inteligente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-border/40 bg-muted/10 p-4">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-semibold text-foreground">Divulgação de IA ativa</span>
+                  <p className="text-xs text-muted-foreground">
+                    Envia um aviso automático no início do primeiro atendimento para cada cliente.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.disclosureEnabled}
+                  onCheckedChange={(v) => set({ disclosureEnabled: v })}
+                />
+              </div>
+
+              {form.disclosureEnabled && (
+                <div className="space-y-2 animate-accordion-down">
+                  <Label htmlFor="ai-disclosure-msg" className="text-xs font-semibold text-muted-foreground">
+                    Mensagem de aviso customizada
+                  </Label>
+                  <Textarea
+                    id="ai-disclosure-msg"
+                    value={form.disclosureMessage}
+                    onChange={(e) => set({ disclosureMessage: e.target.value })}
+                    placeholder="Olá! Você está sendo atendido por um assistente virtual com IA. Se preferir falar com um humano, é só solicitar."
+                    className="min-h-[80px] text-sm focus-visible:ring-primary/30"
+                    rows={3}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Deixe em branco para usar a mensagem padrão do sistema.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="grid gap-2">
-          <Label>Provedor de IA</Label>
-          <Select
-            value={form.llmProvider}
-            onValueChange={(v) => {
-              const provider = v as LlmProvider;
-              set({ llmProvider: provider, model: LLM_MODELS[provider][0].value });
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="anthropic">{LLM_PROVIDER_LABELS.anthropic}</SelectItem>
-              <SelectItem value="openai">{LLM_PROVIDER_LABELS.openai}</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            {form.llmProvider === "openai"
-              ? "Requer a chave OPENAI_API_KEY configurada no servidor."
-              : "Requer a chave ANTHROPIC_API_KEY configurada no servidor."}
-          </p>
-        </div>
+        {/* Coluna Lateral: Parâmetros e Provedor (1/3 da tela) */}
+        <div className="space-y-6">
+          {/* Card Provedor */}
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Cpu className="h-4.5 w-4.5 text-primary" />
+                Provedor & Conexão
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Defina o cérebro do agente e onde as mensagens serão processadas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Modo de atuação</Label>
+                <Select value={form.provider} onValueChange={(v) => set({ provider: v as AiProvider })}>
+                  <SelectTrigger className="w-full bg-background border-border/85 focus:ring-primary/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">{PROVIDER_LABELS.off}</SelectItem>
+                    <SelectItem value="native">{PROVIDER_LABELS.native}</SelectItem>
+                    <SelectItem value="n8n">{PROVIDER_LABELS.n8n}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  <strong>Nativa</strong> processa no WChat. <strong>Externa</strong> envia para n8n.
+                </p>
+              </div>
 
-        <div className="grid gap-2">
-          <Label>Modelo</Label>
-          <Select value={form.model} onValueChange={(v) => set({ model: v })}>
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions(form.llmProvider, form.model).map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Tecnologia (LLM)</Label>
+                <Select
+                  value={form.llmProvider}
+                  onValueChange={(v) => {
+                    const provider = v as LlmProvider;
+                    set({ llmProvider: provider, model: LLM_MODELS[provider][0].value });
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-background border-border/85">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="anthropic">{LLM_PROVIDER_LABELS.anthropic}</SelectItem>
+                    <SelectItem value="openai">{LLM_PROVIDER_LABELS.openai}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="ai-persona">Persona / instruções</Label>
-          <Textarea
-            id="ai-persona"
-            value={form.systemPrompt}
-            onChange={(e) => set({ systemPrompt: e.target.value })}
-            placeholder="Ex.: Você é a Ana, atendente da Loja X. Seja cordial e objetiva..."
-            rows={6}
-          />
-          <p className="text-xs text-muted-foreground">Em branco usa a persona padrão do sistema.</p>
-        </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Modelo principal</Label>
+                <Select value={form.model} onValueChange={(v) => set({ model: v })}>
+                  <SelectTrigger className="w-full bg-background border-border/85">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelOptions(form.llmProvider, form.model).map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="ai-debounce">Espera antes de responder (s)</Label>
-            <Input
-              id="ai-debounce"
-              type="number"
-              min={0}
-              max={120}
-              value={form.debounceSeconds}
-              onChange={(e) => set({ debounceSeconds: Number(e.target.value) })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="ai-maxtokens">Máx. tokens por resposta</Label>
-            <Input
-              id="ai-maxtokens"
-              type="number"
-              min={256}
-              max={8192}
-              value={form.maxOutputTokens}
-              onChange={(e) => set({ maxOutputTokens: Number(e.target.value) })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="ai-limit">Limite mensal de tokens</Label>
-            <Input
-              id="ai-limit"
-              type="number"
-              min={0}
-              value={form.monthlyTokenLimit ?? ""}
-              onChange={(e) => set({ monthlyTokenLimit: e.target.value === "" ? null : Number(e.target.value) })}
-              placeholder="Sem limite"
-            />
-          </div>
-        </div>
+          {/* Card Parâmetros de Controle */}
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <SlidersHorizontal className="h-4.5 w-4.5 text-primary" />
+                Configurações de Controle
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Ajuste os limites operacionais e tempo de resposta.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="ai-debounce" className="text-xs font-semibold flex items-center gap-1.5">
+                  Tempo de Espera (s)
+                  <span title="Tempo que a IA aguarda novas mensagens do cliente antes de responder (evita respostas picadas).">
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </Label>
+                <Input
+                  id="ai-debounce"
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={form.debounceSeconds}
+                  onChange={(e) => set({ debounceSeconds: Number(e.target.value) })}
+                  className="bg-background focus-visible:ring-primary/20"
+                />
+              </div>
 
-        <div className="space-y-2 border-t border-border pt-4">
-          <label className="flex items-center justify-between gap-3">
-            <div>
-              <span className="text-sm font-medium text-foreground">Avisar que é um atendimento por IA</span>
-              <p className="text-xs text-muted-foreground">
-                Transparência (LGPD): envia uma mensagem na primeira vez que a IA atende cada conversa.
-              </p>
-            </div>
-            <Switch checked={form.disclosureEnabled} onCheckedChange={(v) => set({ disclosureEnabled: v })} />
-          </label>
-          {form.disclosureEnabled ? (
-            <Textarea
-              value={form.disclosureMessage}
-              onChange={(e) => set({ disclosureMessage: e.target.value })}
-              placeholder="Em branco usa o padrão: “Olá! Você está sendo atendido por um assistente virtual com inteligência artificial. Se preferir falar com uma pessoa, é só pedir.”"
-              rows={3}
-            />
-          ) : null}
-        </div>
+              <div className="space-y-2">
+                <Label htmlFor="ai-maxtokens" className="text-xs font-semibold flex items-center gap-1.5">
+                  Máximo de Tokens/Resp
+                  <span title="Tamanho máximo aproximado que cada resposta da IA pode conter (previne respostas excessivamente longas).">
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </Label>
+                <Input
+                  id="ai-maxtokens"
+                  type="number"
+                  min={256}
+                  max={8192}
+                  value={form.maxOutputTokens}
+                  onChange={(e) => set({ maxOutputTokens: Number(e.target.value) })}
+                  className="bg-background focus-visible:ring-primary/20"
+                />
+              </div>
 
-        <div className="space-y-2 border-t border-border pt-4">
-          <label className="flex items-center justify-between gap-3">
-            <div>
-              <span className="text-sm font-medium text-foreground">Roteamento inteligente de modelo</span>
-              <p className="text-xs text-muted-foreground">
-                Mensagens curtas e sem contexto (cumprimentos, “ok”, “obrigado”) vão pro Haiku 4.5
-                — até 6× mais barato. Pergunta com base de conhecimento, imagem ou texto longo
-                continua no modelo configurado acima.
-              </p>
-            </div>
-            <Switch
-              checked={form.enableModelRouting}
-              onCheckedChange={(v) => set({ enableModelRouting: v })}
-            />
-          </label>
-        </div>
+              <div className="space-y-2">
+                <Label htmlFor="ai-limit" className="text-xs font-semibold flex items-center gap-1.5">
+                  Teto Mensal de Tokens
+                  <span title="Limite de tokens mensal auto-imposto para controlar custos extras.">
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </Label>
+                <Input
+                  id="ai-limit"
+                  type="number"
+                  min={0}
+                  value={form.monthlyTokenLimit ?? ""}
+                  onChange={(e) => set({ monthlyTokenLimit: e.target.value === "" ? null : Number(e.target.value) })}
+                  placeholder="Sem limite"
+                  className="bg-background focus-visible:ring-primary/20"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-        <div className="space-y-2 border-t border-border pt-4">
-          <label className="flex items-center justify-between gap-3">
-            <div>
-              <span className="text-sm font-medium text-foreground">Raciocínio adaptativo (extended thinking)</span>
-              <p className="text-xs text-muted-foreground">
-                Em perguntas complexas (várias fontes na base, mensagem longa, palavras como
-                “compare”, “diferença”, “por que”) a IA pensa antes de responder — melhora
-                muito a qualidade ao custo de +2-5s de latência e tokens extras. Só Sonnet/Opus
-                suportam; Haiku ignora.
-              </p>
-            </div>
-            <Switch
-              checked={form.enableThinking}
-              onCheckedChange={(v) => set({ enableThinking: v })}
-            />
-          </label>
-        </div>
+          {/* Card Recursos Avançados */}
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Sparkles className="h-4.5 w-4.5 text-primary" />
+                Recursos Inteligentes
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Aumente a eficiência e reduza custos com roteamento dinâmico.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/10 p-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    Roteamento Dinâmico
+                  </span>
+                  <p className="text-[10px] text-muted-foreground leading-normal">
+                    Mensagens simples (ex: "ok", "obrigado") usam o Claude Haiku (até 6x mais barato) em vez do modelo principal.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.enableModelRouting}
+                  onCheckedChange={(v) => set({ enableModelRouting: v })}
+                  className="mt-0.5 scale-90"
+                />
+              </div>
 
-        <div className="flex justify-end">
-          <Button onClick={() => upsert.mutate(form)} disabled={upsert.isPending}>
-            {upsert.isPending ? "Salvando…" : "Salvar configuração"}
-          </Button>
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/10 p-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    Pensamento Adaptativo
+                  </span>
+                  <p className="text-[10px] text-muted-foreground leading-normal">
+                    IA reflete e raciocina antes de responder a perguntas complexas da base de conhecimento (adiciona +2-5s de latência).
+                  </p>
+                </div>
+                <Switch
+                  checked={form.enableThinking}
+                  onCheckedChange={(v) => set({ enableThinking: v })}
+                  className="mt-0.5 scale-90"
+                />
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Save Button Row */}
+      <div className="flex items-center justify-end rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+        <Button
+          onClick={() => upsert.mutate(form)}
+          disabled={upsert.isPending}
+          className="px-6 font-semibold shadow-sm bg-primary hover:bg-primary/95 text-primary-foreground min-w-[150px]"
+        >
+          {upsert.isPending ? "Salvando configurações..." : "Salvar Configuração"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -522,6 +930,8 @@ function ConhecimentoTab() {
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [kbAddTab, setKbAddTab] = useState("manual");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const add = useAddKnowledgeSource({
@@ -556,7 +966,7 @@ function ConhecimentoTab() {
         return;
       }
       await add.mutateAsync({ title: file.name.replace(/\.pdf$/i, ""), content: text });
-      toast({ title: "PDF importado para a base." });
+      toast({ title: "PDF importado com sucesso!" });
     } catch (e) {
       toast({
         title: "Não foi possível ler o PDF",
@@ -568,123 +978,223 @@ function ConhecimentoTab() {
     }
   }
 
+  const filteredSources = sources.filter((s) =>
+    s.title.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Adicionar conteúdo</CardTitle>
-          <CardDescription>
-            Cole textos sobre produtos, preços, políticas e FAQ. A IA usa isso para responder com precisão.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2">
-            <Label htmlFor="kb-title">Título</Label>
-            <Input
-              id="kb-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex.: Política de trocas"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="kb-content">Conteúdo</Label>
-            <Textarea
-              id="kb-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Cole aqui o texto..."
-              rows={6}
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button
-              onClick={() => add.mutate({ title: title.trim(), content: content.trim() })}
-              disabled={!title.trim() || !content.trim() || add.isPending}
-            >
-              {add.isPending ? "Processando…" : "Adicionar à base"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="grid gap-6 md:grid-cols-3">
+      {/* Coluna de Adicionar Conteúdo (1/3) */}
+      <div className="space-y-6 md:col-span-1">
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Plus className="h-4.5 w-4.5 text-primary" />
+              Alimentar Base
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Adicione textos, links ou documentos para treinar a IA.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Tabs value={kbAddTab} onValueChange={setKbAddTab} className="w-full">
+              <TabsList className="grid grid-cols-2 h-9 w-full bg-muted/40 p-0.5 rounded-lg border border-border/40 mb-4">
+                <TabsTrigger value="manual" className="text-xs rounded-md">
+                  Texto Manual
+                </TabsTrigger>
+                <TabsTrigger value="import" className="text-xs rounded-md">
+                  Página / PDF
+                </TabsTrigger>
+              </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Importar página ou PDF</CardTitle>
-          <CardDescription>
-            Cole o link do seu site/FAQ ou suba um PDF — a IA extrai o texto automaticamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://seusite.com/faq"
-              className="flex-1"
-            />
-            <Button onClick={() => importUrl.mutate(url.trim())} disabled={!url.trim() || importUrl.isPending}>
-              {importUrl.isPending ? "Importando…" : "Importar"}
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handlePdf(file);
-                e.target.value = "";
-              }}
-            />
-            <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={pdfLoading || add.isPending}>
-              {pdfLoading ? "Lendo PDF…" : "Subir PDF"}
-            </Button>
-            <span className="text-xs text-muted-foreground">PDF com texto (não escaneado).</span>
-          </div>
-        </CardContent>
-      </Card>
+              <TabsContent value="manual" className="space-y-3 mt-0 focus-visible:outline-none">
+                <div className="space-y-1.5">
+                  <Label htmlFor="kb-title" className="text-xs font-semibold">Título da Fonte</Label>
+                  <Input
+                    id="kb-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Ex.: Política de Devolução"
+                    className="focus-visible:ring-primary/20 bg-background text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="kb-content" className="text-xs font-semibold">Texto informativo</Label>
+                  <Textarea
+                    id="kb-content"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Escreva ou cole aqui as informações que a IA deve aprender..."
+                    className="min-h-[160px] text-xs focus-visible:ring-primary/20 bg-background"
+                    rows={6}
+                  />
+                </div>
+                <Button
+                  onClick={() => add.mutate({ title: title.trim(), content: content.trim() })}
+                  disabled={!title.trim() || !content.trim() || add.isPending}
+                  className="w-full font-semibold bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm h-9 text-xs"
+                >
+                  {add.isPending ? "Salvando..." : "Adicionar à Base"}
+                </Button>
+              </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Conteúdos cadastrados</CardTitle>
-          <CardDescription>Fontes que a IA consulta ao responder.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
-          ) : isError ? (
-            <p className="text-sm text-destructive">{error?.message ?? "Erro ao carregar a base."}</p>
-          ) : sources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum conteúdo cadastrado ainda.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {sources.map((source) => (
-                <li key={source.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{source.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(source.created_at).toLocaleDateString("pt-BR")}
-                    </p>
+              <TabsContent value="import" className="space-y-4 mt-0 focus-visible:outline-none">
+                <div className="space-y-2 border-b border-border/40 pb-4">
+                  <Label className="text-xs font-semibold">Importar URL de FAQ/Site</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      placeholder="https://seusite.com/faq"
+                      className="flex-1 focus-visible:ring-primary/20 bg-background h-9 text-xs"
+                    />
+                    <Button 
+                      onClick={() => importUrl.mutate(url.trim())} 
+                      disabled={!url.trim() || importUrl.isPending}
+                      className="bg-primary hover:bg-primary/95 text-primary-foreground font-semibold h-9 text-xs"
+                    >
+                      {importUrl.isPending ? "Lendo..." : "Importar"}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => del.mutate(source.id)}
-                    disabled={del.isPending}
-                    aria-label={`Remover ${source.title}`}
+                  <p className="text-[10px] text-muted-foreground leading-normal">
+                    A IA visitará a página e extrairá o texto útil para a base de conhecimento.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Upload de arquivo PDF</Label>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handlePdf(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div
+                    onClick={() => !pdfLoading && !add.isPending && fileRef.current?.click()}
+                    className={cn(
+                      "flex flex-col items-center justify-center border-2 border-dashed border-border/70 hover:border-primary/50 bg-muted/10 hover:bg-primary/[0.01] rounded-xl p-4 cursor-pointer transition-all gap-2 text-center",
+                      (pdfLoading || add.isPending) && "opacity-60 cursor-not-allowed"
+                    )}
                   >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                    <UploadCloud className="h-8 w-8 text-primary/70 animate-pulse-soft" />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground">
+                        {pdfLoading ? "Processando arquivo..." : "Clique para selecionar PDF"}
+                      </span>
+                      <p className="text-[10px] text-muted-foreground">PDFs apenas com texto legível</p>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Coluna da Lista de Documentos (2/3) */}
+      <div className="md:col-span-2 space-y-6">
+        <Card className="border-border/80 shadow-sm h-full flex flex-col">
+          <CardHeader className="pb-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <BookOpen className="h-4.5 w-4.5 text-primary" />
+                Fontes de Conhecimento Ativas
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {sources.length} documento(s) cadastrados na inteligência artificial.
+              </CardDescription>
+            </div>
+            {sources.length > 0 && (
+              <div className="relative w-full sm:w-60">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar fontes..."
+                  className="pl-8 h-8.5 bg-background border-border/80 text-xs focus-visible:ring-primary/20"
+                />
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="pt-4 flex-1">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground text-sm">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                Carregando documentos...
+              </div>
+            ) : isError ? (
+              <div className="flex items-center gap-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error?.message ?? "Falha ao carregar a base de conhecimento."}
+              </div>
+            ) : filteredSources.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center border rounded-xl border-dashed border-border/80 bg-muted/5">
+                <FileText className="h-10 w-10 text-muted-foreground/60" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Nenhuma fonte encontrada</p>
+                  <p className="text-xs text-muted-foreground max-w-sm px-4">
+                    {search ? "Nenhuma fonte corresponde aos critérios da busca." : "Alimente a inteligência com manuais, FAQs e informações no painel ao lado."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {filteredSources.map((source) => {
+                  const isPdf = source.title.toLowerCase().endsWith(".pdf") || source.kind === "pdf";
+                  const isUrl = source.title.toLowerCase().startsWith("http") || source.kind === "url";
+                  const SourceIcon = isPdf ? FileText : isUrl ? Globe : FileText;
+
+                  return (
+                    <div
+                      key={source.id}
+                      className="group relative flex items-start gap-3 rounded-xl border border-border/70 p-3 bg-muted/5 hover:bg-muted/15 transition-all shadow-sm hover:border-primary/25"
+                    >
+                      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                        isPdf ? "bg-red-500/10 text-red-600 border-red-500/15" :
+                        isUrl ? "bg-blue-500/10 text-blue-600 border-blue-500/15" :
+                        "bg-primary/10 text-primary border-primary/15"
+                      )}>
+                        <SourceIcon className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1 pr-6">
+                        <p className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors" title={source.title}>
+                          {source.title}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(source.created_at).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all rounded-md"
+                        onClick={() => del.mutate(source.id)}
+                        disabled={del.isPending}
+                        aria-label={`Remover ${source.title}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -692,26 +1202,41 @@ function ConhecimentoTab() {
 function CanaisTab() {
   const { data: channels = [], isLoading, isError, error } = useAiChannels();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Canais</CardTitle>
-        <CardDescription>
-          Ligue a IA por canal. Conversas novas em canais ligados já entram com a IA atendendo.
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="pb-4 border-b border-border/40">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Radio className="h-4.5 w-4.5 text-primary animate-pulse-soft" />
+          Canais de Atendimento WhatsApp
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Ligue ou desligue a IA por canal de atendimento. Canais ativos respondem automaticamente a conversas novas.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando…</p>
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground text-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            Carregando canais...
+          </div>
         ) : isError ? (
-          <p className="text-sm text-destructive">{error?.message ?? "Erro ao carregar os canais."}</p>
+          <div className="flex items-center gap-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-xs text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {error?.message ?? "Falha ao carregar canais."}
+          </div>
         ) : channels.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum canal de WhatsApp conectado.</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center border rounded-xl border-dashed border-border/80 bg-muted/5">
+            <Radio className="h-10 w-10 text-muted-foreground/60 mb-2" />
+            <p className="text-sm font-semibold text-foreground">Nenhum canal de WhatsApp conectado</p>
+            <p className="text-xs text-muted-foreground max-w-sm px-4">
+              Conecte um canal de WhatsApp nas configurações do sistema para poder ativar a IA.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {channels.map((channel) => (
               <ChannelCard key={channel.id} channel={channel} />
             ))}
-          </ul>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -725,7 +1250,7 @@ function ChannelCard({ channel }: { channel: AiChannel }) {
   const [persona, setPersona] = useState(channel.ai_persona ?? "");
 
   const update = useUpdateAiChannel({
-    onSuccess: () => toast({ title: "Canal atualizado." }),
+    onSuccess: () => toast({ title: "Canal atualizado com sucesso!" }),
     onError: (e) => toast({ title: "Não foi possível salvar", description: e.message, variant: "destructive" }),
   });
 
@@ -734,50 +1259,87 @@ function ChannelCard({ channel }: { channel: AiChannel }) {
     mode !== channel.ai_default_mode ||
     persona.trim() !== (channel.ai_persona ?? "");
 
+  const isConnected = channel.status?.toLowerCase() === "connected";
+
   return (
-    <li className="rounded-md border border-border p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{channel.display_name}</p>
-          <p className="text-xs text-muted-foreground">
-            {channel.phone_number || "sem número"} · {channel.status}
-          </p>
+    <div
+      className={cn(
+        "rounded-xl border transition-all duration-300 flex flex-col justify-between shadow-sm p-4 bg-muted/5",
+        enabled
+          ? "border-primary/30 bg-primary/[0.01] hover:border-primary/45"
+          : "border-border/80 hover:border-border/100"
+      )}
+    >
+      <div className="space-y-4">
+        {/* Header do Card */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-sm truncate text-foreground" title={channel.display_name}>
+                {channel.display_name}
+              </span>
+              <span className={cn("inline-flex h-2 w-2 rounded-full", isConnected ? "bg-emerald-500" : "bg-red-500")} />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-mono">
+              {channel.phone_number || "sem número"}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 border border-border/40 rounded-lg bg-card px-2 py-1 shadow-sm shrink-0">
+            <span className="text-[11px] font-medium text-muted-foreground">IA Ativa</span>
+            <Switch checked={enabled} onCheckedChange={setEnabled} className="scale-75" />
+          </div>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">IA ativa</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-        </label>
+
+        {/* Campos Condicionais se IA estiver habilitada */}
+        {enabled && (
+          <div className="space-y-3 pt-3 border-t border-border/40 animate-accordion-down">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                Modo de atuação inicial
+                <span title="Qualificando: Apenas faz as perguntas de cadastro. Completo: Conversa livremente respondendo da base de conhecimento.">
+                  <HelpCircle className="h-3 w-3 text-muted-foreground/80" />
+                </span>
+              </Label>
+              <Select value={mode} onValueChange={(v) => setMode(v as AiDefaultMode)}>
+                <SelectTrigger className="w-full bg-background border-border/80 text-xs h-8.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="qualifying" className="text-xs">Qualificação (cadastro inicial)</SelectItem>
+                  <SelectItem value="full" className="text-xs">Completo (atendimento livre)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold text-muted-foreground">Persona Customizada (opcional)</Label>
+              <Textarea
+                value={persona}
+                onChange={(e) => setPersona(e.target.value)}
+                placeholder="Exclusivo para este canal. Em branco usa a persona global das configurações."
+                className="text-xs min-h-[90px] resize-y bg-background focus-visible:ring-primary/20"
+                rows={3}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {enabled ? (
-        <div className="mt-3 space-y-3 border-t border-border pt-3">
-          <div className="grid gap-2">
-            <Label>Modo padrão (conversas novas)</Label>
-            <Select value={mode} onValueChange={(v) => setMode(v as AiDefaultMode)}>
-              <SelectTrigger className="w-full sm:w-72">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="qualifying">Qualificação (etapas iniciais)</SelectItem>
-                <SelectItem value="full">Completo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label>Persona deste canal (opcional)</Label>
-            <Textarea
-              value={persona}
-              onChange={(e) => setPersona(e.target.value)}
-              placeholder="Em branco usa a persona geral da aba Configuração."
-              rows={4}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-3 flex justify-end">
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/30 pt-3">
+        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+          {enabled ? (
+            <Badge className="bg-primary/10 hover:bg-primary/10 text-primary border-primary/15 text-[9px] px-1.5 py-0 font-normal">
+              Respondendo
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground border-border/60 text-[9px] px-1.5 py-0 font-normal">
+              Desativado
+            </Badge>
+          )}
+        </span>
         <Button
           size="sm"
+          className="text-xs font-semibold h-8 bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm px-3"
           disabled={!dirty || update.isPending}
           onClick={() =>
             update.mutate({
@@ -786,10 +1348,10 @@ function ChannelCard({ channel }: { channel: AiChannel }) {
             })
           }
         >
-          {update.isPending ? "Salvando…" : "Salvar"}
+          {update.isPending ? "Salvando..." : "Salvar Canal"}
         </Button>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -803,7 +1365,6 @@ function AtividadeTab() {
   }
 
   const totalTokens = data.inputTokens + data.outputTokens;
-  // Limite efetivo: cota do plano (add-on ativo, sem overage) e/ou auto-teto do tenant.
   const planQuota = sub?.active && sub.monthlyTokenQuota > 0 && !sub.overageAllowed ? sub.monthlyTokenQuota : null;
   const selfLimit = config?.monthlyTokenLimit && config.monthlyTokenLimit > 0 ? config.monthlyTokenLimit : null;
   const candidates = [planQuota, selfLimit].filter((v): v is number => v != null);
@@ -812,71 +1373,145 @@ function AtividadeTab() {
 
   const stats = [
     {
-      label: "Custo estimado (mês)",
+      label: "Custo Estimado (mês)",
       value: data.costUsd.toLocaleString("pt-BR", {
         style: "currency",
         currency: "USD",
         maximumFractionDigits: data.costUsd < 1 ? 4 : 2,
       }),
+      icon: Coins,
+      desc: "Com base no uso de tokens",
+      color: "text-primary bg-primary/10",
     },
-    { label: "Turnos da IA", value: nf(data.messages) },
-    { label: "Tokens de entrada", value: nf(data.inputTokens) },
-    { label: "Tokens de saída", value: nf(data.outputTokens) },
-    { label: "Tokens de cache (lidos)", value: nf(data.cacheReadTokens) },
+    { 
+      label: "Turnos da IA", 
+      value: nf(data.messages), 
+      icon: MessageSquare, 
+      desc: "Respostas geradas",
+      color: "text-blue-600 bg-blue-500/10",
+    },
+    { 
+      label: "Tokens de Entrada", 
+      value: nf(data.inputTokens), 
+      icon: Layers, 
+      desc: "Contexto enviado",
+      color: "text-amber-600 bg-amber-500/10",
+    },
+    { 
+      label: "Tokens de Saída", 
+      value: nf(data.outputTokens), 
+      icon: Send, 
+      desc: "Respostas geradas",
+      color: "text-emerald-600 bg-emerald-500/10",
+    },
+    { 
+      label: "Cache Lido", 
+      value: nf(data.cacheReadTokens), 
+      icon: Sparkles, 
+      desc: "Tokens economizados",
+      color: "text-violet-600 bg-violet-500/10",
+    },
   ];
 
   return (
-    <div className="space-y-4">
-      {sub ? (
-        (() => {
-          const trialDate = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
-          const trialExpired = trialDate ? trialDate <= new Date() : false;
-          const effectiveActive = sub.active && !trialExpired;
-          return (
-            <div className="text-sm text-muted-foreground">
-              Add-on de IA:{" "}
-              <strong className={effectiveActive ? "text-foreground" : "text-destructive"}>
-                {trialExpired ? "trial expirado" : sub.active ? "ativo" : "inativo"}
-              </strong>
-              {effectiveActive && trialDate ? ` · trial até ${trialDate.toLocaleDateString("pt-BR")}` : ""}
-              {effectiveActive && sub.monthlyTokenQuota > 0
-                ? ` · cota ${nf(sub.monthlyTokenQuota)} tokens/mês${sub.overageAllowed ? " (com overage)" : ""}`
-                : ""}
+    <div className="space-y-6">
+      {/* Informações da Assinatura / Add-on */}
+      {sub && (
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border/80 bg-card p-4 shadow-sm text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Status do Add-on:</span>
+            {(() => {
+              const trialDate = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
+              const trialExpired = trialDate ? trialDate <= new Date() : false;
+              const effectiveActive = sub.active && !trialExpired;
+              return (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "font-semibold text-[10px] px-2 py-0.5",
+                    effectiveActive 
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20" 
+                      : "bg-red-500/10 text-red-700 border-red-500/20"
+                  )}
+                >
+                  {trialExpired ? "Trial Expirado" : sub.active ? "Ativo" : "Inativo"}
+                </Badge>
+              );
+            })()}
+          </div>
+          {sub.active && sub.trialEndsAt && (
+            <div className="flex items-center gap-1 text-muted-foreground border-l border-border/60 pl-4">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Período de teste até: <strong className="text-foreground">{new Date(sub.trialEndsAt).toLocaleDateString("pt-BR")}</strong></span>
             </div>
-          );
-        })()
-      ) : null}
-      {quotaPct !== null && quotaPct >= 80 ? (
+          )}
+          {sub.active && sub.monthlyTokenQuota > 0 && (
+            <div className="flex items-center gap-1 text-muted-foreground border-l border-border/60 pl-4">
+              <Coins className="h-3.5 w-3.5" />
+              <span>Cota contratada: <strong className="text-foreground">{nf(sub.monthlyTokenQuota)} tokens/mês</strong> {sub.overageAllowed && "(com overage)"}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {quotaPct !== null && quotaPct >= 80 && (
         <div
           className={cn(
-            "rounded-md border p-3 text-sm",
+            "flex items-start gap-3 rounded-xl border p-4 text-xs shadow-sm",
             quotaPct >= 100
-              ? "border-destructive bg-destructive/10 text-destructive"
-              : "border-amber-300 bg-amber-50 text-amber-800",
+              ? "border-destructive bg-destructive/5 text-destructive"
+              : "border-amber-300 bg-amber-500/5 text-amber-800 dark:text-amber-200"
           )}
         >
-          {quotaPct >= 100
-            ? `Limite mensal de tokens atingido (${nf(totalTokens)}/${nf(limit!)}). A IA fica em pausa até virar o mês ou você aumentar o limite na aba Configuração.`
-            : `Você já usou ${quotaPct}% do limite mensal de tokens (${nf(totalTokens)}/${nf(limit!)}).`}
+          <ShieldAlert className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">
+              {quotaPct >= 100 ? "Limite Mensal Atingido" : "Aviso de Consumo"}
+            </p>
+            <p className="leading-relaxed">
+              {quotaPct >= 100
+                ? `O limite mensal de tokens foi atingido (${nf(totalTokens)}/${nf(limit!)}). O agente de IA está pausado até o início do próximo ciclo ou até você elevar o teto nas configurações.`
+                : `Você consumiu ${quotaPct}% do seu limite mensal de tokens (${nf(totalTokens)}/${nf(limit!)}).`}
+            </p>
+          </div>
         </div>
-      ) : null}
-      <div>
-        <p className="mb-3 text-sm text-muted-foreground">Consumo no mês atual.</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {stats.map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</p>
-              </CardContent>
-            </Card>
-          ))}
+      )}
+
+      {/* Grid de Estatísticas */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <Activity className="h-4.5 w-4.5 text-primary" />
+            Consumo no Ciclo Atual
+          </h3>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Custo estimado em US$ a partir dos tokens e do modelo de cada turno (preços de tabela; pode variar).
-        </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {stats.map((stat) => {
+            const StatIcon = stat.icon;
+            return (
+              <Card key={stat.label} className="border-border/80 shadow-sm hover:shadow-md transition-all duration-300">
+                <CardContent className="p-4 flex flex-col justify-between h-full space-y-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider line-clamp-1">{stat.label}</span>
+                    <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center shrink-0 shadow-sm border border-border/20", stat.color)}>
+                      <StatIcon className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums">{stat.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{stat.desc}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Modelos e Custo */}
       <CostByModelCard totalCostUsd={data.costUsd} />
+
+      {/* Falhas Recentes e Turnos */}
       <FailuresList />
       <TurnsList />
     </div>
@@ -895,51 +1530,59 @@ function CostByModelCard({ totalCostUsd }: { totalCostUsd: number }) {
   const { data: rows = [], isLoading } = useAiUsageByModelThisMonth();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Custo por modelo (mês)</CardTitle>
-        <CardDescription>
-          Quanto cada modelo está consumindo — útil pra ajustar routing (Haiku para trivial,
-          Sonnet/Opus para complexo) e medir o ganho de cache.
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="pb-4 border-b border-border/40">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Cpu className="h-4.5 w-4.5 text-primary" />
+          Distribuição de Custos por Modelo
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Acompanhe o consumo monetário por modelo de linguagem para otimizar suas regras de roteamento.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-4">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando…</p>
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground text-xs">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            Carregando custos por modelo...
+          </div>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sem consumo registrado no mês.</p>
+          <p className="text-xs text-muted-foreground text-center py-6">Sem registros de consumo de modelos neste ciclo.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto border border-border/60 rounded-xl bg-muted/5 shadow-inner">
+            <table className="w-full text-xs text-foreground">
               <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Modelo</th>
-                  <th className="py-2 pr-3 text-right font-medium">Turnos</th>
-                  <th className="py-2 pr-3 text-right font-medium">Entrada</th>
-                  <th className="py-2 pr-3 text-right font-medium">Saída</th>
-                  <th className="py-2 pr-3 text-right font-medium">Cache (lido)</th>
-                  <th className="py-2 pr-3 text-right font-medium">Custo</th>
-                  <th className="py-2 pr-3 text-right font-medium">% do total</th>
-                  <th className="py-2 pr-0 text-right font-medium">Economia cache</th>
+                <tr className="border-b border-border bg-muted/30 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="py-3 px-4 font-semibold">Modelo</th>
+                  <th className="py-3 px-3 text-right font-semibold">Turnos</th>
+                  <th className="py-3 px-3 text-right font-semibold">Entrada</th>
+                  <th className="py-3 px-3 text-right font-semibold">Saída</th>
+                  <th className="py-3 px-3 text-right font-semibold">Cache (Lido)</th>
+                  <th className="py-3 px-3 text-right font-semibold">Custo Total</th>
+                  <th className="py-3 px-4 text-center font-semibold">% Custo</th>
+                  <th className="py-3 px-4 text-right font-semibold">Economia Cache</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row: AiUsageByModelRow) => {
                   const pct = totalCostUsd > 0 ? Math.round((row.costUsd / totalCostUsd) * 100) : 0;
                   return (
-                    <tr key={row.model} className="border-b border-border/50 last:border-0">
-                      <td className="py-2 pr-3">
-                        <span className="font-mono text-xs">{shortModelName(row.model)}</span>
+                    <tr key={row.model} className="border-b border-border/40 last:border-0 hover:bg-muted/10 transition-colors">
+                      <td className="py-2.5 px-4 font-mono font-semibold text-primary">{shortModelName(row.model)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums">{nf(row.turns)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{nf(row.inputTokens)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{nf(row.outputTokens)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{nf(row.cacheReadTokens)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums font-semibold">{formatUsd(row.costUsd)}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="relative w-12 h-2 rounded-full bg-muted overflow-hidden border border-border/30">
+                            <div className="absolute top-0 left-0 h-full bg-primary" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="font-semibold text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+                        </div>
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.turns)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.inputTokens)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.outputTokens)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
-                        {nf(row.cacheReadTokens)}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{formatUsd(row.costUsd)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{pct}%</td>
-                      <td className="py-2 pr-0 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                      <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
                         {row.cacheSavingsUsd > 0 ? `-${formatUsd(row.cacheSavingsUsd)}` : "—"}
                       </td>
                     </tr>
@@ -959,19 +1602,30 @@ function FailuresList() {
   if (errors.length === 0) return null;
 
   return (
-    <Card className="border-destructive/40">
-      <CardHeader>
-        <CardTitle className="text-base text-destructive">Falhas recentes</CardTitle>
-        <CardDescription>Atendimentos em que a IA falhou após as tentativas — veja o motivo.</CardDescription>
+    <Card className="border-destructive/30 bg-destructive/[0.02] shadow-sm">
+      <CardHeader className="pb-3 border-b border-destructive/10">
+        <CardTitle className="text-base font-semibold text-destructive flex items-center gap-2">
+          <ShieldAlert className="h-4.5 w-4.5" />
+          Falhas Operacionais Recentes
+        </CardTitle>
+        <CardDescription className="text-xs text-destructive/80">
+          Mensagens ou interações em que a inteligência falhou ou parou.
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ul className="space-y-2">
+      <CardContent className="pt-4">
+        <ul className="space-y-2.5">
           {errors.map((err: AiError, i) => (
-            <li key={`${err.chat_id}-${i}`} className="rounded-md border border-border p-3 text-sm">
-              <div className="mb-1 text-xs text-muted-foreground">
-                {new Date(err.updated_at).toLocaleString("pt-BR")}
+            <li key={`${err.chat_id}-${i}`} className="rounded-xl border border-destructive/20 bg-card p-3 text-xs shadow-sm flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground border-b border-border/40 pb-1.5">
+                <span className="font-semibold flex items-center gap-1">
+                  ID Conversa: <span className="font-mono text-foreground">{err.chat_id || "—"}</span>
+                </span>
+                <span className="flex items-center gap-1 font-medium">
+                  <Clock className="h-3 w-3" />
+                  {new Date(err.updated_at).toLocaleString("pt-BR")}
+                </span>
               </div>
-              <p className="break-words text-destructive">{err.last_error ?? "Erro desconhecido."}</p>
+              <p className="break-words font-medium text-destructive leading-relaxed">{err.last_error ?? "Erro indefinido na execução do modelo."}</p>
             </li>
           ))}
         </ul>
@@ -982,24 +1636,50 @@ function FailuresList() {
 
 function TurnsList() {
   const { data: turns = [], isLoading } = useAiTurns();
+  const [search, setSearch] = useState("");
+
+  const filteredTurns = turns.filter((turn) =>
+    (turn.user_message?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
+    (turn.reply?.toLowerCase() ?? "").includes(search.toLowerCase())
+  );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Últimas interações da IA</CardTitle>
-        <CardDescription>
-          Veja o que a IA respondeu e em quais trechos da base ela se baseou — útil para auditar e evitar respostas
-          inventadas.
-        </CardDescription>
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="pb-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <MessageSquare className="h-4.5 w-4.5 text-primary" />
+            Auditoria e Últimas Interações
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Visualize as perguntas feitas pelos clientes, respostas geradas pela IA e o contexto utilizado.
+          </CardDescription>
+        </div>
+        {turns.length > 0 && (
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filtrar conversas..."
+              className="pl-8 h-8.5 bg-background border-border/80 text-xs focus-visible:ring-primary/20"
+            />
+          </div>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-4">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando…</p>
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground text-xs">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            Carregando interações recentes...
+          </div>
         ) : turns.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma interação registrada ainda.</p>
+          <p className="text-xs text-muted-foreground text-center py-8">Nenhuma interação com a IA registrada neste canal.</p>
+        ) : filteredTurns.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-8">Nenhuma interação corresponde ao termo pesquisado.</p>
         ) : (
-          <ul className="space-y-3">
-            {turns.map((turn) => (
+          <ul className="space-y-4">
+            {filteredTurns.map((turn) => (
               <TurnRow key={turn.id} turn={turn} />
             ))}
           </ul>
@@ -1011,7 +1691,6 @@ function TurnsList() {
 
 function shortModelName(model: string | null): string {
   if (!model) return "—";
-  // claude-haiku-4-5-20251001 → "Haiku 4.5"; claude-sonnet-4-6 → "Sonnet 4.6"
   const m = model.toLowerCase();
   if (m === "circuit-breaker") return "Breaker";
   if (m.includes("haiku")) return "Haiku 4.5";
@@ -1023,14 +1702,15 @@ function shortModelName(model: string | null): string {
 }
 
 const OUTCOME_META: Record<AiTurnOutcome, { label: string; tone: "ok" | "warn" | "fail" }> = {
-  delivered: { label: "entregue", tone: "ok" },
-  blocked_critique: { label: "bloqueado pela auditoria", tone: "warn" },
-  no_reply: { label: "sem resposta", tone: "warn" },
-  tool_error: { label: "ferramentas falharam", tone: "fail" },
-  circuit_tripped: { label: "breaker disparado", tone: "fail" },
+  delivered: { label: "Entregue", tone: "ok" },
+  blocked_critique: { label: "Bloqueado na Auditoria", tone: "warn" },
+  no_reply: { label: "Sem Resposta", tone: "warn" },
+  tool_error: { label: "Erro de Ferramenta", tone: "fail" },
+  circuit_tripped: { label: "Breaker Disparado", tone: "fail" },
 };
 
 function TurnRow({ turn }: { turn: AiTurn }) {
+  const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const topSimilarity = turn.retrieved.length > 0
     ? Math.round(Math.max(...turn.retrieved.map((r) => r.similarity ?? 0)) * 100)
@@ -1038,102 +1718,152 @@ function TurnRow({ turn }: { turn: AiTurn }) {
   const writeTools = (turn.tools ?? []).filter((t) => t.name && t.name !== "send_whatsapp_message");
   const hasRetrieved = turn.retrieved.length > 0;
 
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Trecho copiado!" });
+  };
+
+  const outcomeStyle = turn.outcome ? OUTCOME_META[turn.outcome].tone : "warn";
+
   return (
-    <li className="rounded-md border border-border p-3">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">{new Date(turn.created_at).toLocaleString("pt-BR")}</span>
+    <li
+      className={cn(
+        "rounded-xl border border-border/70 bg-card/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 list-none",
+        outcomeStyle === "ok" && "border-l-emerald-500 hover:border-l-emerald-600",
+        outcomeStyle === "warn" && "border-l-amber-500 hover:border-l-amber-600",
+        outcomeStyle === "fail" && "border-l-destructive hover:border-l-destructive"
+      )}
+    >
+      {/* Linha de Info/Meta */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/20 pb-2">
+        <span className="text-[10px] text-muted-foreground flex items-center gap-1.5 font-medium">
+          <Clock className="h-3 w-3" />
+          {new Date(turn.created_at).toLocaleString("pt-BR")}
+        </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className="font-normal text-muted-foreground">
+          <Badge variant="outline" className="font-mono text-[9px] px-2 py-0 h-5 border-border/70 text-muted-foreground font-semibold bg-muted/20">
             {shortModelName(turn.model)}
           </Badge>
           {turn.thinking_budget && turn.thinking_budget > 0 ? (
             <Badge
               variant="outline"
-              className="border-violet-500/40 font-normal text-violet-700 dark:text-violet-300"
+              className="border-violet-500/20 bg-violet-500/5 font-semibold text-[9px] px-2 py-0 h-5 text-violet-700 dark:text-violet-300"
               title={`Extended thinking — budget ${turn.thinking_budget} tokens`}
             >
-              thinking
+              pensamento estendido
             </Badge>
           ) : null}
           {turn.outcome ? (
             <Badge
               variant="outline"
               className={cn(
-                "font-normal",
-                OUTCOME_META[turn.outcome].tone === "ok" && "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
-                OUTCOME_META[turn.outcome].tone === "warn" && "border-amber-500/50 text-amber-700 dark:text-amber-300",
-                OUTCOME_META[turn.outcome].tone === "fail" && "border-destructive text-destructive",
+                "font-semibold text-[9px] px-2 py-0 h-5 border-transparent",
+                OUTCOME_META[turn.outcome].tone === "ok" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
+                OUTCOME_META[turn.outcome].tone === "warn" && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20",
+                OUTCOME_META[turn.outcome].tone === "fail" && "bg-destructive/10 text-destructive border-destructive/20",
               )}
             >
               {OUTCOME_META[turn.outcome].label}
             </Badge>
           ) : null}
           {hasRetrieved ? (
-            <Badge variant="secondary" className="font-normal">
-              base: {turn.retrieved.length} trecho(s) · top {topSimilarity}%
+            <Badge variant="secondary" className="font-semibold text-[9px] px-2 py-0 h-5 bg-primary/5 border border-primary/10 text-primary">
+              Base: {turn.retrieved.length} trechos ({topSimilarity}% rel.)
             </Badge>
           ) : (
-            <Badge variant="outline" className="font-normal text-muted-foreground">
-              sem base
+            <Badge variant="outline" className="font-normal text-[9px] px-2 py-0 h-5 border-border/70 text-muted-foreground">
+              Sem base
             </Badge>
           )}
         </div>
       </div>
-      {turn.user_message ? (
-        <p className="text-sm">
-          <span className="text-muted-foreground">Cliente:</span> {turn.user_message}
-        </p>
-      ) : null}
-      {turn.reply ? (
-        <p className="mt-1 text-sm">
-          <span className="text-muted-foreground">IA:</span> {turn.reply}
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-muted-foreground italic">Sem resposta enviada ({turn.stop_reason ?? "—"}).</p>
-      )}
-      {writeTools.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
+
+      {/* Diálogo */}
+      <div className="space-y-3">
+        {turn.user_message && (
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted/65 text-muted-foreground border border-border/50 text-[10px] font-semibold">
+              U
+            </div>
+            <div className="rounded-2xl rounded-tl-none bg-muted/30 border border-border/50 px-3 py-2 text-xs text-foreground max-w-[85%] leading-relaxed">
+              {turn.user_message}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/15 text-[10px] font-semibold">
+            AI
+          </div>
+          {turn.reply ? (
+            <div className="rounded-2xl rounded-tl-none bg-primary/[0.02] border border-primary/15 px-3 py-2 text-xs text-foreground max-w-[85%] leading-relaxed">
+              {turn.reply}
+            </div>
+          ) : (
+            <div className="rounded-2xl rounded-tl-none bg-muted/20 px-3 py-2 text-xs text-muted-foreground italic border border-border/40">
+              Sem resposta enviada ({turn.stop_reason ?? "nulo"}).
+            </div>
+          )}
+        </div>
+      </div>
+
+      {writeTools.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5 items-center pl-8 border-t border-border/20 pt-2.5">
+          <span className="text-[10px] text-muted-foreground mr-1">Ferramentas chamadas:</span>
           {writeTools.map((t, i) => (
             <Badge
               key={`${turn.id}-${i}`}
               variant="outline"
-              className={cn("font-normal", t.is_error && "border-destructive text-destructive")}
+              className={cn("font-normal text-[9px] px-2 py-0 h-5", t.is_error ? "bg-red-500/10 text-destructive border-destructive/20" : "bg-muted text-muted-foreground")}
             >
               {t.name}
             </Badge>
           ))}
         </div>
-      ) : null}
-      {hasRetrieved ? (
-        <div className="mt-2">
+      )}
+
+      {/* Chunks consultados (Knowledge retrieved) */}
+      {hasRetrieved && (
+        <div className="mt-3 pl-8 border-t border-border/20 pt-2.5">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors focus:outline-none"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {expanded ? "Ocultar trechos usados" : "Ver trechos usados"}
+            {expanded ? "Ocultar trechos consultados" : `Ver ${turn.retrieved.length} trecho(s) consultado(s)`}
           </button>
-          {expanded ? (
-            <ol className="mt-2 space-y-1.5">
+          {expanded && (
+            <ol className="mt-2 space-y-2.5">
               {turn.retrieved.map((r, i) => (
                 <li
                   key={`${turn.id}-r-${i}`}
-                  className="rounded border border-border bg-muted/40 p-2 text-xs leading-relaxed text-foreground"
+                  className="relative rounded-xl border border-border/60 bg-muted/25 p-3 text-[11px] leading-relaxed text-foreground"
                 >
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] text-muted-foreground">trecho [{i + 1}]</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      relevância {Math.round((r.similarity ?? 0) * 100)}%
-                    </span>
+                  <div className="mb-2 flex items-center justify-between border-b border-border/30 pb-1.5">
+                    <span className="font-mono text-[9px] text-muted-foreground font-semibold">Fonte [{i + 1}]</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[9px] text-muted-foreground font-semibold">
+                        Relevância: {Math.round((r.similarity ?? 0) * 100)}%
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-md"
+                        onClick={() => copyText(r.content)}
+                        title="Copiar trecho"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="whitespace-pre-wrap break-words">{r.content}</p>
+                  <p className="whitespace-pre-wrap font-sans break-words pr-2">{r.content}</p>
                 </li>
               ))}
             </ol>
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
       <CritiqueSummary flags={turn.critique_flags ?? []} />
     </li>
   );
@@ -1144,27 +1874,27 @@ function CritiqueSummary({ flags }: { flags: AiTurnCritiqueFlag[] }) {
   const blocked = flags.filter((f) => f.blocked);
   if (blocked.length === 0) {
     return (
-      <div className="mt-2">
-        <Badge variant="outline" className="font-normal text-muted-foreground">
+      <div className="mt-2.5 pl-8">
+        <Badge variant="outline" className="font-normal text-[9px] border-border/50 text-muted-foreground bg-muted/20">
           auditado · sem ressalvas
         </Badge>
       </div>
     );
   }
   return (
-    <div className="mt-2 rounded border border-destructive/40 bg-destructive/5 p-2">
-      <div className="mb-1 flex items-center gap-1.5">
-        <Badge variant="outline" className="border-destructive font-normal text-destructive">
-          auditoria bloqueou {blocked.length} envio{blocked.length > 1 ? "s" : ""}
+    <div className="mt-2.5 ml-8 rounded-xl border border-destructive/20 bg-destructive/[0.02] p-3 text-xs">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <Badge variant="outline" className="border-destructive/30 bg-destructive/10 font-bold text-destructive text-[9px] h-5">
+          Auditoria Bloqueou {blocked.length} Envio{blocked.length > 1 ? "s" : ""}
         </Badge>
       </div>
-      <ul className="space-y-1 text-xs text-foreground">
+      <ul className="space-y-2 text-xs text-foreground">
         {blocked.map((f, i) => (
-          <li key={i}>
-            <p className="text-muted-foreground">Texto bloqueado:</p>
-            <p className="italic">"{f.text}"</p>
-            <p className="mt-0.5 text-muted-foreground">Motivos:</p>
-            <ul className="list-disc pl-4">
+          <li key={i} className="space-y-1">
+            <p className="text-[10px] font-semibold text-muted-foreground">Texto Bloqueado:</p>
+            <p className="italic bg-card border border-border/30 rounded-lg p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">"{f.text}"</p>
+            <p className="text-[10px] font-semibold text-muted-foreground mt-1">Motivos do bloqueio:</p>
+            <ul className="list-disc pl-4 text-[11px] space-y-0.5 leading-relaxed text-foreground">
               {f.issues.map((iss, j) => (
                 <li key={j}>{iss}</li>
               ))}
@@ -1178,8 +1908,11 @@ function CritiqueSummary({ flags }: { flags: AiTurnCritiqueFlag[] }) {
 
 function LoadingCard() {
   return (
-    <Card>
-      <CardContent className="p-6 text-sm text-muted-foreground">Carregando…</CardContent>
+    <Card className="border-border/80 shadow-sm">
+      <CardContent className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        Carregando dados da atividade...
+      </CardContent>
     </Card>
   );
 }

@@ -10,6 +10,7 @@ import {
   Pause,
   Play,
   ShoppingCart,
+  Tag,
   UserRound,
   Users,
 } from "lucide-react";
@@ -80,6 +81,7 @@ export type ChatHeaderActionsProps = {
   onOpenSnoozeDialog: () => void;
   onOpenAssignDialog: () => void;
   onOpenProfile: () => void;
+  onOpenTags: () => void;
   onOpenSaleFlow: () => void;
   onOpenFollowUp: () => void;
 };
@@ -109,6 +111,7 @@ export function ChatHeaderActions({
   onOpenSnoozeDialog,
   onOpenAssignDialog,
   onOpenProfile,
+  onOpenTags,
   onOpenSaleFlow,
   onOpenFollowUp,
 }: ChatHeaderActionsProps) {
@@ -369,6 +372,18 @@ export function ChatHeaderActions({
           aria-label="Transferir"
         >
           <ArrowRightLeft className="h-4 w-4" />
+        </button>
+      </IconTip>
+      <IconTip label="Etiquetar conversa">
+        <button
+          type="button"
+          onClick={onOpenTags}
+          disabled={!canEditInbox}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:opacity-45"
+          aria-label="Etiquetar conversa"
+          data-testid="inbox-open-tags"
+        >
+          <Tag className="h-4 w-4" />
         </button>
       </IconTip>
       <IconTip label="Notificações">

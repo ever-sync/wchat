@@ -98,6 +98,26 @@ export async function addTagToChat(chatId: string, tagId: string): Promise<void>
   if (error && !error.message.includes("duplicate")) throw new Error(error.message);
 }
 
+export async function addTagToChats(chatIds: string[], tagId: string): Promise<void> {
+  const uniqueChatIds = Array.from(new Set(chatIds.filter(Boolean)));
+  if (uniqueChatIds.length === 0) return;
+
+  const supabase = requireSupabase();
+  const { data: profile } = await supabase.auth.getUser();
+  const userId = profile.user?.id;
+  if (!userId) throw new Error("Não autenticado");
+
+  const { error } = await supabase.from("whatsapp_chat_tags").upsert(
+    uniqueChatIds.map((chatId) => ({
+      chat_id: chatId,
+      tag_id: tagId,
+      tagged_by: userId,
+    })),
+    { onConflict: "chat_id,tag_id", ignoreDuplicates: true },
+  );
+  if (error) throw new Error(error.message);
+}
+
 export async function removeTagFromChat(chatId: string, tagId: string): Promise<void> {
   const supabase = requireSupabase();
   const { error } = await supabase
@@ -251,6 +271,20 @@ export function useAddTagToChat(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, tagId }) => addTagToChat(chatId, tagId),
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useAddTagToChats(
+  options?: UseMutationOptions<void, Error, { chatIds: string[]; tagId: string }>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatIds, tagId }) => addTagToChats(chatIds, tagId),
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });

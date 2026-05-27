@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   inboxFiltersFromQuickFilter,
@@ -14,7 +14,7 @@ import type {
 export type UseInboxFiltersResult = {
   /** Estado bruto */
   search: string;
-  instanceId: string;
+  instanceIds: string[];
   listScope: InboxListScope;
   assigneeFilter: string;
   snoozedFilter: "active" | "snoozed";
@@ -23,12 +23,12 @@ export type UseInboxFiltersResult = {
 
   /** Setters */
   setSearch: (value: string) => void;
-  setInstanceId: (value: string) => void;
+  setInstanceIds: Dispatch<SetStateAction<string[]>>;
   setListScope: (value: InboxListScope) => void;
   setAssigneeFilter: (value: string) => void;
   setSnoozedFilter: (value: "active" | "snoozed") => void;
   setQuickFilter: (value: InboxQuickFilter | null) => void;
-  setSelectedTagIds: React.Dispatch<React.SetStateAction<string[]>>;
+  setSelectedTagIds: Dispatch<SetStateAction<string[]>>;
 
   /** Filtro composto para passar ao useInboxChats. */
   inboxChatsFilter: InboxChatFilters;
@@ -45,7 +45,7 @@ export function useInboxFilters(profileId: string | undefined): UseInboxFiltersR
 
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [instanceId, setInstanceId] = useState<string>("all");
+  const [instanceIds, setInstanceIds] = useState<string[]>([]);
   const [listScope, setListScope] = useState<InboxListScope>("open");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [snoozedFilter, setSnoozedFilter] = useState<"active" | "snoozed">("active");
@@ -67,7 +67,7 @@ export function useInboxFilters(profileId: string | undefined): UseInboxFiltersR
 
     return {
       search: debouncedSearch,
-      instanceId: instanceId === "all" ? undefined : instanceId,
+      instanceIds: instanceIds.length > 0 ? instanceIds : undefined,
       tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       ...inboxScopeFiltersForQuickFilter(quickFilter, listScope),
       ...quick,
@@ -81,7 +81,7 @@ export function useInboxFilters(profileId: string | undefined): UseInboxFiltersR
     };
   }, [
     debouncedSearch,
-    instanceId,
+    instanceIds,
     assigneeFilter,
     selectedTagIds,
     snoozedFilter,
@@ -92,14 +92,14 @@ export function useInboxFilters(profileId: string | undefined): UseInboxFiltersR
 
   return {
     search,
-    instanceId,
+    instanceIds,
     listScope,
     assigneeFilter,
     snoozedFilter,
     quickFilter,
     selectedTagIds,
     setSearch,
-    setInstanceId,
+    setInstanceIds,
     setListScope,
     setAssigneeFilter,
     setSnoozedFilter,

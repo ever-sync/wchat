@@ -43,3 +43,4 @@ blob-report/
 # Supabase CLI (metadados locais; nao versionar)
 supabase/.temp/
 scripts/migrate-to-new-supabase.env
+scripts/migrate-to-selfhosted-supabase.env

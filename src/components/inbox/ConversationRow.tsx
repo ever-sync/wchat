@@ -1,7 +1,8 @@
-import { memo } from "react";
+import { memo, type MouseEvent } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlarmClock, CalendarClock, Clock, Lock } from "lucide-react";
+import { AlarmClock, CalendarClock, Check, Clock, Lock } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { isChatSlaBreached, isChatSnoozed, slaMinutesRemaining } from "@/lib/inbox-chat-rules";
 import { mustAssumeUnassignedChatToView } from "@/lib/crm/negotiation-assignee";
 import { cn } from "@/lib/utils";
@@ -38,30 +39,31 @@ function formatConversationTime(value?: string | null) {
   return format(date, "dd/MM", { locale: ptBR });
 }
 
-const MAX_TAG_DOTS = 8;
+const MAX_VISIBLE_TAGS = 2;
 
-function ConversationTagDots({ tags }: { tags: InboxChat["tags"] }) {
+function ConversationTagBadges({ tags }: { tags: InboxChat["tags"] }) {
   const list = tags ?? [];
   if (list.length === 0) {
     return null;
   }
-  const visible = list.slice(0, MAX_TAG_DOTS);
+  const visible = list.slice(0, MAX_VISIBLE_TAGS);
   const overflow = list.length - visible.length;
   const label = list.map((t) => t.name).join(", ");
 
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-0.5"
+      className="mt-1 flex min-w-0 flex-wrap items-center gap-1"
       title={label}
       aria-label={`Etiquetas: ${label}`}
     >
       {visible.map((tag) => (
         <span
           key={tag.tagId}
-          className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/10"
-          style={{ backgroundColor: tag.color }}
-          aria-hidden
-        />
+          className="inline-flex max-w-[8rem] shrink-0 items-center truncate rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
+          style={{ backgroundColor: `${tag.color}24`, color: tag.color }}
+        >
+          {tag.name}
+        </span>
       ))}
       {overflow > 0 ? (
         <span className="text-[9px] font-medium leading-none text-muted-foreground">+{overflow}</span>
@@ -89,6 +91,10 @@ export const ConversationRow = memo(function ConversationRow({
   onPrefetch,
   viewerRole,
   followupStatus,
+  selected = false,
+  selectionMode = false,
+  onSelectionToggle,
+  onContextMenu,
 }: {
   chat: InboxChat;
   active: boolean;
@@ -99,6 +105,10 @@ export const ConversationRow = memo(function ConversationRow({
   viewerRole?: UserRole;
   /** Sinaliza follow-up no chat: 'overdue' (vermelho) ou 'soon' (amber). */
   followupStatus?: "overdue" | "soon" | null;
+  selected?: boolean;
+  selectionMode?: boolean;
+  onSelectionToggle?: (chatId: string) => void;
+  onContextMenu?: (chatId: string, event: MouseEvent) => void;
 }) {
   const subtitle =
     chat.customerName && chat.customerName.trim() !== "" && chat.customerName !== chat.displayName
@@ -119,17 +129,42 @@ export const ConversationRow = memo(function ConversationRow({
   const previewLocked = mustAssumeUnassignedChatToView(viewerRole, chat.assigneeId);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       data-testid={`inbox-chat-${chat.id}`}
       onClick={() => onSelect(chat.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(chat.id);
+        }
+      }}
+      onContextMenu={(event) => {
+        onContextMenu?.(chat.id, event);
+      }}
       onPointerEnter={onPrefetch ? () => onPrefetch(chat.id) : undefined}
       className={cn(
-        "group block w-full min-w-0 max-w-full overflow-hidden rounded-lg px-1.5 py-2 text-left transition-colors duration-150",
+        "group block w-full min-w-0 max-w-full cursor-pointer overflow-hidden rounded-lg px-1.5 py-2 text-left outline-none transition-colors duration-150",
         active ? "bg-wchat-100 ring-1 ring-primary/20" : "hover:bg-wchat-50",
+        selected && "bg-primary/10 ring-1 ring-primary/35",
       )}
     >
       <div className="flex min-w-0 max-w-full items-start gap-2">
+        {selectionMode ? (
+          <span
+            className="mt-2 shrink-0"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onSelectionToggle?.(chat.id)}
+              aria-label={`Selecionar conversa ${chat.displayName}`}
+            />
+          </span>
+        ) : null}
         <span className="shrink-0 rounded-full">
           <ConversationAvatar name={chat.displayName} avatarUrl={chat.avatarUrl} size="xs" />
         </span>
@@ -141,8 +176,13 @@ export const ConversationRow = memo(function ConversationRow({
                   {chat.displayName}
                 </p>
                 {chat.assigneeName ? <AssigneeTag name={chat.assigneeName} /> : null}
-                <ConversationTagDots tags={chat.tags} />
+                {selected ? (
+                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-3 w-3" />
+                  </span>
+                ) : null}
               </div>
+              <ConversationTagBadges tags={chat.tags} />
               {subtitle ? (
                 <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">{subtitle}</p>
               ) : null}
@@ -223,6 +263,6 @@ export const ConversationRow = memo(function ConversationRow({
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 });

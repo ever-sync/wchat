@@ -782,6 +782,7 @@ export interface InboxChat {
 export interface InboxChatFilters {
   search?: string;
   instanceId?: string;
+  instanceIds?: string[];
   unreadOnly?: boolean;
   status?: InboxChatStatus | "all";
   /** Subconjunto pela resolução operacional da conversa (ex.: apenas perdidas). */
