@@ -35,6 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
+import { CustomerMediaGallery } from "@/components/inbox/CustomerMediaGallery";
 import { NegotiationProductsEditor } from "@/components/crm/NegotiationProductsEditor";
 import { CallLogsPanel } from "@/components/crm/CallLogsPanel";
 import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustomFieldsFacts";
@@ -1153,6 +1154,9 @@ export function CustomerProfileSheet({
                   <TabsTrigger value="etiquetas" className={PROFILE_TAB_TRIGGER_CLASS}>
                     Etiquetas
                   </TabsTrigger>
+                  <TabsTrigger value="midia" className={PROFILE_TAB_TRIGGER_CLASS}>
+                    Mídia
+                  </TabsTrigger>
                   {showProdutosTab ? (
                     <TabsTrigger value="produtos" className={PROFILE_TAB_TRIGGER_CLASS}>
                       Produtos
@@ -1255,6 +1259,10 @@ export function CustomerProfileSheet({
                     </div>
                   </TabsContent>
                 ) : null}
+
+                <TabsContent value="midia" className="mt-0 focus-visible:outline-none">
+                  <CustomerMediaGallery messages={messages} />
+                </TabsContent>
 
                 {showArquivosTab ? (
                   <TabsContent value="arquivos" className="mt-0 focus-visible:outline-none">
