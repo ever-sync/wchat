@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, BookOpen, Bot, CheckCircle2, Circle, MessageSquare, Radio, Send, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Activity, BookOpen, Bot, CheckCircle2, ChevronDown, ChevronRight, Circle, MessageSquare, Radio, Send, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -915,25 +915,44 @@ function TurnsList() {
   );
 }
 
+function shortModelName(model: string | null): string {
+  if (!model) return "—";
+  // claude-haiku-4-5-20251001 → "Haiku 4.5"; claude-sonnet-4-6 → "Sonnet 4.6"
+  const m = model.toLowerCase();
+  if (m.includes("haiku")) return "Haiku 4.5";
+  if (m.includes("sonnet-4-7")) return "Sonnet 4.7";
+  if (m.includes("sonnet")) return "Sonnet 4.6";
+  if (m.includes("opus")) return "Opus";
+  if (m.startsWith("gpt-")) return model;
+  return model;
+}
+
 function TurnRow({ turn }: { turn: AiTurn }) {
+  const [expanded, setExpanded] = useState(false);
   const topSimilarity = turn.retrieved.length > 0
     ? Math.round(Math.max(...turn.retrieved.map((r) => r.similarity ?? 0)) * 100)
     : 0;
   const writeTools = (turn.tools ?? []).filter((t) => t.name && t.name !== "send_whatsapp_message");
+  const hasRetrieved = turn.retrieved.length > 0;
 
   return (
     <li className="rounded-md border border-border p-3">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">{new Date(turn.created_at).toLocaleString("pt-BR")}</span>
-        {turn.retrieved.length > 0 ? (
-          <Badge variant="secondary" className="font-normal">
-            base: {turn.retrieved.length} trecho(s) · top {topSimilarity}%
-          </Badge>
-        ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline" className="font-normal text-muted-foreground">
-            sem base
+            {shortModelName(turn.model)}
           </Badge>
-        )}
+          {hasRetrieved ? (
+            <Badge variant="secondary" className="font-normal">
+              base: {turn.retrieved.length} trecho(s) · top {topSimilarity}%
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="font-normal text-muted-foreground">
+              sem base
+            </Badge>
+          )}
+        </div>
       </div>
       {turn.user_message ? (
         <p className="text-sm">
@@ -958,6 +977,36 @@ function TurnRow({ turn }: { turn: AiTurn }) {
               {t.name}
             </Badge>
           ))}
+        </div>
+      ) : null}
+      {hasRetrieved ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {expanded ? "Ocultar trechos usados" : "Ver trechos usados"}
+          </button>
+          {expanded ? (
+            <ol className="mt-2 space-y-1.5">
+              {turn.retrieved.map((r, i) => (
+                <li
+                  key={`${turn.id}-r-${i}`}
+                  className="rounded border border-border bg-muted/40 p-2 text-xs leading-relaxed text-foreground"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] text-muted-foreground">trecho [{i + 1}]</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      relevância {Math.round((r.similarity ?? 0) * 100)}%
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap break-words">{r.content}</p>
+                </li>
+              ))}
+            </ol>
+          ) : null}
         </div>
       ) : null}
     </li>

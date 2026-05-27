@@ -261,6 +261,7 @@ export type AiTurnRetrieved = { content: string; similarity: number };
 export type AiTurn = {
   id: string;
   created_at: string;
+  model: string | null;
   user_message: string | null;
   reply: string | null;
   retrieved: AiTurnRetrieved[];
@@ -276,7 +277,7 @@ export async function fetchAiTurns(): Promise<AiTurn[]> {
   const tenantId = await getCurrentTenantId();
   const { data, error } = await supabase
     .from("ai_turns")
-    .select("id, created_at, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens")
+    .select("id, created_at, model, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(20);
