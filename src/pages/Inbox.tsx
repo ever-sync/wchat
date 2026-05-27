@@ -1139,6 +1139,7 @@ export default function Inbox() {
                 onRetryMessage={composer.handleRetryMessage}
                 onDiscardMessage={composer.handleDiscardMessage}
                 onReplyMessage={composer.setReplyingTo}
+                activeChatId={activeChat.id}
                 retryingMessageId={composer.retryingMessageId}
                 jumpToLatestVisible={jumpToLatestVisible}
                 onJumpToLatest={forceScrollToLatestMessage}

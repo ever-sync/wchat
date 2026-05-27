@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ArrowDown, ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
+import { ForwardMessageDialog } from "./ForwardMessageDialog";
 import {
   bubbleGroupSpacingClass,
   flattenMessageGroups,
@@ -46,6 +47,8 @@ export type MessageThreadProps = {
   onDiscardMessage?: (message: WhatsappMessage) => void;
   /** Disparado pelo botão de hover "Responder" de cada bolha. */
   onReplyMessage?: (message: WhatsappMessage) => void;
+  /** ID da conversa ativa — para excluir ela da lista de destinos de encaminhamento. */
+  activeChatId?: string | null;
   retryingMessageId?: string | null;
   jumpToLatestVisible?: boolean;
   onJumpToLatest?: () => void;
@@ -93,6 +96,7 @@ export function MessageThread({
   onRetryMessage,
   onDiscardMessage,
   onReplyMessage,
+  activeChatId,
   retryingMessageId = null,
   jumpToLatestVisible = false,
   onJumpToLatest,
@@ -132,6 +136,9 @@ export function MessageThread({
     getItemKey: (index) => flat[index]?.key ?? index,
     overscan: 8,
   });
+
+  // --- Encaminhar mensagem ---
+  const [forwardMessage, setForwardMessage] = useState<WhatsappMessage | null>(null);
 
   // --- Busca dentro da thread (Cmd/Ctrl+F) ---
   const [searchOpen, setSearchOpen] = useState(false);
@@ -388,6 +395,7 @@ export function MessageThread({
                     onRetry={onRetryMessage}
                     onDiscard={onDiscardMessage}
                     onReply={onReplyMessage}
+                    onForward={setForwardMessage}
                     retryPending={retryingMessageId === item.message.id}
                     highlightQuery={searchOpen ? searchQuery : undefined}
                   />
@@ -411,6 +419,13 @@ export function MessageThread({
           </button>
         </div>
       ) : null}
+
+      <ForwardMessageDialog
+        open={forwardMessage !== null}
+        onOpenChange={(v) => { if (!v) setForwardMessage(null); }}
+        message={forwardMessage}
+        currentChatId={activeChatId}
+      />
     </div>
   );
 }

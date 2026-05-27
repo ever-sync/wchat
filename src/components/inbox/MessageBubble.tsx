@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertCircle, Check, CheckCheck, Clock3, FileText, Reply, RotateCcw, Trash2 } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock3, FileText, Reply, RotateCcw, Share2, Trash2 } from "lucide-react";
 import { memo, useState } from "react";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import type { BubbleGroupPosition } from "@/lib/inboxMessageGroups";
@@ -168,6 +168,8 @@ type MessageBubbleProps = {
   onDiscard?: (message: WhatsappMessage) => void;
   /** Clique no botão "Responder" da bolha. */
   onReply?: (message: WhatsappMessage) => void;
+  /** Clique no botão "Encaminhar" da bolha. */
+  onForward?: (message: WhatsappMessage) => void;
   retryPending?: boolean;
   /** Quando setado, ocorrências dessa query no body são envolvidas em &lt;mark&gt;. */
   highlightQuery?: string;
@@ -295,6 +297,7 @@ function MessageBubbleImpl({
   onRetry,
   onDiscard,
   onReply,
+  onForward,
   retryPending = false,
   highlightQuery,
 }: MessageBubbleProps) {
@@ -355,6 +358,24 @@ function MessageBubbleImpl({
                 aria-label="Responder esta mensagem"
               >
                 <Reply className="h-3 w-3" />
+              </button>
+            ) : null}
+
+            {onForward ? (
+              <button
+                type="button"
+                onClick={() => onForward(message)}
+                className={cn(
+                  "absolute -top-2 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full",
+                  "border border-border bg-card text-muted-foreground shadow-sm",
+                  "opacity-0 transition-opacity hover:bg-wchat-50 hover:text-foreground",
+                  "group-hover:opacity-100 focus-visible:opacity-100",
+                  isOutbound ? "-left-10" : "-right-10",
+                )}
+                title="Encaminhar"
+                aria-label="Encaminhar esta mensagem"
+              >
+                <Share2 className="h-3 w-3" />
               </button>
             ) : null}
 
@@ -480,6 +501,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps) {
   if (prev.onRetry !== next.onRetry) return false;
   if (prev.onDiscard !== next.onDiscard) return false;
   if (prev.onReply !== next.onReply) return false;
+  if (prev.onForward !== next.onForward) return false;
   if (prev.retryPending !== next.retryPending) return false;
   if ((prev.highlightQuery ?? "") !== (next.highlightQuery ?? "")) return false;
   // Identidade do quoted basta — o conteúdo dele não muda em runtime; chega novo objeto = re-render.
