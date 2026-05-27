@@ -84,6 +84,7 @@ import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { useInboxComposer } from "@/hooks/useInboxComposer";
 import { useFollowupsForChat } from "@/hooks/useFollowupsForChat";
+import { useOverdueFollowupsForTenant } from "@/hooks/useOverdueFollowupsForTenant";
 import { useRunPlayground } from "@/lib/api/ai-agent";
 import { buildCopilotPromptFromThread } from "@/lib/inboxAiCopilot";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
@@ -256,17 +257,32 @@ export default function Inbox() {
     ).length;
   }, [isManagerInbox, chats]);
 
+  // Quando "Lembretes vencidos" está ativo, um único fetch traz as tarefas
+  // abertas do tenant pra cruzar client-side com a lista lateral.
+  const overdueFollowupsIndex = useOverdueFollowupsForTenant({
+    enabled: quickFilter === "overdue_followup",
+  });
+
   /**
-   * Lista efetivamente exibida na barra lateral. O filtro "Aguardando cliente"
-   * é client-side (heurística em isChatWaitingForCustomer) — server traz a
-   * fila do operador inteira via assigneeId="mine".
+   * Lista efetivamente exibida na barra lateral. Os filtros "Aguardando cliente"
+   * e "Lembretes vencidos" são client-side — server traz a fila do operador
+   * inteira via assigneeId="mine" e a redução acontece aqui.
    */
   const displayedChats = useMemo(() => {
     if (quickFilter === "waiting_customer") {
       return chats.filter((c) => isChatWaitingForCustomer(c));
     }
+    if (quickFilter === "overdue_followup") {
+      const { customerIds, negotiationIds } = overdueFollowupsIndex;
+      if (customerIds.size === 0 && negotiationIds.size === 0) return [];
+      return chats.filter(
+        (c) =>
+          (c.customerId && customerIds.has(c.customerId)) ||
+          (c.primaryNegotiationId && negotiationIds.has(c.primaryNegotiationId)),
+      );
+    }
     return chats;
-  }, [chats, quickFilter]);
+  }, [chats, quickFilter, overdueFollowupsIndex]);
   // Badge "(N) Distribui Bot" no titulo da aba enquanto em background.
   const totalUnread = useMemo(
     () => chats.reduce((acc, chat) => acc + (chat.unreadCount ?? 0), 0),
@@ -740,6 +756,11 @@ export default function Inbox() {
             } else if (value === "waiting_customer") {
               // Mostra a fila do operador (server traz assigneeId="mine") e
               // o filtro client-side `isChatWaitingForCustomer` afina depois.
+              setAssigneeFilter("mine");
+              setSnoozedFilter("active");
+            } else if (value === "overdue_followup") {
+              // Mesma estratégia: server traz "minhas" + cruzamento com tarefas
+              // vencidas é client-side.
               setAssigneeFilter("mine");
               setSnoozedFilter("active");
             } else {

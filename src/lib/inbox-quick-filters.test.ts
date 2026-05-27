@@ -37,6 +37,16 @@ describe("inboxFiltersFromQuickFilter", () => {
       unreadOnly: false,
     });
   });
+
+  it("Lembretes vencidos também usa 'mine' (cruzamento com tarefas é client-side)", () => {
+    expect(inboxFiltersFromQuickFilter("overdue_followup", "u1")).toEqual({
+      assigneeId: "mine",
+      currentUserId: "u1",
+      hideSnoozed: true,
+      snoozedOnly: false,
+      unreadOnly: false,
+    });
+  });
 });
 
 describe("inboxScopeFiltersForQuickFilter", () => {
@@ -62,5 +72,8 @@ describe("inboxQuickFilterLabel", () => {
   });
   it("traduz waiting_customer", () => {
     expect(inboxQuickFilterLabel("waiting_customer")).toBe("Aguardando cliente");
+  });
+  it("traduz overdue_followup", () => {
+    expect(inboxQuickFilterLabel("overdue_followup")).toBe("Lembretes vencidos");
   });
 });

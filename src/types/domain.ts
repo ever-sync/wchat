@@ -76,7 +76,8 @@ export type InboxQuickFilter =
   | "unread"
   | "unassigned"
   | "hidden"
-  | "waiting_customer";
+  | "waiting_customer"
+  | "overdue_followup";
 export type ChatAiMode = "off" | "qualifying" | "full" | "handoff";
 export type MessageActorType = "human" | "ai" | "system";
 export type MessageDirection = "inbound" | "outbound";
