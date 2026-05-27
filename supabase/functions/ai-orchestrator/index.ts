@@ -17,6 +17,7 @@ import { normalizeChatAiMode } from "../_shared/ai-business-rules.ts";
 import { executeTool, isChatStillEligible, type ToolContext, toolsForMode } from "../_shared/ai-tools.ts";
 import { embedQuery, rerankDocuments } from "../_shared/embeddings.ts";
 import { redactPii } from "../_shared/pii-redaction.ts";
+import { assessGrounding, type CritiqueResult } from "../_shared/ai-critique.ts";
 import { createChatCompletion, type OpenAiMessage, type OpenAiTool } from "../_shared/openai.ts";
 import { transcribeAudio } from "../_shared/transcribe.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
@@ -283,10 +284,11 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     : config.model;
   const effectiveConfig = { ...config, model: effectiveModel };
 
+  const knowledgeChunks = retrieved.map((r) => r.content);
   // Roda o loop de tool-use no provedor de LLM configurado (Anthropic ou OpenAI).
   const result = effectiveConfig.llmProvider === "openai"
     ? await runOpenAiLoop(ctx, effectiveConfig, system, conversation, tools)
-    : await runAnthropicLoop(ctx, effectiveConfig, system, conversation, tools);
+    : await runAnthropicLoop(ctx, effectiveConfig, system, conversation, tools, knowledgeChunks);
 
   await admin.from("ai_usage").insert({
     tenant_id: tenantId,
@@ -314,17 +316,38 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     cache_read_tokens: result.usage.cacheRead,
     cache_creation_tokens: result.usage.cacheCreation,
     latency_ms: Date.now() - startedAt,
+    critique_flags: result.critiqueFlags,
   });
 }
 
 type LoopUsage = { input: number; output: number; cacheRead: number; cacheCreation: number };
+type CritiqueFlag = {
+  blocked: boolean;
+  text: string;
+  issues: string[];
+  error?: string;
+};
 type LoopResult = {
   usage: LoopUsage;
   toolLog: Array<Record<string, unknown>>;
   replies: string[];
   stopReason: string | null;
   iterations: number;
+  critiqueFlags: CritiqueFlag[];
 };
+
+// Self-critique só roda quando há contexto de RAG e a resposta é não-trivial
+// (textos curtos como "ok" ou perguntas vazias não têm afirmação factual).
+const CRITIQUE_MIN_CHARS = 50;
+
+function toCritiqueFlag(text: string, verdict: CritiqueResult): CritiqueFlag {
+  return {
+    blocked: false,
+    text,
+    issues: verdict.issues,
+    ...(verdict.error ? { error: verdict.error } : {}),
+  };
+}
 
 function recordTool(
   result: LoopResult,
@@ -346,6 +369,8 @@ async function runAnthropicLoop(
   system: AnthropicSystemBlock[],
   conversation: ConvMessage[],
   tools: AnthropicTool[],
+  /** Trechos da base usados no system; vazio = sem critique (nada pra ancorar). */
+  knowledgeChunks: string[] = [],
 ): Promise<LoopResult> {
   const result: LoopResult = {
     usage: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
@@ -353,6 +378,7 @@ async function runAnthropicLoop(
     replies: [],
     stopReason: null,
     iterations: 0,
+    critiqueFlags: [],
   };
   let messages: AnthropicMessage[] = conversation.map(toAnthropicMessage);
   let finalText = "";
@@ -384,8 +410,34 @@ async function runAnthropicLoop(
     const toolResults: AnthropicContentBlock[] = [];
     let aborted = false;
     for (const block of response.content.filter((b) => b.type === "tool_use")) {
-      const outcome = await executeTool(ctx, String(block.name), block.input);
-      recordTool(result, String(block.name), block.input, outcome);
+      const name = String(block.name);
+      const input = block.input;
+
+      // Self-critique antes de enviar: se o turno usou RAG, valida que a
+      // resposta proposta não inventa preço/prazo/política fora dos chunks.
+      // Se reprovar, devolve erro pro LLM ao invés de executar — ele tenta
+      // de novo na próxima iteração (mais conservador ou via handoff).
+      if (name === "send_whatsapp_message" && knowledgeChunks.length > 0) {
+        const text = String((input?.text as string | undefined) ?? "").trim();
+        if (text.length >= CRITIQUE_MIN_CHARS) {
+          const verdict = await assessGrounding(text, knowledgeChunks);
+          if (!verdict.grounded && verdict.issues.length > 0) {
+            const blockedMsg =
+              `Sua resposta foi bloqueada pela auditoria — contém afirmação(ões) não sustentada(s) pela base: ` +
+              `${verdict.issues.join("; ")}. ` +
+              `Reformule sem esses pontos ou use a ferramenta handoff para a equipe humana confirmar.`;
+            result.critiqueFlags.push({ blocked: true, text, issues: verdict.issues });
+            result.toolLog.push({ name, input: input ?? {}, result: blockedMsg, is_error: true, critique_blocked: true });
+            toolResults.push({ type: "tool_result", tool_use_id: block.id, content: blockedMsg, is_error: true });
+            continue;
+          }
+          // Loga aprovados também (auditoria + análise de falso negativo).
+          result.critiqueFlags.push(toCritiqueFlag(text, verdict));
+        }
+      }
+
+      const outcome = await executeTool(ctx, name, input);
+      recordTool(result, name, input, outcome);
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: outcome.content, is_error: outcome.isError });
       if (outcome.aborted) aborted = true;
     }
@@ -420,6 +472,7 @@ async function runOpenAiLoop(
     replies: [],
     stopReason: null,
     iterations: 0,
+    critiqueFlags: [],
   };
 
   const systemText = system.map((b) => b.text).join("\n\n");

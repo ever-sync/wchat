@@ -18,6 +18,7 @@ import {
   type AiError,
   type AiProvider,
   type AiTurn,
+  type AiTurnCritiqueFlag,
   type LlmProvider,
   type PlaygroundMessage,
   type TenantAiConfig,
@@ -1009,7 +1010,45 @@ function TurnRow({ turn }: { turn: AiTurn }) {
           ) : null}
         </div>
       ) : null}
+      <CritiqueSummary flags={turn.critique_flags ?? []} />
     </li>
+  );
+}
+
+function CritiqueSummary({ flags }: { flags: AiTurnCritiqueFlag[] }) {
+  if (flags.length === 0) return null;
+  const blocked = flags.filter((f) => f.blocked);
+  if (blocked.length === 0) {
+    return (
+      <div className="mt-2">
+        <Badge variant="outline" className="font-normal text-muted-foreground">
+          auditado · sem ressalvas
+        </Badge>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 rounded border border-destructive/40 bg-destructive/5 p-2">
+      <div className="mb-1 flex items-center gap-1.5">
+        <Badge variant="outline" className="border-destructive font-normal text-destructive">
+          auditoria bloqueou {blocked.length} envio{blocked.length > 1 ? "s" : ""}
+        </Badge>
+      </div>
+      <ul className="space-y-1 text-xs text-foreground">
+        {blocked.map((f, i) => (
+          <li key={i}>
+            <p className="text-muted-foreground">Texto bloqueado:</p>
+            <p className="italic">"{f.text}"</p>
+            <p className="mt-0.5 text-muted-foreground">Motivos:</p>
+            <ul className="list-disc pl-4">
+              {f.issues.map((iss, j) => (
+                <li key={j}>{iss}</li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
