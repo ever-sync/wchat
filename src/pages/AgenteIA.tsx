@@ -487,6 +487,24 @@ function ConfiguracaoTab() {
           </label>
         </div>
 
+        <div className="space-y-2 border-t border-border pt-4">
+          <label className="flex items-center justify-between gap-3">
+            <div>
+              <span className="text-sm font-medium text-foreground">Raciocínio adaptativo (extended thinking)</span>
+              <p className="text-xs text-muted-foreground">
+                Em perguntas complexas (várias fontes na base, mensagem longa, palavras como
+                “compare”, “diferença”, “por que”) a IA pensa antes de responder — melhora
+                muito a qualidade ao custo de +2-5s de latência e tokens extras. Só Sonnet/Opus
+                suportam; Haiku ignora.
+              </p>
+            </div>
+            <Switch
+              checked={form.enableThinking}
+              onCheckedChange={(v) => set({ enableThinking: v })}
+            />
+          </label>
+        </div>
+
         <div className="flex justify-end">
           <Button onClick={() => upsert.mutate(form)} disabled={upsert.isPending}>
             {upsert.isPending ? "Salvando…" : "Salvar configuração"}
@@ -1028,6 +1046,15 @@ function TurnRow({ turn }: { turn: AiTurn }) {
           <Badge variant="outline" className="font-normal text-muted-foreground">
             {shortModelName(turn.model)}
           </Badge>
+          {turn.thinking_budget && turn.thinking_budget > 0 ? (
+            <Badge
+              variant="outline"
+              className="border-violet-500/40 font-normal text-violet-700 dark:text-violet-300"
+              title={`Extended thinking — budget ${turn.thinking_budget} tokens`}
+            >
+              thinking
+            </Badge>
+          ) : null}
           {turn.outcome ? (
             <Badge
               variant="outline"

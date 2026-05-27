@@ -27,6 +27,7 @@ export type TenantAiConfig = {
   disclosureEnabled: boolean;
   disclosureMessage: string;
   enableModelRouting: boolean;
+  enableThinking: boolean;
 };
 
 export const DEFAULT_AI_CONFIG: TenantAiConfig = {
@@ -40,6 +41,7 @@ export const DEFAULT_AI_CONFIG: TenantAiConfig = {
   disclosureEnabled: true,
   disclosureMessage: "",
   enableModelRouting: true,
+  enableThinking: true,
 };
 
 const CONFIG_KEY = ["tenant-ai-config"] as const;
@@ -55,7 +57,7 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
   const { data, error } = await supabase
     .from("tenant_ai_config")
     .select(
-      "provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing",
+      "provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing, enable_thinking",
     )
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -72,6 +74,7 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
     disclosureEnabled: data.ai_disclosure_enabled ?? true,
     disclosureMessage: data.ai_disclosure_message ?? "",
     enableModelRouting: data.enable_model_routing ?? true,
+    enableThinking: data.enable_thinking ?? true,
   };
 }
 
@@ -92,6 +95,7 @@ export async function upsertTenantAiConfig(input: TenantAiConfig): Promise<void>
       ai_disclosure_enabled: input.disclosureEnabled,
       ai_disclosure_message: input.disclosureMessage.trim() || null,
       enable_model_routing: input.enableModelRouting,
+      enable_thinking: input.enableThinking,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id" },
@@ -358,6 +362,7 @@ export type AiTurn = {
   output_tokens: number;
   critique_flags: AiTurnCritiqueFlag[];
   outcome: AiTurnOutcome | null;
+  thinking_budget: number | null;
 };
 
 export async function fetchAiTurns(): Promise<AiTurn[]> {
@@ -366,7 +371,7 @@ export async function fetchAiTurns(): Promise<AiTurn[]> {
   const tenantId = await getCurrentTenantId();
   const { data, error } = await supabase
     .from("ai_turns")
-    .select("id, created_at, model, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens, critique_flags, outcome")
+    .select("id, created_at, model, user_message, reply, retrieved, tools, stop_reason, input_tokens, output_tokens, critique_flags, outcome, thinking_budget")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(20);

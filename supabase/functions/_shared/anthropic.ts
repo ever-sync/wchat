@@ -59,12 +59,19 @@ export type AnthropicResponse = {
   usage: AnthropicUsage;
 };
 
+export type ThinkingConfig =
+  | { type: "disabled" }
+  | { type: "enabled"; budget_tokens: number };
+
 export type CreateMessageInput = {
   model: string;
   maxTokens: number;
   system: AnthropicSystemBlock[];
   tools: AnthropicTool[];
   messages: AnthropicMessage[];
+  /** Extended thinking (Sonnet/Opus). Default disabled. budget_tokens limita o
+   * raciocínio antes da resposta. Cobra como output. */
+  thinking?: ThinkingConfig;
 };
 
 /** Uma chamada POST /v1/messages. Lança em status != 2xx. */
@@ -85,8 +92,9 @@ export async function createMessage(input: CreateMessageInput): Promise<Anthropi
     body: JSON.stringify({
       model: input.model,
       max_tokens: input.maxTokens,
-      // Resposta de chat: rápido e barato. (Adaptive thinking pode entrar numa fase futura.)
-      thinking: { type: "disabled" },
+      // Adaptive thinking: o orchestrator decide caso a caso. Default disabled
+      // pra manter latência baixa em respostas triviais.
+      thinking: input.thinking ?? { type: "disabled" },
       system: input.system,
       tools: input.tools,
       messages: input.messages,

@@ -70,7 +70,46 @@ type TenantAiConfig = {
   disclosureEnabled: boolean;
   disclosureMessage: string | null;
   enableModelRouting: boolean;
+  enableThinking: boolean;
 };
+
+// Adaptive thinking: gasta ~2-5s extras + tokens de saída, mas melhora muito
+// turnos complexos (comparações, multi-step, perguntas sobre vários trechos).
+const THINKING_BUDGET = 1024;
+const THINKING_LONG_USER_CHARS = 200;
+const THINKING_MIN_KNOWLEDGE = 3;
+const THINKING_KEYWORDS = [
+  "compare", "comparar", "diferença", "diferenca",
+  "por que", "porque",
+  "como funciona", "como faço", "como faco",
+  "qual a melhor", "qual o melhor",
+  "explica", "explique", "explicar",
+  "vantagens", "desvantagens",
+];
+
+/** Haiku não suporta extended thinking — sempre desativado pra ele. */
+function modelSupportsThinking(model: string): boolean {
+  const m = model.toLowerCase();
+  if (m.includes("haiku")) return false;
+  return m.includes("sonnet") || m.includes("opus");
+}
+
+/** Decide o budget de thinking pra este turno. 0 = desligado. */
+function pickThinkingBudget(
+  config: TenantAiConfig,
+  model: string,
+  signals: { lastUserChars: number; lastUserText: string; knowledgeCount: number },
+): number {
+  if (!config.enableThinking) return 0;
+  if (!modelSupportsThinking(model)) return 0;
+  const userLower = signals.lastUserText.toLowerCase();
+  const hasReasoningKeyword = THINKING_KEYWORDS.some((kw) => userLower.includes(kw));
+  const needs =
+    signals.knowledgeCount >= THINKING_MIN_KNOWLEDGE ||
+    signals.lastUserChars >= THINKING_LONG_USER_CHARS ||
+    hasReasoningKeyword;
+  return needs ? THINKING_BUDGET : 0;
+}
 
 // Modelo "barato" pra turnos triviais — Haiku 4.5 vs Sonnet 4.6 são ~5× mais
 // baratos em input e ~6× em output, mantendo qualidade alta para ack/cumprimento.
@@ -305,10 +344,18 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   const effectiveConfig = { ...config, model: effectiveModel };
 
   const knowledgeChunks = retrieved.map((r) => r.content);
+  // Adaptive thinking: liga extended thinking só em turnos complexos (RAG com
+  // vários trechos, mensagem longa, palavras-chave de raciocínio). Haiku
+  // ignora — não suporta.
+  const thinkingBudget = pickThinkingBudget(effectiveConfig, effectiveModel, {
+    lastUserChars: userMessage.length,
+    lastUserText: userMessage,
+    knowledgeCount: retrieved.length,
+  });
   // Roda o loop de tool-use no provedor de LLM configurado (Anthropic ou OpenAI).
   const result = effectiveConfig.llmProvider === "openai"
     ? await runOpenAiLoop(ctx, effectiveConfig, system, conversation, tools)
-    : await runAnthropicLoop(ctx, effectiveConfig, system, conversation, tools, knowledgeChunks);
+    : await runAnthropicLoop(ctx, effectiveConfig, system, conversation, tools, knowledgeChunks, thinkingBudget);
 
   await admin.from("ai_usage").insert({
     tenant_id: tenantId,
@@ -338,6 +385,7 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     latency_ms: Date.now() - startedAt,
     critique_flags: result.critiqueFlags,
     outcome: classifyOutcome(result),
+    thinking_budget: thinkingBudget || null,
   });
 
   // Webhook out: turno concluído (delivered/blocked/etc.). Integrações usam
@@ -468,6 +516,8 @@ async function runAnthropicLoop(
   tools: AnthropicTool[],
   /** Trechos da base usados no system; vazio = sem critique (nada pra ancorar). */
   knowledgeChunks: string[] = [],
+  /** Budget de extended thinking; 0 = desligado (default). */
+  thinkingBudget = 0,
 ): Promise<LoopResult> {
   const result: LoopResult = {
     usage: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
@@ -492,6 +542,9 @@ async function runAnthropicLoop(
       system,
       tools,
       messages: withMessagesCacheBreakpoint(messages),
+      thinking: thinkingBudget > 0
+        ? { type: "enabled", budget_tokens: thinkingBudget }
+        : { type: "disabled" },
     });
     result.usage.input += response.usage.input_tokens ?? 0;
     result.usage.output += response.usage.output_tokens ?? 0;
@@ -750,7 +803,7 @@ async function loadCustomFieldNames(admin: Admin, tenantId: string): Promise<str
 async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<TenantAiConfig> {
   const { data } = await admin
     .from("tenant_ai_config")
-    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing")
+    .select("llm_provider, model, system_prompt, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing, enable_thinking")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   return {
@@ -762,6 +815,7 @@ async function getTenantAiConfig(admin: Admin, tenantId: string): Promise<Tenant
     disclosureEnabled: data?.ai_disclosure_enabled ?? true,
     disclosureMessage: data?.ai_disclosure_message ?? null,
     enableModelRouting: data?.enable_model_routing ?? true,
+    enableThinking: data?.enable_thinking ?? true,
   };
 }
 
