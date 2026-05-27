@@ -9,6 +9,7 @@ import {
   Reply,
   Send,
   Smile,
+  Sparkles,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,12 @@ export type MessageInputProps = {
   activeChatName?: string;
   /** Cancela o reply, fechando a barra. */
   onCancelReply?: () => void;
+  /** Aciona a IA copilot para sugerir uma resposta. Omitir esconde o botão. */
+  onSuggestReply?: () => void;
+  /** Indica que uma sugestão está sendo gerada (mostra spinner). */
+  isSuggestingReply?: boolean;
+  /** Desabilita o botão (sem thread, composer com texto, sem permissão, etc.). */
+  suggestReplyDisabled?: boolean;
 };
 
 export function MessageInput({
@@ -118,6 +125,9 @@ export function MessageInput({
   replyingTo = null,
   activeChatName,
   onCancelReply,
+  onSuggestReply,
+  isSuggestingReply = false,
+  suggestReplyDisabled = false,
 }: MessageInputProps) {
   const { openCalculadora } = useCalculadora();
   const previewKind = resolveComposerAttachmentPreview(
@@ -382,6 +392,32 @@ export function MessageInput({
           >
             <Smile className="h-4 w-4" />
           </button>
+          {onSuggestReply ? (
+            <button
+              type="button"
+              onClick={onSuggestReply}
+              disabled={composerActionsDisabled || suggestReplyDisabled || isSuggestingReply}
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+                isSuggestingReply && "bg-wchat-100 text-primary",
+              )}
+              title={
+                isSuggestingReply
+                  ? "Gerando sugestão da IA…"
+                  : suggestReplyDisabled
+                    ? "Limpe o composer pra usar a sugestão da IA"
+                    : "Sugerir resposta com IA"
+              }
+              aria-label="Sugerir resposta com IA"
+              data-testid="composer-suggest-reply"
+            >
+              {isSuggestingReply ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+            </button>
+          ) : null}
         </div>
 
         {/* textarea nativo evita border/min-height/ring herdados do shadcn (caixa dentro da pilula) */}

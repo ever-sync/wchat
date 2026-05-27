@@ -81,6 +81,8 @@ import { isChatWaitingForCustomer } from "@/lib/inbox-chat-rules";
 import { useInboxFilters } from "@/hooks/useInboxFilters";
 import { useInboxClaimActions } from "@/hooks/useInboxClaimActions";
 import { useInboxComposer } from "@/hooks/useInboxComposer";
+import { useRunPlayground } from "@/lib/api/ai-agent";
+import { buildCopilotPromptFromThread } from "@/lib/inboxAiCopilot";
 import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 
 function formatMoney(value: number) {
@@ -467,6 +469,40 @@ export default function Inbox() {
     inboxLeadLocked,
     hasLinkedNegotiation: Boolean(linkedNegotiation),
   });
+
+  const suggestReplyMutation = useRunPlayground({
+    onSuccess: (data) => {
+      const text = data.reply?.trim();
+      if (!text) {
+        toast({
+          title: "IA não retornou sugestão",
+          description: "Tente novamente em alguns segundos.",
+          variant: "destructive",
+        });
+        return;
+      }
+      composer.setBodyText(text);
+      // Foca pra o vendedor poder editar imediatamente.
+      requestAnimationFrame(() => composer.bodyTextareaRef.current?.focus());
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Tente novamente.";
+      toast({ title: "Falha ao gerar sugestão", description: msg, variant: "destructive" });
+    },
+  });
+
+  function handleSuggestReply() {
+    if (!activeChat) return;
+    const prompt = buildCopilotPromptFromThread(messages);
+    if (prompt.length === 0) {
+      toast({
+        title: "Sem contexto para sugerir",
+        description: "Aguarde alguma mensagem do cliente antes de pedir sugestão.",
+      });
+      return;
+    }
+    suggestReplyMutation.mutate(prompt);
+  }
   const canMarkSaleFromChat =
     Boolean(activeChat) &&
     Boolean(linkedNegotiation) &&
@@ -1048,6 +1084,9 @@ export default function Inbox() {
             replyingTo={composer.replyingTo}
             activeChatName={activeChat?.displayName}
             onCancelReply={() => composer.setReplyingTo(null)}
+            onSuggestReply={handleSuggestReply}
+            isSuggestingReply={suggestReplyMutation.isPending}
+            suggestReplyDisabled={composer.bodyText.trim().length > 0 || messages.length === 0}
           />
             </>
           )}
