@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
 import { invokeAuthedFunction } from "@/lib/api/functions";
+import { getCurrentTenantId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type { CallLog } from "@/types/domain";
 
@@ -135,14 +136,37 @@ export function useCallLogsRealtime(scope: CallLogScope) {
   useEffect(() => {
     if (!isSupabaseConfigured || !target) return;
     const supabase = requireSupabase();
-    const channel = supabase
-      .channel(`call-logs:${key}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "call_logs" }, () => {
-        void queryClient.invalidateQueries({ queryKey: ["call-logs"] });
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    void getCurrentTenantId()
+      .then((tenantId) => {
+        if (cancelled) return;
+        channel = supabase
+          .channel(`call-logs:${tenantId}:${key}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "call_logs",
+              filter: `tenant_id=eq.${tenantId}`,
+            },
+            () => {
+              void queryClient.invalidateQueries({ queryKey: ["call-logs"] });
+            },
+          )
+          .subscribe();
       })
-      .subscribe();
+      .catch(() => {
+        // Sem tenant/sessão: ignora.
+      });
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [key, target, queryClient]);
 }

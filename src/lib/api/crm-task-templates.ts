@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
+import { getCurrentTenantId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type { CrmTaskTemplate } from "@/types/domain";
 
@@ -170,18 +171,35 @@ export function useCrmTaskTemplatesRealtime() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const supabase = requireSupabase();
-    const channel = supabase
-      .channel("crm-task-templates")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "crm_task_templates" },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: crmTaskTemplatesQueryKey });
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    void getCurrentTenantId()
+      .then((tenantId) => {
+        if (cancelled) return;
+        channel = supabase
+          .channel(`crm-task-templates:${tenantId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "crm_task_templates",
+              filter: `tenant_id=eq.${tenantId}`,
+            },
+            () => {
+              void queryClient.invalidateQueries({ queryKey: crmTaskTemplatesQueryKey });
+            },
+          )
+          .subscribe();
+      })
+      .catch(() => undefined);
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [queryClient]);
 }
