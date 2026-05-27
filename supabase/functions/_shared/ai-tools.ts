@@ -27,6 +27,7 @@ export type ToolName =
   | "remove_tag"
   | "set_custom_field"
   | "create_task"
+  | "remember_customer_fact"
   | "handoff";
 
 const NUMERIC_FIELD_KINDS = new Set(["numero", "inteiro", "moeda", "porcentagem"]);
@@ -115,6 +116,23 @@ const TOOLS: Record<ToolName, AnthropicTool> = {
       additionalProperties: false,
     },
   },
+  remember_customer_fact: {
+    name: "remember_customer_fact",
+    description:
+      "Salva um fato durável sobre o cliente para personalizar conversas futuras. Use APENAS para preferências/contextos que vão valer em outros atendimentos (ex.: 'prefere ser contatado pela manhã', 'tem 3 filhos pequenos', 'não gosta de áudios longos', 'trabalha com logística'). Não use para coisas efêmeras (estado do pedido atual) — para essas, use set_custom_field. Máximo 280 caracteres.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fact: {
+          type: "string",
+          description:
+            "O fato em uma frase curta, no infinitivo ou descritivo. Português objetivo. Ex.: 'prefere áudio a texto'.",
+        },
+      },
+      required: ["fact"],
+      additionalProperties: false,
+    },
+  },
   handoff: {
     name: "handoff",
     description:
@@ -132,7 +150,15 @@ const TOOLS: Record<ToolName, AnthropicTool> = {
 };
 
 const MODE_TOOLS: Record<"qualifying" | "full", ToolName[]> = {
-  qualifying: ["send_whatsapp_message", "add_tag", "remove_tag", "set_custom_field", "move_stage", "handoff"],
+  qualifying: [
+    "send_whatsapp_message",
+    "add_tag",
+    "remove_tag",
+    "set_custom_field",
+    "move_stage",
+    "remember_customer_fact",
+    "handoff",
+  ],
   full: [
     "send_whatsapp_message",
     "add_tag",
@@ -140,6 +166,7 @@ const MODE_TOOLS: Record<"qualifying" | "full", ToolName[]> = {
     "set_custom_field",
     "move_stage",
     "create_task",
+    "remember_customer_fact",
     "handoff",
   ],
 };
@@ -323,6 +350,34 @@ export async function createFollowupTask(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Salva um fato de longo prazo sobre o cliente (memória persistente). Trata
+ * unique violation como sucesso (já lembrava daquilo) — gracefully idempotente.
+ */
+export async function rememberCustomerFact(
+  admin: Admin,
+  tenantId: string,
+  customerId: string,
+  fact: string,
+  chatId: string | null,
+): Promise<string> {
+  const { error } = await admin.from("customer_ai_facts").insert({
+    tenant_id: tenantId,
+    customer_id: customerId,
+    fact,
+    source: "ai",
+    chat_id: chatId,
+  });
+  if (error) {
+    // 23505 = unique_violation (fact already exists for this customer) → noop.
+    if (error.code === "23505") {
+      return "Fato já estava registrado na memória do cliente.";
+    }
+    throw new Error(error.message);
+  }
+  return "Fato salvo na memória do cliente.";
+}
+
 export async function handoffChat(
   admin: Admin,
   tenantId: string,
@@ -450,6 +505,14 @@ export async function executeTool(
           dueAt: input?.due_at ? String(input.due_at) : null,
         });
         return { content: "Tarefa criada.", isError: false };
+      }
+      case "remember_customer_fact": {
+        if (!ctx.customerId) throw new Error("Sem contato vinculado a este chat.");
+        const fact = String(input?.fact ?? "").trim();
+        if (!fact) throw new Error("fact obrigatório.");
+        if (fact.length > 280) throw new Error("Fact muito longo (máx. 280 caracteres).");
+        const msg = await rememberCustomerFact(ctx.admin, ctx.tenantId, ctx.customerId, fact, String(ctx.chat.id));
+        return { content: msg, isError: false };
       }
       case "handoff": {
         const summary = input?.summary ? String(input.summary) : undefined;

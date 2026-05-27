@@ -54,6 +54,7 @@ import {
 } from "@/lib/api/customers";
 import { useChatNegotiation, useEnsureLeadFromChat, useSetChatResolution } from "@/lib/api/crm-lead";
 import { useAtendimentoUsers, useSetChatAiMode } from "@/lib/api/chat-tags";
+import { useCustomerAiFacts, useDeleteCustomerAiFact } from "@/lib/api/customer-ai-facts";
 import { useDeleteWhatsappChat, useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { ChatTagsPicker } from "@/components/inbox/ChatTagsPicker";
 import { CUSTOMER_TAGS_SOURCE_KEY, parseCustomerTags, serializeCustomerTags } from "@/lib/customer-tags";
@@ -1192,6 +1193,12 @@ export function CustomerProfileSheet({
                       }}
                     />
                   ) : null}
+                  {customer?.id ? (
+                    <CustomerAiMemoryPanel
+                      customerId={customer.id}
+                      canDelete={canEditClientes}
+                    />
+                  ) : null}
                 </TabsContent>
 
                 {showCrmTab && customer ? (
@@ -1386,5 +1393,65 @@ export function CustomerProfileSheet({
       </AlertDialogContent>
     </AlertDialog>
     </>
+  );
+}
+
+function CustomerAiMemoryPanel({ customerId, canDelete }: { customerId: string; canDelete: boolean }) {
+  const { toast } = useToast();
+  const { data: facts = [], isLoading } = useCustomerAiFacts(customerId);
+  const deleteFact = useDeleteCustomerAiFact(customerId, {
+    onError: (err) =>
+      toast({
+        title: "Não foi possível remover o fato",
+        description: err.message,
+        variant: "destructive",
+      }),
+  });
+
+  if (isLoading) return null;
+  if (facts.length === 0) return null;
+
+  return (
+    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">
+          Memória da IA
+        </p>
+        <span className="text-[10px] text-[var(--inbox-muted)]">
+          {facts.length} fato{facts.length > 1 ? "s" : ""}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-[var(--inbox-muted)]">
+        Fatos persistentes que a IA aprendeu nas conversas e usa para personalizar respostas.
+      </p>
+      <ul className="mt-3 space-y-1.5">
+        {facts.map((f) => (
+          <li
+            key={f.id}
+            className="flex items-start justify-between gap-2 rounded-md border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-2.5 py-1.5 text-xs text-[var(--inbox-ink)]"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="break-words leading-relaxed">{f.fact}</p>
+              <p className="mt-0.5 text-[10px] text-[var(--inbox-muted)]">
+                {f.source === "ai" ? "aprendido pela IA" : "registrado pelo time"}
+                {" · "}
+                {new Date(f.created_at).toLocaleDateString("pt-BR")}
+              </p>
+            </div>
+            {canDelete ? (
+              <button
+                type="button"
+                aria-label="Esquecer este fato"
+                disabled={deleteFact.isPending}
+                onClick={() => void deleteFact.mutateAsync(f.id)}
+                className="shrink-0 rounded p-1 text-[var(--inbox-muted)] hover:bg-[var(--crm-danger-tint,rgba(220,38,38,0.08))] hover:text-[var(--crm-danger,#dc2626)] disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -249,6 +249,12 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
   if (fieldNames.length === 0) {
     tools = tools.filter((t) => t.name !== "set_custom_field");
   }
+  // Memória de longo prazo: fatos persistentes que a IA aprendeu sobre o cliente.
+  // Sem customer vinculado a tool fica fora também (não tem onde gravar).
+  const customerFacts = customerId ? await loadCustomerFacts(admin, customerId) : [];
+  if (!customerId) {
+    tools = tools.filter((t) => t.name !== "remember_customer_fact");
+  }
 
   const { data: rows } = await admin
     .from("whatsapp_messages")
@@ -273,6 +279,7 @@ async function processJob(admin: Admin, job: Record<string, unknown>) {
     stageId: negotiation?.stageId ?? null,
     stages,
     fieldNames,
+    customerFacts,
     knowledge: retrieved.map((r) => r.content),
   });
   const ctx: ToolContext = { admin, tenantId, chat, negotiationId, customerId, aiMode };
@@ -685,6 +692,21 @@ async function retrieveKnowledge(admin: Admin, tenantId: string, query: string):
   }
 }
 
+// Limite defensivo: muitos fatos viram ruído no contexto e empurram o que
+// importa pra fora. 30 cobre 99% dos casos reais; admin pode podar mais
+// no painel se algum cliente passar disso.
+const MAX_CUSTOMER_FACTS = 30;
+
+async function loadCustomerFacts(admin: Admin, customerId: string): Promise<string[]> {
+  const { data } = await admin
+    .from("customer_ai_facts")
+    .select("fact")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(MAX_CUSTOMER_FACTS);
+  return (data ?? []).map((r: Record<string, unknown>) => String(r.fact)).filter(Boolean);
+}
+
 async function loadCustomFieldNames(admin: Admin, tenantId: string): Promise<string[]> {
   const { data } = await admin
     .from("customer_custom_fields")
@@ -881,6 +903,7 @@ function buildSystem(
     stageId: string | null;
     stages: FunnelStage[];
     fieldNames: string[];
+    customerFacts: string[];
     knowledge: string[];
   },
 ): AnthropicSystemBlock[] {
@@ -909,6 +932,26 @@ function buildSystem(
   }
   if (context.length > 0) {
     blocks.push({ type: "text", text: `Contexto desta conversa: ${context.join(" ")}` });
+  }
+
+  // Memória de longo prazo: fatos persistentes do cliente. Bloco separado e
+  // claramente marcado para personalizar sem confundir com a base de conhecimento.
+  if (opts.customerFacts.length > 0) {
+    blocks.push({
+      type: "text",
+      text:
+        "Memória sobre este cliente (use para personalizar — não cite literalmente, apenas se adapte):\n" +
+        opts.customerFacts.map((f) => `- ${f}`).join("\n") +
+        "\n\nSe aprender algo NOVO e durável (preferência, contexto, restrição) que vá valer em conversas futuras, " +
+        "use a ferramenta remember_customer_fact. Não duplique fatos já listados acima.",
+    });
+  } else {
+    blocks.push({
+      type: "text",
+      text:
+        "Ainda não há memória de longo prazo sobre este cliente. " +
+        "Se aprender algo durável (ex.: 'prefere áudio a texto'), use a ferramenta remember_customer_fact para salvar.",
+    });
   }
 
   if (opts.knowledge.length > 0) {
