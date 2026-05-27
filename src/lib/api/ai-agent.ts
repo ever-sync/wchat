@@ -26,6 +26,7 @@ export type TenantAiConfig = {
   monthlyTokenLimit: number | null;
   disclosureEnabled: boolean;
   disclosureMessage: string;
+  enableModelRouting: boolean;
 };
 
 export const DEFAULT_AI_CONFIG: TenantAiConfig = {
@@ -38,6 +39,7 @@ export const DEFAULT_AI_CONFIG: TenantAiConfig = {
   monthlyTokenLimit: null,
   disclosureEnabled: true,
   disclosureMessage: "",
+  enableModelRouting: true,
 };
 
 const CONFIG_KEY = ["tenant-ai-config"] as const;
@@ -53,7 +55,7 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
   const { data, error } = await supabase
     .from("tenant_ai_config")
     .select(
-      "provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message",
+      "provider, llm_provider, model, system_prompt, debounce_seconds, max_output_tokens, monthly_token_limit, ai_disclosure_enabled, ai_disclosure_message, enable_model_routing",
     )
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -69,6 +71,7 @@ export async function fetchTenantAiConfig(): Promise<TenantAiConfig> {
     monthlyTokenLimit: data.monthly_token_limit ?? null,
     disclosureEnabled: data.ai_disclosure_enabled ?? true,
     disclosureMessage: data.ai_disclosure_message ?? "",
+    enableModelRouting: data.enable_model_routing ?? true,
   };
 }
 
@@ -88,6 +91,7 @@ export async function upsertTenantAiConfig(input: TenantAiConfig): Promise<void>
       monthly_token_limit: input.monthlyTokenLimit,
       ai_disclosure_enabled: input.disclosureEnabled,
       ai_disclosure_message: input.disclosureMessage.trim() || null,
+      enable_model_routing: input.enableModelRouting,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id" },

@@ -466,6 +466,23 @@ function ConfiguracaoTab() {
           ) : null}
         </div>
 
+        <div className="space-y-2 border-t border-border pt-4">
+          <label className="flex items-center justify-between gap-3">
+            <div>
+              <span className="text-sm font-medium text-foreground">Roteamento inteligente de modelo</span>
+              <p className="text-xs text-muted-foreground">
+                Mensagens curtas e sem contexto (cumprimentos, “ok”, “obrigado”) vão pro Haiku 4.5
+                — até 6× mais barato. Pergunta com base de conhecimento, imagem ou texto longo
+                continua no modelo configurado acima.
+              </p>
+            </div>
+            <Switch
+              checked={form.enableModelRouting}
+              onCheckedChange={(v) => set({ enableModelRouting: v })}
+            />
+          </label>
+        </div>
+
         <div className="flex justify-end">
           <Button onClick={() => upsert.mutate(form)} disabled={upsert.isPending}>
             {upsert.isPending ? "Salvando…" : "Salvar configuração"}
