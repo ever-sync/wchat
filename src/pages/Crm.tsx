@@ -2193,7 +2193,10 @@ export default function Crm() {
                   onOpenNegotiation={openNegotiationCard}
                   onOpenCustomer={handleOpenCustomerCard}
                   onOpenChat={openChatInbox}
+                  onUpdateInline={handleUpdateInlineNegotiation}
                   resolveAssigneeName={resolveAssigneeName}
+                  attendantsForReassign={attendants}
+                  canReassign={canEditCrm && profile?.role !== "atendimento"}
                   onColumnRefresh={() => {
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
                     void queryClient.invalidateQueries({ queryKey: ["crm-negotiation-stages"] });
@@ -2626,6 +2629,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onOpenChat,
   onUpdateInline,
   resolveAssigneeName,
+  attendantsForReassign,
+  canReassign,
 }: {
   card: CrmNegotiation;
   staleNegotiationDays: number;
@@ -2642,13 +2647,28 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onOpenChat?: (chatId: string) => void;
   onUpdateInline?: (
     card: CrmNegotiation,
-    patch: { qualification?: number; totalValue?: number },
+    patch: { qualification?: number; totalValue?: number; assigneeId?: string },
   ) => void;
   resolveAssigneeName?: (assigneeId: string) => string | null;
+  attendantsForReassign?: { id: string; name: string }[];
+  canReassign?: boolean;
 }) {
   const { profile } = useAuth();
   const profileId = profile?.id;
   const canDrag = canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignSearch, setReassignSearch] = useState("");
+  const canReassignChip =
+    Boolean(canReassign) &&
+    Boolean(onUpdateInline) &&
+    Boolean(attendantsForReassign?.length) &&
+    isPersistedCrmNegotiationId(card.id);
+  const filteredReassign = useMemo(() => {
+    if (!attendantsForReassign) return [] as { id: string; name: string }[];
+    const q = reassignSearch.trim().toLowerCase();
+    if (!q) return attendantsForReassign;
+    return attendantsForReassign.filter((a) => a.name.toLowerCase().includes(q));
+  }, [attendantsForReassign, reassignSearch]);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `neg-${card.id}`,
@@ -2695,14 +2715,148 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--crm-ink-2)]">
         <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--crm-brand-2)]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
-        {isInPool ? <CrmPoolBadge /> : null}
+        {isInPool ? (
+          canReassignChip ? (
+            <Popover open={reassignOpen} onOpenChange={setReassignOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded px-1 py-0.5 hover:bg-[var(--crm-brand-tint)]"
+                  aria-label="Atribuir responsável"
+                >
+                  <CrmPoolBadge />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-64 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="border-b border-[var(--crm-border)] p-2">
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--crm-ink-3)]"
+                      aria-hidden
+                    />
+                    <Input
+                      autoFocus
+                      value={reassignSearch}
+                      onChange={(e) => setReassignSearch(e.target.value)}
+                      placeholder="Atribuir a..."
+                      className="h-8 border-[var(--crm-border-2)] pl-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <ul className="max-h-56 overflow-y-auto py-1">
+                  {filteredReassign.length === 0 ? (
+                    <li className="px-3 py-2 text-xs text-[var(--crm-ink-3)]">
+                      Nenhum atendente encontrado.
+                    </li>
+                  ) : (
+                    filteredReassign.map((a) => (
+                      <li key={a.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateInline?.(card, { assigneeId: a.id });
+                            setReassignOpen(false);
+                            setReassignSearch("");
+                          }}
+                          className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
+                        >
+                          {a.name}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <CrmPoolBadge />
+          )
+        ) : null}
         {!isInPool && card.assigneeId && resolveAssigneeName?.(card.assigneeId) ? (
-          <span
-            className="max-w-[7rem] truncate text-[10px] font-medium text-[var(--crm-ink-2)]"
-            title={`Responsável: ${resolveAssigneeName(card.assigneeId)}`}
-          >
-            {resolveAssigneeName(card.assigneeId)}
-          </span>
+          canReassignChip ? (
+            <Popover open={reassignOpen} onOpenChange={setReassignOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className="max-w-[7rem] truncate rounded px-1 py-0.5 text-[10px] font-medium text-[var(--crm-ink-2)] hover:bg-[var(--crm-brand-tint)] hover:text-[var(--crm-brand)]"
+                  title={`Responsável: ${resolveAssigneeName(card.assigneeId)} — clique para trocar`}
+                >
+                  {resolveAssigneeName(card.assigneeId)}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-64 border-[var(--crm-border)] bg-card p-0 text-[var(--crm-ink)] shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="border-b border-[var(--crm-border)] p-2">
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--crm-ink-3)]"
+                      aria-hidden
+                    />
+                    <Input
+                      autoFocus
+                      value={reassignSearch}
+                      onChange={(e) => setReassignSearch(e.target.value)}
+                      placeholder="Trocar responsável..."
+                      className="h-8 border-[var(--crm-border-2)] pl-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <ul className="max-h-56 overflow-y-auto py-1">
+                  {filteredReassign.length === 0 ? (
+                    <li className="px-3 py-2 text-xs text-[var(--crm-ink-3)]">
+                      Nenhum atendente encontrado.
+                    </li>
+                  ) : (
+                    filteredReassign.map((a) => {
+                      const current = a.id === card.assigneeId;
+                      return (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            disabled={current}
+                            onClick={() => {
+                              onUpdateInline?.(card, { assigneeId: a.id });
+                              setReassignOpen(false);
+                              setReassignSearch("");
+                            }}
+                            className={cn(
+                              "flex w-full px-3 py-1.5 text-left text-xs",
+                              current
+                                ? "cursor-default font-semibold text-[var(--crm-brand)]"
+                                : "hover:bg-[var(--crm-surface)]",
+                            )}
+                          >
+                            {a.name}
+                            {current ? " (atual)" : ""}
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <span
+              className="max-w-[7rem] truncate text-[10px] font-medium text-[var(--crm-ink-2)]"
+              title={`Responsável: ${resolveAssigneeName(card.assigneeId)}`}
+            >
+              {resolveAssigneeName(card.assigneeId)}
+            </span>
+          )
         ) : null}
         <Info className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--crm-ink-3)]" aria-hidden />
       </div>
@@ -2848,6 +3002,8 @@ function KanbanColumn({
   onColumnRefresh,
   onColumnValueSort,
   resolveAssigneeName,
+  attendantsForReassign,
+  canReassign,
 }: {
   stage: CrmStageDef & { cards: CrmNegotiation[] };
   staleNegotiationDays: number;
@@ -2864,11 +3020,13 @@ function KanbanColumn({
   onOpenChat?: (chatId: string) => void;
   onUpdateInline?: (
     card: CrmNegotiation,
-    patch: { qualification?: number; totalValue?: number },
+    patch: { qualification?: number; totalValue?: number; assigneeId?: string },
   ) => void;
   onColumnRefresh?: () => void;
   onColumnValueSort?: () => void;
   resolveAssigneeName?: (assigneeId: string) => string | null;
+  attendantsForReassign?: { id: string; name: string }[];
+  canReassign?: boolean;
 }) {
   const count = stage.cards.length;
   const columnValue = stage.cards.reduce((acc, c) => acc + c.totalValue, 0);
@@ -2963,7 +3121,10 @@ function KanbanColumn({
                   onOpenNegotiation={onOpenNegotiation}
                   onOpenCustomer={onOpenCustomer}
                   onOpenChat={onOpenChat}
+                  onUpdateInline={onUpdateInline}
                   resolveAssigneeName={resolveAssigneeName}
+                  attendantsForReassign={attendantsForReassign}
+                  canReassign={canReassign}
                 />
               </div>
             );

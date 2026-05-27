@@ -48,6 +48,7 @@ import {
   useCrmCommercialSla,
   useCrmSellerPerformance,
   useFunnelReport,
+  useFunnelVelocity,
   useLostReasons,
   useSellerSalesReport,
   useStaleNegotiations,
@@ -429,6 +430,7 @@ export default function Relatorios() {
     { enabled: tab === "atendimento" },
   );
   const funnelQ = useFunnelReport(funnelId, fromDate, toDate, { enabled: tab === "funil" });
+  const funnelVelocityQ = useFunnelVelocity(funnelId, fromDate, toDate, { enabled: tab === "funil" });
   const staleSummaryQ = useStaleNegotiationsSummary(funnelId, { enabled: tab === "parados" });
   const staleQ = useStaleNegotiations(funnelId, staleLimit, { enabled: tab === "parados" });
   const crmSlaQ = useCrmCommercialSla(funnelId, fromDate, toDate, { enabled: tab === "sla" });
@@ -634,15 +636,29 @@ export default function Relatorios() {
   const exportFunnel = () => {
     downloadCsv(
       `funil-${funnelId}-${from}-${to}.csv`,
-      ["Etapa", "No funil agora", "Entraram no periodo", "Conversao %", "Vendidos", "Perdidos"],
-      sortedFunnelRows.map((r) => [
-        funnelStageTitleIn(funnels, funnelId, r.stage_id),
-        r.current_count,
-        r.entered_in_period,
-        r.conversion_pct ?? "",
-        r.won_in_period,
-        r.lost_in_period,
-      ]),
+      [
+        "Etapa",
+        "No funil agora",
+        "Entraram no periodo",
+        "Conversao %",
+        "Media dias",
+        "Mediana dias",
+        "Vendidos",
+        "Perdidos",
+      ],
+      sortedFunnelRows.map((r) => {
+        const v = funnelVelocityByStage.get(r.stage_id);
+        return [
+          funnelStageTitleIn(funnels, funnelId, r.stage_id),
+          r.current_count,
+          r.entered_in_period,
+          r.conversion_pct ?? "",
+          v?.avg_days ?? "",
+          v?.median_days ?? "",
+          r.won_in_period,
+          r.lost_in_period,
+        ];
+      }),
     );
   };
 
@@ -664,17 +680,32 @@ export default function Relatorios() {
   const exportCrmSellers = () => {
     downloadCsv(
       `performance-crm-${funnelId}-${from}-${to}.csv`,
-      ["Responsavel", "Abertos", "Pipeline", "Vendas", "Faturamento", "Perdas", "Parados", "Media dias parado"],
-      crmSellers.map((r) => [
-        r.assignee_name,
-        r.open_count,
-        r.pipeline_value,
-        r.won_count,
-        r.won_value,
-        r.lost_count,
-        r.stale_count,
-        r.avg_days_without_touch ?? "",
-      ]),
+      [
+        "Responsavel",
+        "Abertos",
+        "Pipeline",
+        "Vendas",
+        "Faturamento",
+        "Perdas",
+        "Win-rate %",
+        "Parados",
+        "Media dias parado",
+      ],
+      crmSellers.map((r) => {
+        const closed = r.won_count + r.lost_count;
+        const winRate = closed > 0 ? Math.round((r.won_count / closed) * 1000) / 10 : "";
+        return [
+          r.assignee_name,
+          r.open_count,
+          r.pipeline_value,
+          r.won_count,
+          r.won_value,
+          r.lost_count,
+          winRate,
+          r.stale_count,
+          r.avg_days_without_touch ?? "",
+        ];
+      }),
     );
   };
 
@@ -709,6 +740,31 @@ export default function Relatorios() {
         perdidos: r.lost_in_period,
       })),
     [sortedFunnelRows, funnels, funnelId],
+  );
+
+  const funnelVelocityByStage = useMemo(() => {
+    const rows = funnelVelocityQ.data ?? [];
+    const map = new Map<string, (typeof rows)[number]>();
+    for (const v of rows) {
+      map.set(v.stage_id, v);
+    }
+    return map;
+  }, [funnelVelocityQ.data]);
+
+  const funnelVelocityChartData = useMemo(
+    () =>
+      sortedFunnelRows
+        .map((r) => {
+          const v = funnelVelocityByStage.get(r.stage_id);
+          return {
+            stage: funnelStageTitleIn(funnels, funnelId, r.stage_id),
+            avg_days: v?.avg_days ?? 0,
+            median_days: v?.median_days ?? 0,
+            transitions: v?.transitions ?? 0,
+          };
+        })
+        .filter((r) => r.transitions > 0),
+    [sortedFunnelRows, funnelVelocityByStage, funnels, funnelId],
   );
 
   const salesChartData = useMemo(
@@ -987,11 +1043,36 @@ export default function Relatorios() {
               </CardContent>
             </Card>
           ) : null}
+          {funnelVelocityChartData.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Velocidade por etapa</CardTitle>
+                <CardDescription>
+                  Tempo médio (e mediano) que o negócio passou em cada etapa antes de avançar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={funnelVelocityChartData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="stage" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 11 }} label={{ value: "dias", angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
+                      <RechartsTooltip formatter={(value: number) => `${value} dias`} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="avg_days" name="Média" fill={CHART_COLORS[3] ?? CHART_COLORS[0]} />
+                      <Bar dataKey="median_days" name="Mediana" fill={CHART_COLORS[1]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Conversão por etapa</CardTitle>
+              <CardTitle className="text-base">Conversão e velocidade por etapa</CardTitle>
               <CardDescription>
-                Cards atuais, entradas no período (histórico de estágio) e taxa em relação à etapa anterior.
+                Cards atuais, entradas no período, taxa em relação à etapa anterior e tempo médio em cada etapa.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1002,32 +1083,41 @@ export default function Relatorios() {
               ) : (
                 <>
                   <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[640px] text-sm">
+                    <table className="w-full min-w-[760px] text-sm">
                       <thead>
                         <tr className="border-b text-left text-muted-foreground">
                           <SortableTh k="stage_order" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort}>Etapa</SortableTh>
                           <SortableTh k="current_count" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort}>No funil agora</SortableTh>
                           <SortableTh k="entered_in_period" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort}>Entraram no período</SortableTh>
                           <SortableTh k="conversion_pct" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort}>Conversão</SortableTh>
+                          <th className="py-2 pr-4 font-normal">Média de dias</th>
+                          <th className="py-2 pr-4 font-normal">Mediana</th>
                           <SortableTh k="won_in_period" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort}>Vendidos</SortableTh>
                           <SortableTh k="lost_in_period" sortKey={funnelSort.sortKey} sortDir={funnelSort.sortDir} onSort={funnelSort.toggleSort} className="pr-0">Perdidos</SortableTh>
                         </tr>
                       </thead>
                       <tbody>
-                        {funnelSort.sorted.map((row) => (
-                          <tr key={row.stage_id} className="border-b border-border/60">
-                            <td className="py-2 pr-4 font-medium">{funnelStageTitleIn(funnels, funnelId, row.stage_id)}</td>
-                            <td className="py-2 pr-4">{row.current_count}</td>
-                            <td className="py-2 pr-4">{row.entered_in_period}</td>
-                            <td className="py-2 pr-4">{row.conversion_pct != null ? `${row.conversion_pct}%` : "—"}</td>
-                            <td className="py-2 pr-4">{row.won_in_period}</td>
-                            <td className="py-2">{row.lost_in_period}</td>
-                          </tr>
-                        ))}
+                        {funnelSort.sorted.map((row) => {
+                          const v = funnelVelocityByStage.get(row.stage_id);
+                          return (
+                            <tr key={row.stage_id} className="border-b border-border/60">
+                              <td className="py-2 pr-4 font-medium">{funnelStageTitleIn(funnels, funnelId, row.stage_id)}</td>
+                              <td className="py-2 pr-4">{row.current_count}</td>
+                              <td className="py-2 pr-4">{row.entered_in_period}</td>
+                              <td className="py-2 pr-4">{row.conversion_pct != null ? `${row.conversion_pct}%` : "—"}</td>
+                              <td className="py-2 pr-4">{v?.avg_days != null ? `${v.avg_days} d` : "—"}</td>
+                              <td className="py-2 pr-4">{v?.median_days != null ? `${v.median_days} d` : "—"}</td>
+                              <td className="py-2 pr-4">{row.won_in_period}</td>
+                              <td className="py-2">{row.lost_in_period}</td>
+                            </tr>
+                          );
+                        })}
                         <tr className="bg-muted/50 font-semibold">
                           <td className="py-2 pr-4">Total</td>
                           <td className="py-2 pr-4">{funnelTotals.current_count}</td>
                           <td className="py-2 pr-4">{funnelTotals.entered_in_period}</td>
+                          <td className="py-2 pr-4">—</td>
+                          <td className="py-2 pr-4">—</td>
                           <td className="py-2 pr-4">—</td>
                           <td className="py-2 pr-4">{funnelTotals.won_in_period}</td>
                           <td className="py-2">{funnelTotals.lost_in_period}</td>
@@ -1036,18 +1126,23 @@ export default function Relatorios() {
                     </table>
                   </div>
                   <div className="space-y-2 md:hidden">
-                    {funnelSort.sorted.map((row) => (
-                      <div key={row.stage_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
-                        <p className="mb-2 font-medium text-foreground">{funnelStageTitleIn(funnels, funnelId, row.stage_id)}</p>
-                        <dl className="grid grid-cols-2 gap-2 text-xs">
-                          <div><dt className="text-muted-foreground">Atual</dt><dd>{row.current_count}</dd></div>
-                          <div><dt className="text-muted-foreground">Entraram</dt><dd>{row.entered_in_period}</dd></div>
-                          <div><dt className="text-muted-foreground">Conversão</dt><dd>{row.conversion_pct != null ? `${row.conversion_pct}%` : "—"}</dd></div>
-                          <div><dt className="text-muted-foreground">Vendidos</dt><dd>{row.won_in_period}</dd></div>
-                          <div><dt className="text-muted-foreground">Perdidos</dt><dd>{row.lost_in_period}</dd></div>
-                        </dl>
-                      </div>
-                    ))}
+                    {funnelSort.sorted.map((row) => {
+                      const v = funnelVelocityByStage.get(row.stage_id);
+                      return (
+                        <div key={row.stage_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
+                          <p className="mb-2 font-medium text-foreground">{funnelStageTitleIn(funnels, funnelId, row.stage_id)}</p>
+                          <dl className="grid grid-cols-2 gap-2 text-xs">
+                            <div><dt className="text-muted-foreground">Atual</dt><dd>{row.current_count}</dd></div>
+                            <div><dt className="text-muted-foreground">Entraram</dt><dd>{row.entered_in_period}</dd></div>
+                            <div><dt className="text-muted-foreground">Conversão</dt><dd>{row.conversion_pct != null ? `${row.conversion_pct}%` : "—"}</dd></div>
+                            <div><dt className="text-muted-foreground">Média</dt><dd>{v?.avg_days != null ? `${v.avg_days} d` : "—"}</dd></div>
+                            <div><dt className="text-muted-foreground">Mediana</dt><dd>{v?.median_days != null ? `${v.median_days} d` : "—"}</dd></div>
+                            <div><dt className="text-muted-foreground">Vendidos</dt><dd>{row.won_in_period}</dd></div>
+                            <div><dt className="text-muted-foreground">Perdidos</dt><dd>{row.lost_in_period}</dd></div>
+                          </dl>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -1310,23 +1405,29 @@ export default function Relatorios() {
                           <SortableTh k="won_count" sortKey={sellersSort.sortKey} sortDir={sellersSort.sortDir} onSort={sellersSort.toggleSort}>Vendas</SortableTh>
                           <SortableTh k="won_value" sortKey={sellersSort.sortKey} sortDir={sellersSort.sortDir} onSort={sellersSort.toggleSort}>Faturamento</SortableTh>
                           <SortableTh k="lost_count" sortKey={sellersSort.sortKey} sortDir={sellersSort.sortDir} onSort={sellersSort.toggleSort}>Perdas</SortableTh>
+                          <th className="py-2 pr-4 font-normal">Win-rate</th>
                           <SortableTh k="stale_count" sortKey={sellersSort.sortKey} sortDir={sellersSort.sortDir} onSort={sellersSort.toggleSort}>Parados</SortableTh>
                           <SortableTh k="avg_days_without_touch" sortKey={sellersSort.sortKey} sortDir={sellersSort.sortDir} onSort={sellersSort.toggleSort} className="pr-0">Média dias parado</SortableTh>
                         </tr>
                       </thead>
                       <tbody>
-                        {sellersSort.sorted.map((row) => (
-                          <tr key={row.assignee_id} className="border-b border-border/60">
-                            <td className="py-2 pr-4 font-medium">{row.assignee_name}</td>
-                            <td className="py-2 pr-4">{row.open_count}</td>
-                            <td className="py-2 pr-4">{formatCurrency(row.pipeline_value)}</td>
-                            <td className="py-2 pr-4">{row.won_count}</td>
-                            <td className="py-2 pr-4">{formatCurrency(row.won_value)}</td>
-                            <td className="py-2 pr-4">{row.lost_count}</td>
-                            <td className="py-2 pr-4">{row.stale_count}</td>
-                            <td className="py-2">{row.avg_days_without_touch != null ? `${row.avg_days_without_touch} d` : "—"}</td>
-                          </tr>
-                        ))}
+                        {sellersSort.sorted.map((row) => {
+                          const closed = row.won_count + row.lost_count;
+                          const winRate = closed > 0 ? Math.round((row.won_count / closed) * 1000) / 10 : null;
+                          return (
+                            <tr key={row.assignee_id} className="border-b border-border/60">
+                              <td className="py-2 pr-4 font-medium">{row.assignee_name}</td>
+                              <td className="py-2 pr-4">{row.open_count}</td>
+                              <td className="py-2 pr-4">{formatCurrency(row.pipeline_value)}</td>
+                              <td className="py-2 pr-4">{row.won_count}</td>
+                              <td className="py-2 pr-4">{formatCurrency(row.won_value)}</td>
+                              <td className="py-2 pr-4">{row.lost_count}</td>
+                              <td className="py-2 pr-4">{winRate != null ? `${winRate}%` : "—"}</td>
+                              <td className="py-2 pr-4">{row.stale_count}</td>
+                              <td className="py-2">{row.avg_days_without_touch != null ? `${row.avg_days_without_touch} d` : "—"}</td>
+                            </tr>
+                          );
+                        })}
                         <tr className="bg-muted/50 font-semibold">
                           <td className="py-2 pr-4">Total</td>
                           <td className="py-2 pr-4">{sellersTotals.open_count}</td>
@@ -1334,6 +1435,10 @@ export default function Relatorios() {
                           <td className="py-2 pr-4">{sellersTotals.won_count}</td>
                           <td className="py-2 pr-4">{formatCurrency(sellersTotals.won_value)}</td>
                           <td className="py-2 pr-4">{sellersTotals.lost_count}</td>
+                          <td className="py-2 pr-4">{(() => {
+                            const closed = sellersTotals.won_count + sellersTotals.lost_count;
+                            return closed > 0 ? `${Math.round((sellersTotals.won_count / closed) * 1000) / 10}%` : "—";
+                          })()}</td>
                           <td className="py-2 pr-4">{sellersTotals.stale_count}</td>
                           <td className="py-2">—</td>
                         </tr>
@@ -1341,20 +1446,25 @@ export default function Relatorios() {
                     </table>
                   </div>
                   <div className="space-y-2 md:hidden">
-                    {sellersSort.sorted.map((row) => (
-                      <div key={row.assignee_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
-                        <p className="mb-2 font-medium text-foreground">{row.assignee_name}</p>
-                        <dl className="grid grid-cols-2 gap-2 text-xs">
-                          <div><dt className="text-muted-foreground">Abertos</dt><dd>{row.open_count}</dd></div>
-                          <div><dt className="text-muted-foreground">Pipeline</dt><dd>{formatCurrency(row.pipeline_value)}</dd></div>
-                          <div><dt className="text-muted-foreground">Vendas</dt><dd>{row.won_count}</dd></div>
-                          <div><dt className="text-muted-foreground">Faturamento</dt><dd>{formatCurrency(row.won_value)}</dd></div>
-                          <div><dt className="text-muted-foreground">Perdas</dt><dd>{row.lost_count}</dd></div>
-                          <div><dt className="text-muted-foreground">Parados</dt><dd>{row.stale_count}</dd></div>
-                          <div className="col-span-2"><dt className="text-muted-foreground">Média dias parado</dt><dd>{row.avg_days_without_touch != null ? `${row.avg_days_without_touch} d` : "—"}</dd></div>
-                        </dl>
-                      </div>
-                    ))}
+                    {sellersSort.sorted.map((row) => {
+                      const closed = row.won_count + row.lost_count;
+                      const winRate = closed > 0 ? Math.round((row.won_count / closed) * 1000) / 10 : null;
+                      return (
+                        <div key={row.assignee_id} className="rounded-lg border border-border/60 bg-card/40 p-3 text-sm">
+                          <p className="mb-2 font-medium text-foreground">{row.assignee_name}</p>
+                          <dl className="grid grid-cols-2 gap-2 text-xs">
+                            <div><dt className="text-muted-foreground">Abertos</dt><dd>{row.open_count}</dd></div>
+                            <div><dt className="text-muted-foreground">Pipeline</dt><dd>{formatCurrency(row.pipeline_value)}</dd></div>
+                            <div><dt className="text-muted-foreground">Vendas</dt><dd>{row.won_count}</dd></div>
+                            <div><dt className="text-muted-foreground">Faturamento</dt><dd>{formatCurrency(row.won_value)}</dd></div>
+                            <div><dt className="text-muted-foreground">Perdas</dt><dd>{row.lost_count}</dd></div>
+                            <div><dt className="text-muted-foreground">Win-rate</dt><dd>{winRate != null ? `${winRate}%` : "—"}</dd></div>
+                            <div><dt className="text-muted-foreground">Parados</dt><dd>{row.stale_count}</dd></div>
+                            <div className="col-span-2"><dt className="text-muted-foreground">Média dias parado</dt><dd>{row.avg_days_without_touch != null ? `${row.avg_days_without_touch} d` : "—"}</dd></div>
+                          </dl>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}

@@ -22,6 +22,15 @@ export type FunnelReportRow = {
   conversion_pct: number | null;
 };
 
+export type FunnelVelocityRow = {
+  stage_id: string;
+  stage_order: number;
+  transitions: number;
+  avg_days: number | null;
+  median_days: number | null;
+  max_days: number | null;
+};
+
 /** @deprecated use FunnelReportRow fields */
 export type LegacyFunnelReportRow = {
   stage_id: string;
@@ -137,6 +146,24 @@ export async function fetchFunnelReport(funnelId: string, from: Date, to: Date) 
     lost_in_period: Number(row.lost_in_period ?? 0),
     conversion_pct: row.conversion_pct != null ? Number(row.conversion_pct) : null,
   })) as FunnelReportRow[];
+}
+
+export async function fetchFunnelVelocity(funnelId: string, from: Date, to: Date) {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc("report_funnel_velocity", {
+    p_funnel_id: funnelId,
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    stage_id: String(row.stage_id ?? ""),
+    stage_order: Number(row.stage_order ?? 999),
+    transitions: Number(row.transitions ?? 0),
+    avg_days: row.avg_days != null ? Number(row.avg_days) : null,
+    median_days: row.median_days != null ? Number(row.median_days) : null,
+    max_days: row.max_days != null ? Number(row.max_days) : null,
+  })) as FunnelVelocityRow[];
 }
 
 export async function fetchStaleNegotiationsSummary(funnelId?: string) {
@@ -308,6 +335,14 @@ export function useFunnelReport(funnelId: string, from: Date, to: Date, opts?: U
   return useQuery({
     queryKey: ["reports", "funnel", funnelId, from.toISOString(), to.toISOString()],
     queryFn: () => fetchFunnelReport(funnelId, from, to),
+    enabled: isSupabaseConfigured && Boolean(funnelId) && (opts?.enabled ?? true),
+  });
+}
+
+export function useFunnelVelocity(funnelId: string, from: Date, to: Date, opts?: UseReportOptions) {
+  return useQuery({
+    queryKey: ["reports", "funnel-velocity", funnelId, from.toISOString(), to.toISOString()],
+    queryFn: () => fetchFunnelVelocity(funnelId, from, to),
     enabled: isSupabaseConfigured && Boolean(funnelId) && (opts?.enabled ?? true),
   });
 }
