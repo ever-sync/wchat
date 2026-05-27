@@ -60,6 +60,8 @@ export type UseInboxComposerResult = {
   attachmentUploading: boolean;
   attachmentProgress: number | null;
   retryingMessageId: string | null;
+  /** Mensagem que está sendo citada (reply). Null quando não há reply ativo. */
+  replyingTo: WhatsappMessage | null;
 
   // ---- Mutations expostas pra UI ler isPending ----
   sendMessage: ReturnType<typeof useSendWhatsappMessage>;
@@ -79,6 +81,8 @@ export type UseInboxComposerResult = {
   setShowEmojiPicker: (value: boolean) => void;
   setNoteMode: (value: boolean) => void;
   setQuickReplyOpen: (value: boolean) => void;
+  /** Marca/desmarca a mensagem que está sendo citada. */
+  setReplyingTo: (value: WhatsappMessage | null) => void;
   /** Reseta anexo + mediaUrl + payload + messageType, mantendo bodyText opcionalmente. */
   resetComposerAttachmentState: (options?: { keepBodyText?: boolean }) => void;
 
@@ -129,6 +133,7 @@ export function useInboxComposer({
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [attachmentProgress, setAttachmentProgress] = useState<number | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<WhatsappMessage | null>(null);
 
   // -------- Refs --------
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -145,10 +150,11 @@ export function useInboxComposer({
   // Rascunho persistido por chat (restaura ao abrir, salva debounced).
   useInboxChatDraft(chat?.id, bodyText, setBodyText);
 
-  // Trocou de chat: sai do emoji picker, sai do modo nota e cancela upload.
+  // Trocou de chat: sai do emoji picker, do modo nota, do reply, e cancela upload.
   useEffect(() => {
     setShowEmojiPicker(false);
     setNoteMode(false);
+    setReplyingTo(null);
     attachmentAbortRef.current?.abort();
     attachmentAbortRef.current = null;
   }, [chat?.id]);
@@ -628,6 +634,7 @@ export function useInboxComposer({
       mediaUrl: mediaUrl || undefined,
       payload,
       simulateTypingMs: simulateTyping ? 600 : undefined,
+      quotedMessageId: replyingTo?.id ?? undefined,
     };
 
     const sendFingerprint = JSON.stringify({
@@ -649,6 +656,7 @@ export function useInboxComposer({
     recentSendFingerprintsRef.current.set(sendFingerprint, now);
 
     resetComposerAttachmentState();
+    setReplyingTo(null);
     clearInboxChatDraft(chat.id);
 
     // Envio em background; botão segue habilitado para várias mensagens em sequência.
@@ -697,6 +705,7 @@ export function useInboxComposer({
     attachmentUploading,
     attachmentProgress,
     retryingMessageId,
+    replyingTo,
     sendMessage,
     createChatNote,
     bodyTextareaRef,
@@ -710,6 +719,7 @@ export function useInboxComposer({
     setShowEmojiPicker,
     setNoteMode,
     setQuickReplyOpen,
+    setReplyingTo,
     resetComposerAttachmentState,
     appendEmoji,
     handleSendMessage,

@@ -944,6 +944,7 @@ export default function Inbox() {
                 onLoadOlder={handleLoadOlderMessages}
                 onRetryMessage={composer.handleRetryMessage}
                 onDiscardMessage={composer.handleDiscardMessage}
+                onReplyMessage={composer.setReplyingTo}
                 retryingMessageId={composer.retryingMessageId}
                 jumpToLatestVisible={jumpToLatestVisible}
                 onJumpToLatest={forceScrollToLatestMessage}
@@ -1022,6 +1023,9 @@ export default function Inbox() {
               setTimeout(() => composer.bodyTextareaRef.current?.focus(), 50);
             }}
             onClearAttachment={() => composer.resetComposerAttachmentState({ keepBodyText: true })}
+            replyingTo={composer.replyingTo}
+            activeChatName={activeChat?.displayName}
+            onCancelReply={() => composer.setReplyingTo(null)}
           />
             </>
           )}

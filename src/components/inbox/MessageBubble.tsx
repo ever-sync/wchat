@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlertCircle, Check, CheckCheck, Clock3, FileText, RotateCcw, Trash2 } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock3, FileText, Reply, RotateCcw, Trash2 } from "lucide-react";
 import { memo, useState } from "react";
 import { ConversationAvatar } from "@/components/inbox/ConversationAvatar";
 import type { BubbleGroupPosition } from "@/lib/inboxMessageGroups";
@@ -161,10 +161,56 @@ type MessageBubbleProps = {
   groupPosition?: BubbleGroupPosition;
   activeChatName: string;
   activeChatAvatarUrl?: string | null;
+  /** Mensagem citada (resolvida pelo MessageThread a partir de message.quotedMessageId). */
+  quotedMessage?: WhatsappMessage | null;
   onRetry?: (message: WhatsappMessage) => void;
   onDiscard?: (message: WhatsappMessage) => void;
+  /** Clique no botão "Responder" da bolha. */
+  onReply?: (message: WhatsappMessage) => void;
   retryPending?: boolean;
 };
+
+/** Mini bloco de citação renderizado no topo de uma bolha que responde a outra. */
+function QuotedMessagePreview({
+  quoted,
+  activeChatName,
+  isOutbound,
+}: {
+  quoted: WhatsappMessage;
+  activeChatName: string;
+  isOutbound: boolean;
+}) {
+  const preview = getInboxMessagePreviewText(quoted);
+  const authorLabel =
+    quoted.direction === "outbound" ? "Você" : activeChatName || "Contato";
+  return (
+    <div
+      className={cn(
+        "mb-1 overflow-hidden rounded-md border-l-[3px] px-2.5 py-1.5",
+        isOutbound
+          ? "border-primary-foreground/60 bg-primary-foreground/10"
+          : "border-primary bg-wchat-50",
+      )}
+    >
+      <p
+        className={cn(
+          "truncate text-[11.5px] font-semibold leading-tight",
+          isOutbound ? "text-primary-foreground/90" : "text-primary",
+        )}
+      >
+        {authorLabel}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 line-clamp-2 text-[12px] leading-snug",
+          isOutbound ? "text-primary-foreground/80" : "text-muted-foreground",
+        )}
+      >
+        {preview || "(mensagem sem texto)"}
+      </p>
+    </div>
+  );
+}
 
 function BubbleTail({ outbound }: { outbound: boolean }) {
   if (outbound) {
@@ -242,8 +288,10 @@ function MessageBubbleImpl({
   groupPosition = "single",
   activeChatName,
   activeChatAvatarUrl,
+  quotedMessage,
   onRetry,
   onDiscard,
+  onReply,
   retryPending = false,
 }: MessageBubbleProps) {
   const isOutbound = message.direction === "outbound";
@@ -285,8 +333,26 @@ function MessageBubbleImpl({
             </div>
           ) : null}
 
-          <div className={cn("relative inline-block max-w-full", isOutbound ? "ml-auto" : "")}>
+          <div className={cn("group relative inline-block max-w-full", isOutbound ? "ml-auto" : "")}>
             {!isOutbound && showTail ? <BubbleTail outbound={false} /> : null}
+
+            {onReply ? (
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                className={cn(
+                  "absolute -top-2 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full",
+                  "border border-border bg-card text-muted-foreground shadow-sm",
+                  "opacity-0 transition-opacity hover:bg-wchat-50 hover:text-foreground",
+                  "group-hover:opacity-100 focus-visible:opacity-100",
+                  isOutbound ? "-left-3" : "-right-3",
+                )}
+                title="Responder"
+                aria-label="Responder esta mensagem"
+              >
+                <Reply className="h-3 w-3" />
+              </button>
+            ) : null}
 
             <div
               className={cn(
@@ -297,6 +363,14 @@ function MessageBubbleImpl({
                   : "border border-border bg-card text-foreground shadow-[0_1px_0.5px_rgba(11,20,26,0.08)]",
               )}
             >
+              {quotedMessage ? (
+                <QuotedMessagePreview
+                  quoted={quotedMessage}
+                  activeChatName={activeChatName}
+                  isOutbound={isOutbound}
+                />
+              ) : null}
+
               {presentation ? (
                 <div className={bodyText ? "mb-1" : undefined}>
                   <MessageAttachment presentation={presentation} isOutbound={isOutbound} />
@@ -401,7 +475,10 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps) {
   if (prev.activeChatName !== next.activeChatName) return false;
   if (prev.onRetry !== next.onRetry) return false;
   if (prev.onDiscard !== next.onDiscard) return false;
+  if (prev.onReply !== next.onReply) return false;
   if (prev.retryPending !== next.retryPending) return false;
+  // Identidade do quoted basta — o conteúdo dele não muda em runtime; chega novo objeto = re-render.
+  if (prev.quotedMessage?.id !== next.quotedMessage?.id) return false;
   const a = prev.message;
   const b = next.message;
   if (a === b) return true;

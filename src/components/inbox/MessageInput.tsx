@@ -6,6 +6,7 @@ import {
   Mic,
   Paperclip,
   PenLine,
+  Reply,
   Send,
   Smile,
   X,
@@ -15,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WHATSAPP_MEDIA_MAX_BYTES } from "@/lib/api/whatsapp-media";
 import { resolveComposerAttachmentPreview } from "@/lib/inboxComposerPreview";
+import { getInboxMessagePreviewText } from "@/lib/inboxMessageBody";
 import { cn } from "@/lib/utils";
-import type { MessageType, QuickReply } from "@/types/domain";
+import type { MessageType, QuickReply, WhatsappMessage } from "@/types/domain";
 import { useCalculadora } from "@/contexts/CalculadoraContext";
 import { QUICK_EMOJIS } from "./inboxComposerOptions";
 import { QuickReplyPicker } from "./QuickReplyPicker";
@@ -64,6 +66,12 @@ export type MessageInputProps = {
   noteMode?: boolean;
   onNoteModeChange?: (value: boolean) => void;
   onClearAttachment?: () => void;
+  /** Mensagem que o composer está citando (reply). Null quando não há reply ativo. */
+  replyingTo?: WhatsappMessage | null;
+  /** Nome a mostrar no header da barra de reply para mensagem inbound. */
+  activeChatName?: string;
+  /** Cancela o reply, fechando a barra. */
+  onCancelReply?: () => void;
 };
 
 export function MessageInput({
@@ -107,6 +115,9 @@ export function MessageInput({
   noteMode = false,
   onNoteModeChange,
   onClearAttachment,
+  replyingTo = null,
+  activeChatName,
+  onCancelReply,
 }: MessageInputProps) {
   const { openCalculadora } = useCalculadora();
   const previewKind = resolveComposerAttachmentPreview(
@@ -278,6 +289,30 @@ export function MessageInput({
             type="button"
             onClick={() => onNoteModeChange?.(false)}
             className="ml-2 text-[var(--inbox-gold)] transition-colors hover:text-[var(--inbox-gold)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+
+      {replyingTo ? (
+        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-[3px] border-primary bg-wchat-50 px-3 py-2">
+          <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11.5px] font-semibold leading-tight text-primary">
+              Respondendo a{" "}
+              {replyingTo.direction === "outbound" ? "Você" : activeChatName || "Contato"}
+            </p>
+            <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">
+              {getInboxMessagePreviewText(replyingTo) || "(mensagem sem texto)"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onCancelReply?.()}
+            className="ml-1 shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground"
+            aria-label="Cancelar reply"
+            title="Cancelar reply"
           >
             <X className="h-3.5 w-3.5" />
           </button>

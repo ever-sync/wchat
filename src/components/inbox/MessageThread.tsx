@@ -43,6 +43,8 @@ export type MessageThreadProps = {
   onLoadOlder?: () => void | Promise<void>;
   onRetryMessage?: (message: WhatsappMessage) => void;
   onDiscardMessage?: (message: WhatsappMessage) => void;
+  /** Disparado pelo botão de hover "Responder" de cada bolha. */
+  onReplyMessage?: (message: WhatsappMessage) => void;
   retryingMessageId?: string | null;
   jumpToLatestVisible?: boolean;
   onJumpToLatest?: () => void;
@@ -89,6 +91,7 @@ export function MessageThread({
   onLoadOlder,
   onRetryMessage,
   onDiscardMessage,
+  onReplyMessage,
   retryingMessageId = null,
   jumpToLatestVisible = false,
   onJumpToLatest,
@@ -103,6 +106,18 @@ export function MessageThread({
   const chatBg = isDark ? WHATSAPP_CHAT_BG_DARK : WHATSAPP_CHAT_BG;
 
   const flat = useMemo(() => flattenMessageGroups(messageGroups), [messageGroups]);
+
+  // Lookup id → mensagem para resolver `quotedMessage` de cada bolha em O(1).
+  // Construído a partir do mesmo dataset já achatado.
+  const messageById = useMemo(() => {
+    const map = new Map<string, WhatsappMessage>();
+    for (const item of flat) {
+      if (item.kind === "msg") {
+        map.set(item.message.id, item.message);
+      }
+    }
+    return map;
+  }, [flat]);
 
   const estimateSize = useCallback(
     (index: number) => estimateThreadItemSize(flat[index]),
@@ -216,8 +231,14 @@ export function MessageThread({
                     groupPosition={item.groupPosition}
                     activeChatName={activeChatName}
                     activeChatAvatarUrl={activeChatAvatarUrl}
+                    quotedMessage={
+                      item.message.quotedMessageId
+                        ? messageById.get(item.message.quotedMessageId) ?? null
+                        : null
+                    }
                     onRetry={onRetryMessage}
                     onDiscard={onDiscardMessage}
+                    onReply={onReplyMessage}
                     retryPending={retryingMessageId === item.message.id}
                   />
                   </div>
