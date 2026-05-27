@@ -30,7 +30,9 @@ import {
   useAiTurns,
   useImportKnowledgeUrl,
   useRunPlayground,
+  useAiUsageByModelThisMonth,
   useAiUsageThisMonth,
+  type AiUsageByModelRow,
   useDeleteKnowledgeSource,
   useKnowledgeSources,
   useTenantAiConfig,
@@ -856,9 +858,81 @@ function AtividadeTab() {
           Custo estimado em US$ a partir dos tokens e do modelo de cada turno (preços de tabela; pode variar).
         </p>
       </div>
+      <CostByModelCard totalCostUsd={data.costUsd} />
       <FailuresList />
       <TurnsList />
     </div>
+  );
+}
+
+function formatUsd(v: number): string {
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: v < 1 ? 4 : 2,
+  });
+}
+
+function CostByModelCard({ totalCostUsd }: { totalCostUsd: number }) {
+  const { data: rows = [], isLoading } = useAiUsageByModelThisMonth();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Custo por modelo (mês)</CardTitle>
+        <CardDescription>
+          Quanto cada modelo está consumindo — útil pra ajustar routing (Haiku para trivial,
+          Sonnet/Opus para complexo) e medir o ganho de cache.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sem consumo registrado no mês.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Modelo</th>
+                  <th className="py-2 pr-3 text-right font-medium">Turnos</th>
+                  <th className="py-2 pr-3 text-right font-medium">Entrada</th>
+                  <th className="py-2 pr-3 text-right font-medium">Saída</th>
+                  <th className="py-2 pr-3 text-right font-medium">Cache (lido)</th>
+                  <th className="py-2 pr-3 text-right font-medium">Custo</th>
+                  <th className="py-2 pr-3 text-right font-medium">% do total</th>
+                  <th className="py-2 pr-0 text-right font-medium">Economia cache</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row: AiUsageByModelRow) => {
+                  const pct = totalCostUsd > 0 ? Math.round((row.costUsd / totalCostUsd) * 100) : 0;
+                  return (
+                    <tr key={row.model} className="border-b border-border/50 last:border-0">
+                      <td className="py-2 pr-3">
+                        <span className="font-mono text-xs">{shortModelName(row.model)}</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.turns)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.inputTokens)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{nf(row.outputTokens)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                        {nf(row.cacheReadTokens)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{formatUsd(row.costUsd)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{pct}%</td>
+                      <td className="py-2 pr-0 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                        {row.cacheSavingsUsd > 0 ? `-${formatUsd(row.cacheSavingsUsd)}` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

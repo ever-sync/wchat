@@ -252,6 +252,79 @@ export function useAiUsageThisMonth(
   return useQuery({ queryKey: USAGE_KEY, queryFn: fetchAiUsageThisMonth, staleTime: 60_000, ...options });
 }
 
+export type AiUsageByModelRow = {
+  model: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  /** Quanto teria custado a parte cacheada se fosse cobrada como input normal. */
+  cacheSavingsUsd: number;
+};
+
+const USAGE_BY_MODEL_KEY = ["ai-usage-by-model"] as const;
+
+export async function fetchAiUsageByModelThisMonth(): Promise<AiUsageByModelRow[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const { data, error } = await supabase
+    .from("ai_usage")
+    .select("model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens")
+    .eq("tenant_id", tenantId)
+    .gte("created_at", monthStart.toISOString());
+  if (error) throw new Error(error.message);
+
+  const byModel = new Map<string, AiUsageByModelRow>();
+  for (const r of data ?? []) {
+    const model = r.model ?? "desconhecido";
+    const inp = r.input_tokens ?? 0;
+    const out = r.output_tokens ?? 0;
+    const cr = r.cache_read_tokens ?? 0;
+    const cw = r.cache_creation_tokens ?? 0;
+    const p = MODEL_PRICING[model] ?? DEFAULT_PRICE;
+    const cost = (inp * p.input + out * p.output + cr * p.cacheRead + cw * p.cacheWrite) / 1_000_000;
+    // Savings: o que cache_read teria custado como input normal menos o que custou de fato.
+    const savings = (cr * (p.input - p.cacheRead)) / 1_000_000;
+
+    const row = byModel.get(model) ?? {
+      model,
+      turns: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      costUsd: 0,
+      cacheSavingsUsd: 0,
+    };
+    row.turns += 1;
+    row.inputTokens += inp;
+    row.outputTokens += out;
+    row.cacheReadTokens += cr;
+    row.cacheCreationTokens += cw;
+    row.costUsd += cost;
+    row.cacheSavingsUsd += savings;
+    byModel.set(model, row);
+  }
+  return [...byModel.values()].sort((a, b) => b.costUsd - a.costUsd);
+}
+
+export function useAiUsageByModelThisMonth(
+  options?: Omit<UseQueryOptions<AiUsageByModelRow[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: USAGE_BY_MODEL_KEY,
+    queryFn: fetchAiUsageByModelThisMonth,
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Observabilidade — turnos da IA (ai_turns)
 // ---------------------------------------------------------------------------
