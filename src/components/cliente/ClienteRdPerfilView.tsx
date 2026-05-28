@@ -1,9 +1,11 @@
-import { type ReactNode, useMemo, useState, type ReactElement } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import { formatBRL } from "@/lib/format";
 import {
   ArrowLeft,
   Calendar,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
   Hand,
   MoreVertical,
@@ -149,70 +151,126 @@ function PipelineChevrons({
 }) {
   const segments = stages ?? buildPipelineLabels(daysContact);
   const interactive = Boolean(onStageSelect);
-  const notch = 12;
-  const inactiveFill = "var(--crm-surface-2)";
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLButtonElement | HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [activeIndex, segments.length]);
+
+  const scrollStages = (direction: "prev" | "next") => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const amount = Math.max(260, el.clientWidth * 0.55);
+    el.scrollBy({
+      left: direction === "next" ? amount : -amount,
+      behavior: "smooth",
+    });
+  };
 
   return (
     <div className="w-full border-b border-[var(--crm-border-2)] bg-[var(--crm-surface)]">
-      <div className="mx-auto max-w-[1600px] px-2 py-2 md:px-4">
-        <div
-          className="flex min-h-[48px] w-full gap-[3px] bg-card p-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
-          role={interactive ? "tablist" : undefined}
-          aria-label={interactive ? "Etapas do funil de vendas" : undefined}
-        >
-          {segments.map((seg, i) => {
-            const active = i === activeIndex;
-            const isFirst = i === 0;
-            const isLast = i === segments.length - 1;
-            const clip = isFirst
-              ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
-              : isLast
-                ? `polygon(${notch}px 0, 100% 0, 100% 100%, ${notch}px 100%, 0 50%)`
-                : `polygon(${notch}px 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, ${notch}px 100%, 0 50%)`;
+      <div className="mx-auto max-w-[1600px] px-3 py-3 md:px-6">
+        <div className="flex items-center gap-2 rounded-2xl border border-[var(--crm-border-2)] bg-card/95 p-2 shadow-sm">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 rounded-xl border-[var(--crm-border-2)] bg-white"
+            aria-label="Ver etapas anteriores"
+            onClick={() => scrollStages("prev")}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
 
-            const label = (
-              <span
-                className={cn(
-                  "relative z-10 block hyphens-auto px-1.5 text-[9px] uppercase leading-tight tracking-wide sm:text-[10px] md:text-[11px]",
-                  active ? "font-extrabold text-white" : "font-bold text-[var(--crm-ink-2)]",
-                )}
-              >
-                {seg.label}
-              </span>
-            );
+          <div
+            ref={scrollerRef}
+            className="scrollbar-thin flex min-w-0 flex-1 snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain px-1 py-1"
+            role={interactive ? "tablist" : undefined}
+            aria-label={interactive ? "Etapas do funil de vendas" : undefined}
+          >
+            {segments.map((seg, i) => {
+              const active = i === activeIndex;
+              const position = `${i + 1}/${segments.length}`;
+              const commonClass = cn(
+                "relative flex h-16 w-[176px] shrink-0 snap-center flex-col items-center justify-center rounded-xl border px-3 text-center outline-none transition-[background-color,border-color,box-shadow,transform] sm:w-[190px]",
+                interactive && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--crm-brand)] focus-visible:ring-offset-1",
+                active
+                  ? "border-transparent bg-[var(--crm-brand)] text-white shadow-md"
+                  : "border-[var(--crm-border-2)] bg-[var(--crm-surface-2)] text-[var(--crm-ink-2)]",
+              );
 
-            const shellStyle = {
-              clipPath: clip,
-              backgroundColor: active ? BRAND_ACCENT : inactiveFill,
-            } as const;
+              const label = (
+                <>
+                  <span
+                    className={cn(
+                      "absolute left-2 top-2 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none",
+                      active
+                        ? "bg-white/15 text-white"
+                        : "bg-white/80 text-[var(--crm-ink-3)]",
+                    )}
+                  >
+                    {position}
+                  </span>
+                  <span
+                    className={cn(
+                      "block max-w-full overflow-hidden text-[11px] font-extrabold uppercase leading-tight tracking-wide",
+                      active ? "text-white" : "text-[var(--crm-ink-2)]",
+                    )}
+                    style={{
+                      display: "-webkit-box",
+                      WebkitBoxOrient: "vertical",
+                      WebkitLineClamp: 2,
+                    }}
+                    title={seg.label}
+                  >
+                    {seg.label}
+                  </span>
+                </>
+              );
 
-            return (
-              <div key={seg.key} className="min-w-0 flex-1">
-                {interactive ? (
+              if (interactive) {
+                return (
                   <button
+                    key={seg.key}
+                    ref={active ? activeRef as Ref<HTMLButtonElement> : undefined}
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    className={cn(
-                      "flex min-h-[44px] w-full cursor-pointer items-center justify-center px-1 py-2 text-center outline-none transition-[filter,box-shadow] hover:brightness-[1.04] focus-visible:ring-2 focus-visible:ring-[var(--crm-brand)] focus-visible:ring-offset-1",
-                      active && "shadow-[0_1px_3px_rgba(0,0,0,0.12)]",
-                    )}
-                    style={shellStyle}
+                    className={commonClass}
                     onClick={() => onStageSelect?.(i)}
                   >
                     {label}
                   </button>
-                ) : (
-                  <div
-                    className="flex min-h-[44px] items-center justify-center px-1 py-2 text-center"
-                    style={shellStyle}
-                  >
-                    {label}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              }
+
+              return (
+                <div
+                  key={seg.key}
+                  ref={active ? activeRef as Ref<HTMLDivElement> : undefined}
+                  className={commonClass}
+                >
+                  {label}
+                </div>
+              );
+            })}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0 rounded-xl border-[var(--crm-border-2)] bg-white"
+            aria-label="Ver próximas etapas"
+            onClick={() => scrollStages("next")}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>

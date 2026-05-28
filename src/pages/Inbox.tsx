@@ -1102,7 +1102,6 @@ export default function Inbox() {
                     setAssignDialogOpen(true);
                   }}
                   onOpenProfile={() => setProfileOpen(true)}
-                  onOpenTags={() => setTagsDialogOpen(true)}
                   onOpenSaleFlow={handleOpenSaleFlow}
                   onOpenFollowUp={() => setFollowUpDialogOpen(true)}
                 />

@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Kanban, Pause, Pencil, Phone, Play, Plus, Trash2, X } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Circle,
+  Kanban,
+  Pause,
+  Pencil,
+  Phone,
+  Play,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +55,7 @@ import { CustomerCustomFieldsFacts } from "@/components/customers/CustomerCustom
 import { CustomerLeadSheet } from "@/components/customers/CustomerLeadSheet";
 import { type CrmFunnel, DEFAULT_CRM_FUNNELS, funnelListNameIn, funnelStageTitleIn } from "@/data/crm-funnels";
 import { useCrmNegotiationsForCustomer, useUpdateCrmNegotiation } from "@/lib/api/crm-negotiations";
+import { useCrmTasksForCustomer, useCrmTasksForNegotiation } from "@/lib/api/crm-tasks";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
 import {
   toCustomerUpsertInput,
@@ -77,6 +91,7 @@ import { useAppStore } from "@/store/useAppStore";
 import {
   type ChatResolution,
   type CrmNegotiationRecord,
+  type CrmTask,
   type CrmNegotiationStatus,
   type Customer,
   type InboxChat,
@@ -130,6 +145,39 @@ function formatDateTime(value?: string | null) {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function formatTaskDue(value?: string | null) {
+  if (!value) {
+    return "Sem prazo";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function taskDueTone(task: CrmTask): "done" | "overdue" | "scheduled" | "none" {
+  if (task.status === "concluida") {
+    return "done";
+  }
+  if (!task.dueAt) {
+    return "none";
+  }
+  const time = Date.parse(task.dueAt);
+  if (Number.isNaN(time)) {
+    return "none";
+  }
+  return time < Date.now() ? "overdue" : "scheduled";
 }
 
 function infoValue(value?: string | null) {
@@ -588,7 +636,125 @@ function CustomerQuickFacts({
 }
 
 const PROFILE_TAB_TRIGGER_CLASS =
-  "rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--inbox-muted)] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
+  "shrink-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--inbox-muted)] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
+
+function ProfileTasksPanel({
+  tasks,
+  isLoading,
+  negotiations,
+  effectiveCrmFunnels,
+}: {
+  tasks: CrmTask[];
+  isLoading: boolean;
+  negotiations: CrmNegotiationRecord[];
+  effectiveCrmFunnels: CrmFunnel[];
+}) {
+  const negotiationById = useMemo(
+    () => new Map(negotiations.map((n) => [n.id, n])),
+    [negotiations],
+  );
+
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === "aberta" ? -1 : 1;
+      }
+      const at = a.dueAt ? Date.parse(a.dueAt) : Number.MAX_SAFE_INTEGER;
+      const bt = b.dueAt ? Date.parse(b.dueAt) : Number.MAX_SAFE_INTEGER;
+      return at - bt;
+    });
+  }, [tasks]);
+
+  return (
+    <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">
+          Tarefas do lead
+        </p>
+        <Badge className="border border-[var(--inbox-border)] bg-[var(--inbox-surface)] text-[10px] font-medium text-[var(--inbox-muted)]">
+          {tasks.length} tarefa{tasks.length === 1 ? "" : "s"}
+        </Badge>
+      </div>
+
+      {isLoading ? (
+        <p className="mt-3 text-sm text-[var(--inbox-muted)]">Carregando tarefas…</p>
+      ) : sortedTasks.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--inbox-muted)]">
+          Nenhuma tarefa vinculada a este lead.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {sortedTasks.map((task) => {
+            const tone = taskDueTone(task);
+            const negotiation = task.negotiationId ? negotiationById.get(task.negotiationId) : null;
+            const scopeLabel = negotiation
+              ? `${funnelListNameIn(effectiveCrmFunnels, negotiation.funnelId)} · ${funnelStageTitleIn(
+                  effectiveCrmFunnels,
+                  negotiation.funnelId,
+                  negotiation.stageId,
+                )}`
+              : "Cliente";
+            const StatusIcon = task.status === "concluida" ? CheckCircle2 : Circle;
+            return (
+              <li
+                key={task.id}
+                className="rounded-2xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-3"
+              >
+                <div className="flex items-start gap-2.5">
+                  <StatusIcon
+                    className={cn(
+                      "mt-0.5 h-4 w-4 shrink-0",
+                      task.status === "concluida"
+                        ? "text-emerald-600"
+                        : "text-[var(--crm-brand)]",
+                    )}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="min-w-0 break-words text-sm font-semibold leading-snug text-[var(--inbox-ink)]">
+                        {task.title}
+                      </p>
+                      <Badge
+                        className={cn(
+                          "shrink-0 border text-[10px] font-medium",
+                          task.status === "concluida"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-[var(--crm-brand-border)] bg-[var(--crm-brand-tint)] text-[var(--crm-brand)]",
+                        )}
+                      >
+                        {task.status === "concluida" ? "Concluída" : "Aberta"}
+                      </Badge>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--inbox-muted)]">
+                      <span className="inline-flex items-center gap-1">
+                        <CalendarClock
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            tone === "overdue" && "text-[var(--crm-danger,#dc2626)]",
+                            tone === "done" && "text-emerald-600",
+                          )}
+                          aria-hidden
+                        />
+                        {formatTaskDue(task.dueAt)}
+                      </span>
+                      <span>{scopeLabel}</span>
+                    </div>
+                    {task.notes.trim() ? (
+                      <p className="mt-2 whitespace-pre-wrap rounded-xl bg-card px-3 py-2 text-xs leading-relaxed text-[var(--inbox-muted)]">
+                        {task.notes.trim()}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function ProfileNegotiationsPanel({
   negotiations,
@@ -750,6 +916,26 @@ export function CustomerProfileSheet({
     }
     return null;
   }, [linkedNegotiation?.id, chat?.primaryNegotiationId, negotiationsForDisplay]);
+  const { data: customerTasks = [], isLoading: customerTasksLoading } = useCrmTasksForCustomer(customer?.id, {
+    enabled: Boolean(open && customer?.id && isSupabaseConfigured),
+  });
+  const { data: negotiationTasks = [], isLoading: negotiationTasksLoading } = useCrmTasksForNegotiation(
+    documentsNegotiationId ?? undefined,
+    {
+      enabled: Boolean(open && documentsNegotiationId && isSupabaseConfigured),
+    },
+  );
+  const profileTasks = useMemo(() => {
+    const byId = new Map<string, CrmTask>();
+    for (const task of customerTasks) {
+      byId.set(task.id, task);
+    }
+    for (const task of negotiationTasks) {
+      byId.set(task.id, task);
+    }
+    return [...byId.values()];
+  }, [customerTasks, negotiationTasks]);
+  const profileTasksLoading = customerTasksLoading || negotiationTasksLoading;
   const {
     data: tenantFunnelsSaved,
     isError: tenantFunnelsQueryError,
@@ -818,6 +1004,7 @@ export function CustomerProfileSheet({
   const showCamposTab = Boolean(customer && isSupabaseConfigured);
   const showArquivosTab = Boolean(isSupabaseConfigured && canViewCrm);
   const showProdutosTab = Boolean(isSupabaseConfigured && canViewCrm && (customer || chat));
+  const showTarefasTab = Boolean(isSupabaseConfigured && canViewCrm && (customer || documentsNegotiationId));
   const canEditCustomerIdentityInInbox = canEditClientes || canEditInbox;
   const showCustomerIdentityEditButton = Boolean(customer) && canEditCustomerIdentityInInbox;
   const customerIdentityEditBlockedMessage = useMemo(() => {
@@ -844,15 +1031,17 @@ export function CustomerProfileSheet({
       setProfileTab("resumo");
     } else if (profileTab === "produtos" && !showProdutosTab) {
       setProfileTab("resumo");
+    } else if (profileTab === "tarefas" && !showTarefasTab) {
+      setProfileTab("resumo");
     }
-  }, [profileTab, showArquivosTab, showCamposTab, showCrmTab, showProdutosTab]);
+  }, [profileTab, showArquivosTab, showCamposTab, showCrmTab, showProdutosTab, showTarefasTab]);
 
   return (
     <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[92vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,#fbfcf9_0%,#f4f7f5_100%)] p-0 sm:max-w-[520px]"
+        className="w-[96vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,#fbfcf9_0%,#f4f7f5_100%)] p-0 sm:max-w-[760px] xl:max-w-[860px]"
       >
         <div className="flex min-h-full flex-col">
           <SheetHeader className="space-y-0 border-b border-[var(--inbox-border)] bg-card/60 px-5 pb-5 pt-5 backdrop-blur-sm">
@@ -928,18 +1117,7 @@ export function CustomerProfileSheet({
                   ) : null}
 
                   {customer ? (
-                    <div className="grid grid-cols-2 gap-2 pt-0.5">
-                      <Button
-                        asChild
-                        variant="secondary"
-                        size="sm"
-                        className="h-9 rounded-xl bg-[var(--crm-brand-tint)] px-2.5 text-xs font-semibold text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
-                      >
-                        <Link to={`/clientes/${customer.id}`} className="inline-flex items-center justify-center gap-1.5">
-                          <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          Perfil completo
-                        </Link>
-                      </Button>
+                    <div className="grid gap-2 pt-0.5">
                       {canViewCrm ? (
                         <Button
                           asChild
@@ -1138,7 +1316,7 @@ export function CustomerProfileSheet({
 
             {chat ? (
               <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4">
-                <TabsList className="h-auto w-full flex-wrap justify-start gap-0.5 rounded-2xl border border-[var(--inbox-border)] bg-card/90 p-1 shadow-sm">
+                <TabsList className="h-auto w-full flex-nowrap justify-start gap-0.5 overflow-x-auto rounded-2xl border border-[var(--inbox-border)] bg-card/90 p-1 shadow-sm">
                   <TabsTrigger value="resumo" className={PROFILE_TAB_TRIGGER_CLASS}>
                     Resumo
                   </TabsTrigger>
@@ -1161,6 +1339,11 @@ export function CustomerProfileSheet({
                   {showProdutosTab ? (
                     <TabsTrigger value="produtos" className={PROFILE_TAB_TRIGGER_CLASS}>
                       Produtos
+                    </TabsTrigger>
+                  ) : null}
+                  {showTarefasTab ? (
+                    <TabsTrigger value="tarefas" className={PROFILE_TAB_TRIGGER_CLASS}>
+                      Tarefas
                     </TabsTrigger>
                   ) : null}
                   {showArquivosTab ? (
@@ -1264,6 +1447,17 @@ export function CustomerProfileSheet({
                         )}
                       </div>
                     </div>
+                  </TabsContent>
+                ) : null}
+
+                {showTarefasTab ? (
+                  <TabsContent value="tarefas" className="mt-0 focus-visible:outline-none">
+                    <ProfileTasksPanel
+                      tasks={profileTasks}
+                      isLoading={profileTasksLoading}
+                      negotiations={negotiations}
+                      effectiveCrmFunnels={effectiveCrmFunnels}
+                    />
                   </TabsContent>
                 ) : null}
 
