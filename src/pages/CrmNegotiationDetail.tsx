@@ -48,6 +48,7 @@ import {
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
 import {
+  createStageTemplateTask,
   useCreateCrmTask,
   useCrmTasksForCustomer,
   useCrmTasksForNegotiation,
@@ -1061,29 +1062,31 @@ function CrmNegotiationDetailContent({
                 } else if (negotiation.status === "perdido") {
                   patch.status = "em_andamento";
                 }
-                await updateNegotiation.mutateAsync({ id: negotiation.id, patch });
+
                 // Tarefa pronta vinculada à etapa de destino (não duplica se já houver aberta do mesmo modelo).
                 if (stage.taskTemplateId) {
                   const tpl = crmTaskTemplates.find((t) => t.id === stage.taskTemplateId);
-                  const alreadyOpen = crmTasksByNegotiation.some(
-                    (t) => t.templateId === stage.taskTemplateId && t.status === "aberta",
-                  );
-                  if (tpl && !alreadyOpen) {
-                    const dueAt =
-                      tpl.defaultDueDays != null
-                        ? new Date(Date.now() + tpl.defaultDueDays * 86_400_000).toISOString()
-                        : null;
-                    await createCrmTask.mutateAsync({
-                      title: tpl.title,
+                  if (tpl) {
+                    const created = await createStageTemplateTask({
                       negotiationId: negotiation.id,
                       customerId: negotiation.customerId ?? null,
                       assigneeId: negotiation.assigneeId ?? null,
-                      dueAt,
-                      notes: tpl.notes,
-                      templateId: tpl.id,
+                      template: {
+                        id: tpl.id,
+                        title: tpl.title,
+                        notes: tpl.notes,
+                        defaultDueDays: tpl.defaultDueDays,
+                      },
                     });
+                    if (created) {
+                      void queryClient.invalidateQueries({ queryKey: ["crm-tasks"] });
+                      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations", negotiation.id] });
+                      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+                    }
                   }
                 }
+
+                await updateNegotiation.mutateAsync({ id: negotiation.id, patch });
                 if (linkedCustomer) {
                   let nextStatus: CustomerStatus = linkedCustomer.status;
                   if (isLostStage) {

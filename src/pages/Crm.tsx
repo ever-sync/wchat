@@ -1592,10 +1592,16 @@ export default function Crm() {
       }
 
       const cid = resolveCustomerIdForNegotiation(card, customers);
-      const stageTitle = funnelDef.stages.find((s) => s.id === stageDropId)?.title ?? stageDropId;
+      const destinationStage = funnelDef.stages.find((s) => s.id === stageDropId);
+      const stageTitle = destinationStage?.title ?? stageDropId;
+      const persistedRow = isPersistedCrmNegotiationId(negId);
+      const destTemplateId = destinationStage?.taskTemplateId;
+      const destTemplate = destTemplateId ? taskTemplates.find((t) => t.id === destTemplateId) : undefined;
 
       const dbRow = dbRecords.find((r) => r.id === negId);
-      const required = stageRequiredFields(funnels, funnelId, stageDropId);
+      const required = stageRequiredFields(funnels, funnelId, stageDropId).filter(
+        (field) => field !== "next_task_at" || !persistedRow || !destTemplate,
+      );
       if (required.length > 0) {
         const validationError = validateNegotiationForStage(
           dbRow ?? {
@@ -1617,7 +1623,6 @@ export default function Crm() {
       }
 
       if (stageDropId === "perdido") {
-        const persistedRow = isPersistedCrmNegotiationId(negId);
         if (!persistedRow) {
           toast({
             title: "Marcar perda",
@@ -1632,7 +1637,6 @@ export default function Crm() {
       }
 
       if (isSaleDestinationStage(funnels, funnelId, stageDropId)) {
-        const persistedRow = isPersistedCrmNegotiationId(negId);
         if (!persistedRow) {
           toast({
             title: "Marcar venda",
@@ -1664,30 +1668,28 @@ export default function Crm() {
       }
 
       try {
-        const persistedRow = isPersistedCrmNegotiationId(negId);
         if (persistedRow) {
-          await updateCrmNegotiation.mutateAsync({
-            id: negId,
-            patch: { stageId: stageDropId, funnelId },
-          });
-          const destTemplateId = funnelDef.stages.find((s) => s.id === stageDropId)?.taskTemplateId;
-          const tpl = destTemplateId ? taskTemplates.find((t) => t.id === destTemplateId) : undefined;
-          if (tpl) {
+          if (destTemplate) {
             const created = await createStageTemplateTask({
               negotiationId: negId,
               customerId: cid ?? null,
               assigneeId: dragAssigneeId ?? null,
               template: {
-                id: tpl.id,
-                title: tpl.title,
-                notes: tpl.notes,
-                defaultDueDays: tpl.defaultDueDays,
+                id: destTemplate.id,
+                title: destTemplate.title,
+                notes: destTemplate.notes,
+                defaultDueDays: destTemplate.defaultDueDays,
               },
             });
             if (created) {
               void queryClient.invalidateQueries({ queryKey: ["crm-tasks"] });
+              void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
             }
           }
+          await updateCrmNegotiation.mutateAsync({
+            id: negId,
+            patch: { stageId: stageDropId, funnelId },
+          });
         }
         if (cid) {
           const customer = customers.find((c) => c.id === cid);
