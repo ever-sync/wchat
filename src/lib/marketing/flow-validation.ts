@@ -106,23 +106,11 @@ const ACTION_SCHEMAS: Record<string, StepValidator> = {
       "WAIT_NO_DATETIME",
       `“${step.label}”: defina a data e hora de agendamento.`,
     ),
-  email: (step) =>
-    requireSubtitle(
-      step,
-      "MSG_EMPTY",
-      `“${step.label}”: defina o conteúdo do e-mail.`,
-    ),
   sms: (step) =>
     requireSubtitle(
       step,
       "MSG_EMPTY",
       `“${step.label}”: defina o conteúdo do SMS.`,
-    ),
-  "mensagem-inteligente": (step) =>
-    requireSubtitle(
-      step,
-      "MSG_EMPTY",
-      `“${step.label}”: defina o prompt da mensagem inteligente.`,
     ),
 };
 

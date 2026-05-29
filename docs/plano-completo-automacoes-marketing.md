@@ -1023,9 +1023,24 @@ O projeto de automacoes pode ser considerado pronto quando:
 - `src/components/marketing/MarketingAutomations.tsx`
 - `src/pages/MarketingFlowEditor.tsx`
 - `src/components/marketing/MarketingFlowActionsPanel.tsx`
+- `src/components/marketing/FlowExecutionsPanel.tsx`
+- `src/components/marketing/SimulatorDialog.tsx`
+- `src/components/marketing/action-configs.tsx`
 - `src/components/marketing/flow-actions.ts`
 - `src/lib/api/marketing-flows.ts`
+- `src/lib/api/marketing-flow-participants.ts`
+- `src/lib/api/marketing-flow-stats.ts`
+- `src/lib/marketing/criteria-evaluator.ts`
+- `src/lib/marketing/flow-action-configs.ts`
+- `src/lib/marketing/flow-types.ts`
+- `src/lib/marketing/flow-validation.ts`
+- `supabase/functions/marketing-flow-worker/`
 - `supabase/migrations/20260628120000_marketing_flows.sql`
+- `supabase/migrations/20260628130000_marketing_flow_foundation.sql`
+- `supabase/migrations/20260628140000_marketing_flow_triggers.sql`
+- `supabase/migrations/20260628150000_marketing_flow_management_rpcs.sql`
+- `supabase/migrations/20260628160000_marketing_flow_cross_flow_rpcs.sql`
+- `supabase/migrations/20260628170000_marketing_flow_runtime_limits.sql`
 
 ## 21. Proxima tarefa sugerida
 

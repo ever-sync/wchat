@@ -10,6 +10,7 @@ import {
   Minus,
   Pencil,
   Plus,
+  Sparkles,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -51,9 +52,17 @@ import {
   type ValidationIssue,
   type ValidationResult,
 } from "@/lib/marketing/flow-validation";
+import {
+  getConfigKind,
+  parseConfig,
+  summarizeConfig,
+} from "@/lib/marketing/flow-action-configs";
+import { pickConfigComponent } from "@/components/marketing/action-configs";
+import { FlowExecutionsPanel } from "@/components/marketing/FlowExecutionsPanel";
+import { SimulatorDialog } from "@/components/marketing/SimulatorDialog";
 import { cn } from "@/lib/utils";
 
-type FlowTab = "editor" | "configuracoes" | "saida";
+type FlowTab = "editor" | "configuracoes" | "saida" | "historico";
 
 const SUBTITLE_VARIANTS = ["plain", "primary", "chip", "multiline"] as const;
 type SubtitleVariant = (typeof SUBTITLE_VARIANTS)[number];
@@ -490,24 +499,58 @@ const SUBTITLE_VARIANT_LABELS: Record<SubtitleVariant, string> = {
 
 function StepEditDialog({
   step,
+  steps,
+  flowId,
   onOpenChange,
   onSave,
 }: {
   step: FlowStep | null;
+  steps: FlowStep[];
+  flowId: string;
   onOpenChange: (open: boolean) => void;
-  onSave: (patch: { subtitle?: string; subtitleVariant?: SubtitleVariant }) => void;
+  onSave: (patch: Partial<FlowStep>) => void;
 }) {
+  const configKind = step ? getConfigKind(step.actionId) : null;
+  const ConfigComponent = step ? pickConfigComponent(step.actionId) : null;
+  const configContext = useMemo(
+    () => ({
+      steps: steps
+        .filter((s) => !step || s.id !== step.id)
+        .map((s) => ({ id: s.id, label: s.label })),
+      currentFlowId: flowId,
+    }),
+    [steps, step, flowId],
+  );
+
+  // Estado pro caminho "subtitle livre" (actions sem config schema).
   const [subtitleDraft, setSubtitleDraft] = useState("");
   const [variantDraft, setVariantDraft] = useState<SubtitleVariant>("plain");
 
+  // Estado pro caminho "config estruturada" (actions cobertas pelo registry).
+  const [configDraft, setConfigDraft] = useState<Record<string, unknown>>({});
+
   useEffect(() => {
-    if (step) {
-      setSubtitleDraft(step.subtitle ?? "");
-      setVariantDraft(step.subtitleVariant ?? "plain");
+    if (!step) return;
+    setSubtitleDraft(step.subtitle ?? "");
+    setVariantDraft(step.subtitleVariant ?? "plain");
+    if (configKind) {
+      setConfigDraft(parseConfig(configKind, step.config) as Record<string, unknown>);
     }
+    // intencional: rebaseia drafts ao trocar de step
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const handleSave = () => {
+  const handleSaveConfig = () => {
+    if (!step || !configKind) return;
+    const subtitle = summarizeConfig(configKind, configDraft);
+    onSave({
+      config: configDraft,
+      subtitle: subtitle || undefined,
+      subtitleVariant: subtitle ? "plain" : undefined,
+    });
+  };
+
+  const handleSaveSubtitle = () => {
     const trimmed = subtitleDraft.trim();
     if (!trimmed) {
       onSave({ subtitle: undefined, subtitleVariant: undefined });
@@ -522,60 +565,73 @@ function StepEditDialog({
         <DialogHeader>
           <DialogTitle>{step ? step.label : "Editar passo"}</DialogTitle>
           <DialogDescription>
-            Adicione uma descrição para este passo. Deixe em branco para remover.
+            {ConfigComponent
+              ? "Configure os campos abaixo. Os valores são salvos junto com o fluxo no botão “Salvar” do cabeçalho."
+              : "Adicione uma descrição para este passo. Deixe em branco para remover."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="step-subtitle">Descrição</Label>
-            {variantDraft === "multiline" ? (
-              <Textarea
-                id="step-subtitle"
-                value={subtitleDraft}
-                onChange={(event) => setSubtitleDraft(event.target.value)}
-                rows={4}
-              />
-            ) : (
-              <Input
-                id="step-subtitle"
-                value={subtitleDraft}
-                onChange={(event) => setSubtitleDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSave();
-                  }
-                }}
-              />
-            )}
-          </div>
+        {ConfigComponent && configKind ? (
+          <ConfigComponent
+            value={parseConfig(configKind, configDraft)}
+            onChange={(next) => setConfigDraft(next as Record<string, unknown>)}
+            context={configContext}
+          />
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="step-subtitle">Descrição</Label>
+              {variantDraft === "multiline" ? (
+                <Textarea
+                  id="step-subtitle"
+                  value={subtitleDraft}
+                  onChange={(event) => setSubtitleDraft(event.target.value)}
+                  rows={4}
+                />
+              ) : (
+                <Input
+                  id="step-subtitle"
+                  value={subtitleDraft}
+                  onChange={(event) => setSubtitleDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSaveSubtitle();
+                    }
+                  }}
+                />
+              )}
+            </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="step-variant">Estilo</Label>
-            <Select
-              value={variantDraft}
-              onValueChange={(value) => setVariantDraft(value as SubtitleVariant)}
-            >
-              <SelectTrigger id="step-variant">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SUBTITLE_VARIANTS.map((variant) => (
-                  <SelectItem key={variant} value={variant}>
-                    {SUBTITLE_VARIANT_LABELS[variant]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="step-variant">Estilo</Label>
+              <Select
+                value={variantDraft}
+                onValueChange={(value) => setVariantDraft(value as SubtitleVariant)}
+              >
+                <SelectTrigger id="step-variant">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBTITLE_VARIANTS.map((variant) => (
+                    <SelectItem key={variant} value={variant}>
+                      {SUBTITLE_VARIANT_LABELS[variant]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button type="button" onClick={handleSave}>
+          <Button
+            type="button"
+            onClick={ConfigComponent ? handleSaveConfig : handleSaveSubtitle}
+          >
             Aplicar
           </Button>
         </DialogFooter>
@@ -584,16 +640,48 @@ function StepEditDialog({
   );
 }
 
+const TRIGGER_OPTIONS: { value: string; label: string; description: string }[] = [
+  {
+    value: "manual",
+    label: "Manual",
+    description: "Leads entram apenas se adicionados manualmente ou por outro fluxo.",
+  },
+  {
+    value: "form_submitted",
+    label: "Formulário enviado",
+    description: "Dispara quando um lead envia qualquer formulário de marketing.",
+  },
+  {
+    value: "tag_added",
+    label: "Etiqueta adicionada",
+    description: "Dispara quando uma etiqueta nova é aplicada a um lead.",
+  },
+  {
+    value: "negotiation_created",
+    label: "Negociação criada",
+    description: "Dispara quando uma nova negociação entra no CRM.",
+  },
+  {
+    value: "negotiation_stage_changed",
+    label: "Etapa do CRM alterada",
+    description: "Dispara quando uma negociação muda de etapa no funil.",
+  },
+];
+
 function FlowSettingsPanel({
   flow,
   onPatch,
+  onTriggerChange,
   isPending,
 }: {
   flow: MarketingFlowRecord;
   onPatch: (overrides: Record<string, unknown>) => void;
+  onTriggerChange: (trigger: Record<string, unknown>) => void;
   isPending: boolean;
 }) {
   const settings = parseFlowSettings(flow.definition);
+  const currentTriggerType =
+    typeof flow.trigger.type === "string" ? flow.trigger.type : "";
   const [abandonDraft, setAbandonDraft] = useState(
     settings.autoAbandonDays != null ? String(settings.autoAbandonDays) : "",
   );
@@ -627,6 +715,43 @@ function FlowSettingsPanel({
         <p className="text-sm text-muted-foreground">
           Defina como os leads se comportam neste fluxo.
         </p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="flow-trigger" className="text-sm font-semibold">
+              Gatilho de entrada
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Define o evento que coloca leads dentro deste fluxo.
+            </p>
+          </div>
+          <Select
+            value={currentTriggerType || undefined}
+            onValueChange={(next) => {
+              if (next === currentTriggerType) return;
+              onTriggerChange({ ...flow.trigger, type: next });
+            }}
+            disabled={isPending}
+          >
+            <SelectTrigger id="flow-trigger">
+              <SelectValue placeholder="Selecione um gatilho" />
+            </SelectTrigger>
+            <SelectContent>
+              {TRIGGER_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {currentTriggerType ? (
+            <p className="text-xs text-muted-foreground">
+              {TRIGGER_OPTIONS.find((o) => o.value === currentTriggerType)?.description}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5">
@@ -851,6 +976,7 @@ export default function MarketingFlowEditor() {
     open: boolean;
     result: ValidationResult | null;
   }>({ open: false, result: null });
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const stepCounter = useRef(0);
   const stepIdPrefix = useId();
   const hydratedFor = useRef<string | null>(null);
@@ -911,16 +1037,9 @@ export default function MarketingFlowEditor() {
     setSteps((prev) => prev.filter((step) => step.id !== stepId));
   };
 
-  const handleUpdateStepSubtitle = (
-    stepId: string,
-    patch: { subtitle?: string; subtitleVariant?: SubtitleVariant },
-  ) => {
+  const handleUpdateStep = (stepId: string, patch: Partial<FlowStep>) => {
     setSteps((prev) =>
-      prev.map((step) =>
-        step.id === stepId
-          ? { ...step, subtitle: patch.subtitle, subtitleVariant: patch.subtitleVariant }
-          : step,
-      ),
+      prev.map((step) => (step.id === stepId ? { ...step, ...patch } : step)),
     );
     setEditingStepId(null);
   };
@@ -985,6 +1104,21 @@ export default function MarketingFlowEditor() {
         onError: (e) =>
           toast({
             title: "Erro ao salvar critérios",
+            description: e.message,
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const patchTrigger = (trigger: Record<string, unknown>) => {
+    if (!flow) return;
+    updateFlow.mutate(
+      { id: flow.id, patch: { trigger } },
+      {
+        onError: (e) =>
+          toast({
+            title: "Erro ao salvar gatilho",
             description: e.message,
             variant: "destructive",
           }),
@@ -1163,10 +1297,26 @@ export default function MarketingFlowEditor() {
               active={tab === "saida"}
               onClick={() => setTab("saida")}
             />
+            <TabButton
+              label="Execuções"
+              active={tab === "historico"}
+              onClick={() => setTab("historico")}
+            />
           </nav>
         </div>
 
         <div className="flex items-center gap-2 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-primary hover:bg-primary/10"
+            aria-label="Simular fluxo"
+            onClick={() => setSimulatorOpen(true)}
+            disabled={!flow}
+          >
+            <Sparkles className="h-5 w-5" aria-hidden />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -1305,15 +1455,18 @@ export default function MarketingFlowEditor() {
             <FlowSettingsPanel
               flow={flow}
               onPatch={patchDefinition}
+              onTriggerChange={patchTrigger}
               isPending={updateFlow.isPending}
             />
-          ) : (
+          ) : tab === "saida" ? (
             <FlowExitPanel
               flow={flow}
               onPatch={patchDefinition}
               isPending={updateFlow.isPending}
             />
-          )}
+          ) : tab === "historico" ? (
+            <FlowExecutionsPanel flowId={flow.id} />
+          ) : null}
         </div>
       ) : null}
 
@@ -1327,11 +1480,13 @@ export default function MarketingFlowEditor() {
 
       <StepEditDialog
         step={editingStep}
+        steps={steps}
+        flowId={flow?.id ?? ""}
         onOpenChange={(open) => {
           if (!open) setEditingStepId(null);
         }}
         onSave={(patch) => {
-          if (editingStepId) handleUpdateStepSubtitle(editingStepId, patch);
+          if (editingStepId) handleUpdateStep(editingStepId, patch);
         }}
       />
 
@@ -1345,6 +1500,12 @@ export default function MarketingFlowEditor() {
         onConfirm={() => {
           if (validationDialog.result) doPublish(validationDialog.result);
         }}
+      />
+
+      <SimulatorDialog
+        open={simulatorOpen}
+        onOpenChange={setSimulatorOpen}
+        definition={flow ? { ...flow.definition, steps } : null}
       />
     </div>
   );

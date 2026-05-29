@@ -97,6 +97,7 @@ export type MarketingFlowPatch = Partial<{
   status: MarketingFlowStatus;
   definition: Record<string, unknown>;
   criteria: Record<string, unknown>;
+  trigger: Record<string, unknown>;
   leadsEntry: number;
   leadsActive: number | null;
 }>;
@@ -107,6 +108,7 @@ function patchToRow(patch: MarketingFlowPatch): Record<string, unknown> {
   if (patch.status !== undefined) row.status = patch.status;
   if (patch.definition !== undefined) row.definition = patch.definition;
   if (patch.criteria !== undefined) row.criteria = patch.criteria;
+  if (patch.trigger !== undefined) row.trigger = patch.trigger;
   if (patch.leadsEntry !== undefined) row.leads_entry = patch.leadsEntry;
   if (patch.leadsActive !== undefined) row.leads_active = patch.leadsActive;
   return row;

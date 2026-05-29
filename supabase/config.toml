@@ -39,6 +39,10 @@ verify_jwt = false
 [functions.marketing-email-dispatch]
 verify_jwt = false
 
+# Worker dos fluxos de automação de marketing: chamado por cron (x-cron-secret).
+[functions.marketing-flow-worker]
+verify_jwt = false
+
 # Dispatcher de webhooks de saída: cron (x-cron-secret) drena tudo; app (JWT) testa/processa o próprio tenant.
 [functions.webhook-dispatcher]
 verify_jwt = false

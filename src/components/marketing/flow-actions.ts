@@ -138,6 +138,12 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
         iconKey: "calendar-clock",
         iconClass: "bg-orange-500",
       },
+      {
+        id: "esperar-condicao",
+        label: "Esperar até condição",
+        iconKey: "clock",
+        iconClass: "bg-orange-500",
+      },
     ],
   },
   {

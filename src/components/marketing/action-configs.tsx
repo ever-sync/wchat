@@ -5,6 +5,7 @@
 
 import type { ComponentType } from "react";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,23 +17,53 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  SPLIT_OPERATORS,
   WEBHOOK_METHODS,
   getConfigKind,
+  type ABTestConfig,
+  type ABTestVariant,
   type ActionConfigByKind,
   type ActionConfigKind,
+  type AddToFlowConfig,
   type CreateDealConfig,
   type CreateTaskConfig,
+  type EmailConfig,
   type MoveDealConfig,
+  type RemoveFromFlowConfig,
+  type SmartMessageConfig,
+  type SplitConfig,
+  type SplitOperator,
   type TagConfig,
   type WaitConfig,
+  type WaitUntilConfig,
   type WebhookConfig,
   type WebhookMethod,
   type WhatsAppConfig,
 } from "@/lib/marketing/flow-action-configs";
+import { useMarketingFlows } from "@/lib/api/marketing-flows";
+
+export type ActionConfigContext = {
+  /** Outros steps do mesmo fluxo (usado por split pra escolher branches). */
+  steps?: Array<{ id: string; label: string }>;
+  /** Id do fluxo atual (usado por add/remove pra remover da lista de destino). */
+  currentFlowId?: string;
+};
 
 type ConfigProps<T> = {
   value: T;
   onChange: (next: T) => void;
+  context?: ActionConfigContext;
+};
+
+const SPLIT_OPERATOR_LABELS: Record<SplitOperator, string> = {
+  equals: "é igual a",
+  not_equals: "é diferente de",
+  contains: "contém",
+  not_contains: "não contém",
+  exists: "existe",
+  not_exists: "não existe",
+  greater_than: "maior que",
+  less_than: "menor que",
 };
 
 // ---------------------------------------------------------------- Wait
@@ -86,6 +117,39 @@ export function WhatsAppActionConfig({ value, onChange }: ConfigProps<WhatsAppCo
         Variáveis disponíveis na Fase 5: <code>{`{{cliente.nome}}`}</code>,{" "}
         <code>{`{{negociacao.titulo}}`}</code>, etc.
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Email
+
+export function EmailActionConfig({ value, onChange }: ConfigProps<EmailConfig>) {
+  const set = (patch: Partial<EmailConfig>) => onChange({ ...value, ...patch });
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email-subject" className="text-xs font-semibold uppercase tracking-wide">
+          Assunto
+        </Label>
+        <Input
+          id="email-subject"
+          value={value.subject}
+          onChange={(event) => set({ subject: event.target.value })}
+          placeholder="Olá {{cliente.nome}}, novidade para você"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email-body" className="text-xs font-semibold uppercase tracking-wide">
+          Corpo do e-mail
+        </Label>
+        <Textarea
+          id="email-body"
+          value={value.body}
+          onChange={(event) => set({ body: event.target.value })}
+          rows={6}
+          placeholder="Escreva sua mensagem. Aceita variáveis: {{cliente.nome}}, {{negociacao.titulo}}…"
+        />
+      </div>
     </div>
   );
 }
@@ -320,21 +384,505 @@ export function WebhookActionConfig({ value, onChange }: ConfigProps<WebhookConf
   );
 }
 
+// ---------------------------------------------------------------- Split
+
+export function SplitActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<SplitConfig>) {
+  const set = (patch: Partial<SplitConfig>) => onChange({ ...value, ...patch });
+  const steps = context?.steps ?? [];
+  const needsValue = value.operator !== "exists" && value.operator !== "not_exists";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_140px_1fr]">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="split-field" className="text-xs font-semibold uppercase tracking-wide">
+            Campo
+          </Label>
+          <Input
+            id="split-field"
+            value={value.field}
+            onChange={(event) => set({ field: event.target.value })}
+            placeholder="cliente.email"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="split-operator" className="text-xs font-semibold uppercase tracking-wide">
+            Operador
+          </Label>
+          <Select
+            value={value.operator}
+            onValueChange={(next) =>
+              set({ operator: next as SplitOperator, ...(next === "exists" || next === "not_exists" ? { value: "" } : {}) })
+            }
+          >
+            <SelectTrigger id="split-operator">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPLIT_OPERATORS.map((op) => (
+                <SelectItem key={op} value={op}>
+                  {SPLIT_OPERATOR_LABELS[op]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="split-value" className="text-xs font-semibold uppercase tracking-wide">
+            Valor
+          </Label>
+          <Input
+            id="split-value"
+            value={value.value}
+            onChange={(event) => set({ value: event.target.value })}
+            disabled={!needsValue}
+            placeholder={needsValue ? "ex.: gmail.com" : "—"}
+          />
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Variáveis suportadas: <code>cliente.&lt;campo&gt;</code>,{" "}
+        <code>negociacao.&lt;campo&gt;</code>, <code>contexto.&lt;campo&gt;</code>.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="split-true" className="text-xs font-semibold uppercase tracking-wide">
+            Se sim, ir para
+          </Label>
+          <Select
+            value={value.trueStepId || undefined}
+            onValueChange={(next) => set({ trueStepId: next })}
+            disabled={steps.length === 0}
+          >
+            <SelectTrigger id="split-true">
+              <SelectValue
+                placeholder={steps.length === 0 ? "Adicione passos primeiro" : "Selecione um passo"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {steps.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="split-false" className="text-xs font-semibold uppercase tracking-wide">
+            Se não, ir para
+          </Label>
+          <Select
+            value={value.falseStepId || undefined}
+            onValueChange={(next) => set({ falseStepId: next })}
+            disabled={steps.length === 0}
+          >
+            <SelectTrigger id="split-false">
+              <SelectValue
+                placeholder={steps.length === 0 ? "Adicione passos primeiro" : "Selecione um passo"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {steps.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Add/Remove from other flow
+
+function FlowPickerField({
+  id,
+  label,
+  value,
+  onChange,
+  excludeFlowId,
+  helper,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  excludeFlowId?: string;
+  helper?: string;
+}) {
+  const { data: flows = [] } = useMarketingFlows();
+  const filtered = flows.filter((f) => f.id !== excludeFlowId);
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wide">
+        {label}
+      </Label>
+      <Select
+        value={value || undefined}
+        onValueChange={onChange}
+        disabled={filtered.length === 0}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue
+            placeholder={filtered.length === 0 ? "Nenhum outro fluxo disponível" : "Selecione um fluxo"}
+          />
+        </SelectTrigger>
+        <SelectContent>
+          {filtered.map((f) => (
+            <SelectItem key={f.id} value={f.id}>
+              {f.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
+    </div>
+  );
+}
+
+export function AddToFlowActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<AddToFlowConfig>) {
+  return (
+    <FlowPickerField
+      id="add-flow-target"
+      label="Fluxo de destino"
+      value={value.targetFlowId}
+      onChange={(next) => onChange({ targetFlowId: next })}
+      excludeFlowId={context?.currentFlowId}
+      helper="O fluxo destino precisa estar ativo. Trigger interno usado: cross_flow."
+    />
+  );
+}
+
+export function RemoveFromFlowActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<RemoveFromFlowConfig>) {
+  return (
+    <div className="flex flex-col gap-3">
+      <FlowPickerField
+        id="remove-flow-target"
+        label="Fluxo de origem"
+        value={value.targetFlowId}
+        onChange={(next) => onChange({ ...value, targetFlowId: next })}
+        excludeFlowId={context?.currentFlowId}
+      />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="remove-flow-reason" className="text-xs font-semibold uppercase tracking-wide">
+          Motivo (opcional)
+        </Label>
+        <Input
+          id="remove-flow-reason"
+          value={value.reason ?? ""}
+          onChange={(event) => onChange({ ...value, reason: event.target.value })}
+          placeholder="Lead concluiu este fluxo, remove do anterior"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- A/B Test
+
+export function ABTestActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<ABTestConfig>) {
+  const steps = context?.steps ?? [];
+  const variants = value.variants;
+  const sum = variants.reduce((s, v) => s + v.weight, 0);
+
+  const update = (idx: number, patch: Partial<ABTestVariant>) => {
+    onChange({
+      variants: variants.map((v, i) => (i === idx ? { ...v, ...patch } : v)),
+    });
+  };
+
+  const add = () => {
+    const id = `variant-${variants.length + 1}`;
+    onChange({
+      variants: [...variants, { id, weight: 0, nextStepId: "" }],
+    });
+  };
+
+  const remove = (idx: number) => {
+    onChange({ variants: variants.filter((_, i) => i !== idx) });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Soma dos pesos: <span className={sum === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>{sum}%</span> (precisa ser 100)
+        </p>
+        <Button type="button" variant="ghost" size="sm" onClick={add}>
+          + Variante
+        </Button>
+      </div>
+      {variants.map((v, i) => (
+        <div
+          key={i}
+          className="grid items-end gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_90px_1fr_36px]"
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Nome (opcional)</Label>
+            <Input
+              value={v.label ?? ""}
+              onChange={(event) => update(i, { label: event.target.value })}
+              placeholder={`Variante ${i + 1}`}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Peso %</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={v.weight}
+              onChange={(event) =>
+                update(i, {
+                  weight: Math.max(0, Math.min(100, Math.floor(Number(event.target.value) || 0))),
+                })
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Próximo passo</Label>
+            <Select
+              value={v.nextStepId || undefined}
+              onValueChange={(next) => update(i, { nextStepId: next })}
+              disabled={steps.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={steps.length === 0 ? "Adicione passos primeiro" : "Selecione"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {steps.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => remove(i)}
+            disabled={variants.length <= 2}
+            aria-label="Remover variante"
+            className="text-muted-foreground hover:text-destructive"
+          >
+            ×
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Wait Until
+
+export function WaitUntilActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<WaitUntilConfig>) {
+  const steps = context?.steps ?? [];
+  const set = (patch: Partial<WaitUntilConfig>) => onChange({ ...value, ...patch });
+  const needsValue = value.operator !== "exists" && value.operator !== "not_exists";
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_140px_1fr]">
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Campo</Label>
+          <Input
+            value={value.field}
+            onChange={(event) => set({ field: event.target.value })}
+            placeholder="cliente.status"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Operador</Label>
+          <Select
+            value={value.operator}
+            onValueChange={(next) =>
+              set({
+                operator: next as SplitOperator,
+                ...(next === "exists" || next === "not_exists" ? { value: "" } : {}),
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPLIT_OPERATORS.map((op) => (
+                <SelectItem key={op} value={op}>
+                  {SPLIT_OPERATOR_LABELS[op]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Valor</Label>
+          <Input
+            value={value.value}
+            onChange={(event) => set({ value: event.target.value })}
+            disabled={!needsValue}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">
+            Reverificar a cada (minutos)
+          </Label>
+          <Input
+            type="number"
+            min={1}
+            value={value.checkIntervalMinutes}
+            onChange={(event) =>
+              set({ checkIntervalMinutes: Math.max(1, Math.floor(Number(event.target.value) || 1)) })
+            }
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">
+            Timeout (horas, 0 = sem timeout)
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            value={value.timeoutHours}
+            onChange={(event) =>
+              set({ timeoutHours: Math.max(0, Math.floor(Number(event.target.value) || 0)) })
+            }
+          />
+        </div>
+      </div>
+
+      {value.timeoutHours > 0 ? (
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">
+            Caminho alternativo (no timeout)
+          </Label>
+          <Select
+            value={value.alternativeStepId || undefined}
+            onValueChange={(next) => set({ alternativeStepId: next })}
+            disabled={steps.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={steps.length === 0 ? "Adicione passos primeiro" : "Vazio = fim do fluxo"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {steps.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Smart Message
+
+export function SmartMessageActionConfig({
+  value,
+  onChange,
+}: ConfigProps<SmartMessageConfig>) {
+  const set = (patch: Partial<SmartMessageConfig>) => onChange({ ...value, ...patch });
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">Prompt</Label>
+        <Textarea
+          value={value.prompt}
+          onChange={(event) => set({ prompt: event.target.value })}
+          rows={5}
+          placeholder="Escreva uma mensagem para reativar o lead {{cliente.nome}} que abandonou o carrinho."
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Tom (opcional)</Label>
+          <Input
+            value={value.tone ?? ""}
+            onChange={(event) => set({ tone: event.target.value })}
+            placeholder="Amigável e direto"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">
+            Tamanho máx. (caracteres)
+          </Label>
+          <Input
+            type="number"
+            min={50}
+            max={1000}
+            value={value.maxLength}
+            onChange={(event) =>
+              set({ maxLength: Math.max(1, Math.floor(Number(event.target.value) || 280)) })
+            }
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        A IA gera o texto e envia pelo mesmo canal do WhatsApp do lead. Usa as variáveis padrão{" "}
+        <code>{`{{cliente.nome}}`}</code>, <code>{`{{negociacao.titulo}}`}</code> no prompt.
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Registry
 
 type AnyConfigComponent = ComponentType<{
   value: ActionConfigByKind[ActionConfigKind];
   onChange: (next: ActionConfigByKind[ActionConfigKind]) => void;
+  context?: ActionConfigContext;
 }>;
 
 const COMPONENTS: { [K in ActionConfigKind]: ComponentType<ConfigProps<ActionConfigByKind[K]>> } = {
   wait: WaitActionConfig,
   whatsapp: WhatsAppActionConfig,
+  email: EmailActionConfig,
   "create-task": CreateTaskActionConfig,
   "create-deal": CreateDealActionConfig,
   "move-deal": MoveDealActionConfig,
   tag: TagActionConfig,
   webhook: WebhookActionConfig,
+  split: SplitActionConfig,
+  "add-to-flow": AddToFlowActionConfig,
+  "remove-from-flow": RemoveFromFlowActionConfig,
+  "ab-test": ABTestActionConfig,
+  "wait-until": WaitUntilActionConfig,
+  "smart-message": SmartMessageActionConfig,
 };
 
 export function pickConfigComponent(actionId: string): AnyConfigComponent | null {

@@ -69,6 +69,7 @@ import {
   MARKETING_FLOW_STATUSES,
   isMarketingFlowStatus,
 } from "@/lib/marketing/flow-types";
+import { statsFor, useMarketingFlowStats } from "@/lib/api/marketing-flow-stats";
 import { cn } from "@/lib/utils";
 
 type SortField = "createdAt" | "updatedAt";
@@ -195,6 +196,7 @@ export function MarketingAutomations() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: flows, isLoading, error } = useMarketingFlows();
+  const { data: stats } = useMarketingFlowStats();
   const createFlow = useCreateMarketingFlow();
   const updateFlow = useUpdateMarketingFlow();
   const duplicateFlow = useDuplicateMarketingFlow();
@@ -637,9 +639,9 @@ export function MarketingAutomations() {
                       {flow.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatNumber(flow.leadsEntry)}</TableCell>
+                  <TableCell>{formatNumber(statsFor(stats, flow.id).totalEntered)}</TableCell>
                   <TableCell>
-                    {flow.leadsActive === null ? "—" : formatNumber(flow.leadsActive)}
+                    {formatNumber(statsFor(stats, flow.id).activeCount)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {formatDateTime(flow.createdAt)}

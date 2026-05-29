@@ -14,6 +14,8 @@ export type WaitConfig = { days: number; hours: number; minutes: number };
 
 export type WhatsAppConfig = { message: string };
 
+export type EmailConfig = { subject: string; body: string };
+
 export type CreateTaskConfig = {
   title: string;
   description?: string;
@@ -39,14 +41,69 @@ export type WebhookConfig = {
   body?: string;
 };
 
+// ---------------------------------------------------------------- Fase 7
+
+export const SPLIT_OPERATORS = [
+  "equals",
+  "not_equals",
+  "contains",
+  "not_contains",
+  "exists",
+  "not_exists",
+  "greater_than",
+  "less_than",
+] as const;
+export type SplitOperator = (typeof SPLIT_OPERATORS)[number];
+
+export type SplitConfig = {
+  field: string;
+  operator: SplitOperator;
+  value: string;
+  trueStepId: string;
+  falseStepId: string;
+};
+
+export type AddToFlowConfig = { targetFlowId: string };
+export type RemoveFromFlowConfig = { targetFlowId: string; reason?: string };
+
+export type ABTestVariant = {
+  id: string;
+  label?: string;
+  weight: number;
+  nextStepId: string;
+};
+export type ABTestConfig = { variants: ABTestVariant[] };
+
+export type WaitUntilConfig = {
+  field: string;
+  operator: SplitOperator;
+  value: string;
+  checkIntervalMinutes: number;
+  timeoutHours: number;
+  alternativeStepId?: string;
+};
+
+export type SmartMessageConfig = {
+  prompt: string;
+  tone?: string;
+  maxLength: number;
+};
+
 export type ActionConfigByKind = {
   wait: WaitConfig;
   whatsapp: WhatsAppConfig;
+  email: EmailConfig;
   "create-task": CreateTaskConfig;
   "create-deal": CreateDealConfig;
   "move-deal": MoveDealConfig;
   tag: TagConfig;
   webhook: WebhookConfig;
+  split: SplitConfig;
+  "add-to-flow": AddToFlowConfig;
+  "remove-from-flow": RemoveFromFlowConfig;
+  "ab-test": ABTestConfig;
+  "wait-until": WaitUntilConfig;
+  "smart-message": SmartMessageConfig;
 };
 
 export type ActionConfigKind = keyof ActionConfigByKind;
@@ -60,12 +117,20 @@ export type ActionConfigKind = keyof ActionConfigByKind;
 export const ACTION_CONFIG_REGISTRY: Record<string, ActionConfigKind> = {
   espera: "wait",
   whatsapp: "whatsapp",
+  email: "email",
   "criar-tarefa-negociacao": "create-task",
   "criar-negociacao": "create-deal",
   "mover-negociacao": "move-deal",
   "adicionar-tags": "tag",
   "remover-tag": "tag",
   webhook: "webhook",
+  "dividir-caminho": "split",
+  "dividir-por-segmentacao": "split",
+  "adicionar-leads-outros-fluxos": "add-to-flow",
+  "remover-leads-outros-fluxos": "remove-from-flow",
+  "teste-ab": "ab-test",
+  "esperar-condicao": "wait-until",
+  "mensagem-inteligente": "smart-message",
 };
 
 export function getConfigKind(actionId: string): ActionConfigKind | null {
@@ -112,6 +177,11 @@ export function parseConfig<K extends ActionConfigKind>(
       } as ActionConfigByKind[K];
     case "whatsapp":
       return { message: toString(r.message) } as ActionConfigByKind[K];
+    case "email":
+      return {
+        subject: toString(r.subject),
+        body: toString(r.body),
+      } as ActionConfigByKind[K];
     case "create-task":
       return {
         title: toString(r.title),
@@ -137,6 +207,59 @@ export function parseConfig<K extends ActionConfigKind>(
         method: isWebhookMethod(r.method) ? r.method : "POST",
         headers: toString(r.headers) || undefined,
         body: toString(r.body) || undefined,
+      } as ActionConfigByKind[K];
+    case "split": {
+      const op = toString(r.operator);
+      return {
+        field: toString(r.field),
+        operator: (SPLIT_OPERATORS as readonly string[]).includes(op)
+          ? (op as SplitOperator)
+          : "equals",
+        value: toString(r.value),
+        trueStepId: toString(r.trueStepId),
+        falseStepId: toString(r.falseStepId),
+      } as ActionConfigByKind[K];
+    }
+    case "add-to-flow":
+      return { targetFlowId: toString(r.targetFlowId) } as ActionConfigByKind[K];
+    case "remove-from-flow":
+      return {
+        targetFlowId: toString(r.targetFlowId),
+        reason: toString(r.reason) || undefined,
+      } as ActionConfigByKind[K];
+    case "ab-test": {
+      const raw = Array.isArray(r.variants) ? r.variants : [];
+      const variants: ABTestVariant[] = raw
+        .map((v, i) => {
+          const vr = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+          return {
+            id: toString(vr.id) || `variant-${i + 1}`,
+            label: toString(vr.label) || undefined,
+            weight: Math.max(0, Math.floor(toNumber(vr.weight, 0))),
+            nextStepId: toString(vr.nextStepId),
+          };
+        })
+        .filter((v) => v !== null);
+      return { variants } as ActionConfigByKind[K];
+    }
+    case "wait-until": {
+      const op = toString(r.operator);
+      return {
+        field: toString(r.field),
+        operator: (SPLIT_OPERATORS as readonly string[]).includes(op)
+          ? (op as SplitOperator)
+          : "equals",
+        value: toString(r.value),
+        checkIntervalMinutes: Math.max(1, Math.floor(toNumber(r.checkIntervalMinutes, 30))),
+        timeoutHours: Math.max(0, Math.floor(toNumber(r.timeoutHours, 0))),
+        alternativeStepId: toString(r.alternativeStepId) || undefined,
+      } as ActionConfigByKind[K];
+    }
+    case "smart-message":
+      return {
+        prompt: toString(r.prompt),
+        tone: toString(r.tone) || undefined,
+        maxLength: Math.max(1, Math.floor(toNumber(r.maxLength, 280))),
       } as ActionConfigByKind[K];
   }
 }
@@ -182,6 +305,25 @@ export function validateActionConfig(
         ];
       }
       return [];
+    }
+    case "email": {
+      const c = config as EmailConfig;
+      const issues: IssueWithoutStep[] = [];
+      if (!c.subject.trim()) {
+        issues.push({
+          code: "EMAIL_NO_SUBJECT",
+          severity: "error",
+          message: `“${label}”: defina o assunto do e-mail.`,
+        });
+      }
+      if (!c.body.trim()) {
+        issues.push({
+          code: "EMAIL_NO_BODY",
+          severity: "error",
+          message: `“${label}”: defina o conteúdo do e-mail.`,
+        });
+      }
+      return issues;
     }
     case "create-task": {
       const c = config as CreateTaskConfig;
@@ -280,6 +422,145 @@ export function validateActionConfig(
       }
       return [];
     }
+    case "split": {
+      const c = config as SplitConfig;
+      const issues: IssueWithoutStep[] = [];
+      if (!c.field.trim()) {
+        issues.push({
+          code: "SPLIT_NO_FIELD",
+          severity: "error",
+          message: `“${label}”: defina o campo da condição.`,
+        });
+      }
+      const needsValue = c.operator !== "exists" && c.operator !== "not_exists";
+      if (needsValue && !c.value.trim()) {
+        issues.push({
+          code: "SPLIT_NO_VALUE",
+          severity: "error",
+          message: `“${label}”: defina o valor da condição.`,
+        });
+      }
+      if (!c.trueStepId) {
+        issues.push({
+          code: "SPLIT_NO_TRUE_STEP",
+          severity: "error",
+          message: `“${label}”: escolha o passo do caminho "sim".`,
+        });
+      }
+      if (!c.falseStepId) {
+        issues.push({
+          code: "SPLIT_NO_FALSE_STEP",
+          severity: "error",
+          message: `“${label}”: escolha o passo do caminho "não".`,
+        });
+      }
+      return issues;
+    }
+    case "add-to-flow": {
+      const c = config as AddToFlowConfig;
+      if (!c.targetFlowId) {
+        return [
+          {
+            code: "FLOW_NO_TARGET",
+            severity: "error",
+            message: `“${label}”: escolha o fluxo de destino.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "remove-from-flow": {
+      const c = config as RemoveFromFlowConfig;
+      if (!c.targetFlowId) {
+        return [
+          {
+            code: "FLOW_NO_TARGET",
+            severity: "error",
+            message: `“${label}”: escolha o fluxo de origem.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "ab-test": {
+      const c = config as ABTestConfig;
+      const issues: IssueWithoutStep[] = [];
+      if (c.variants.length < 2) {
+        issues.push({
+          code: "ABTEST_FEW_VARIANTS",
+          severity: "error",
+          message: `“${label}”: defina ao menos 2 variantes.`,
+        });
+      }
+      const sumWeights = c.variants.reduce((s, v) => s + v.weight, 0);
+      if (sumWeights !== 100) {
+        issues.push({
+          code: "ABTEST_WEIGHTS",
+          severity: "error",
+          message: `“${label}”: os pesos devem somar 100 (atual: ${sumWeights}).`,
+        });
+      }
+      for (const [i, v] of c.variants.entries()) {
+        if (!v.nextStepId) {
+          issues.push({
+            code: "ABTEST_NO_STEP",
+            severity: "error",
+            message: `“${label}”: variante ${i + 1} sem passo de destino.`,
+          });
+        }
+      }
+      return issues;
+    }
+    case "wait-until": {
+      const c = config as WaitUntilConfig;
+      const issues: IssueWithoutStep[] = [];
+      if (!c.field.trim()) {
+        issues.push({
+          code: "WAITUNTIL_NO_FIELD",
+          severity: "error",
+          message: `“${label}”: defina o campo da condição.`,
+        });
+      }
+      const needsValue = c.operator !== "exists" && c.operator !== "not_exists";
+      if (needsValue && !c.value.trim()) {
+        issues.push({
+          code: "WAITUNTIL_NO_VALUE",
+          severity: "error",
+          message: `“${label}”: defina o valor da condição.`,
+        });
+      }
+      if (c.checkIntervalMinutes < 1) {
+        issues.push({
+          code: "WAITUNTIL_INTERVAL",
+          severity: "error",
+          message: `“${label}”: intervalo de verificação precisa ser ≥ 1 minuto.`,
+        });
+      }
+      if (c.timeoutHours === 0) {
+        return [
+          ...issues,
+          {
+            code: "WAITUNTIL_NO_TIMEOUT",
+            severity: "warning",
+            message: `“${label}”: sem timeout. O lead pode ficar esperando indefinidamente.`,
+          },
+        ];
+      }
+      return issues;
+    }
+    case "smart-message": {
+      const c = config as SmartMessageConfig;
+      if (!c.prompt.trim()) {
+        return [
+          {
+            code: "SMART_NO_PROMPT",
+            severity: "error",
+            message: `“${label}”: defina o prompt para a IA.`,
+          },
+        ];
+      }
+      return [];
+    }
   }
 }
 
@@ -299,6 +580,12 @@ export function summarizeConfig(
       const c = config as WhatsAppConfig;
       const t = c.message.trim();
       return t.length > 60 ? `${t.slice(0, 60)}…` : t;
+    }
+    case "email": {
+      const c = config as EmailConfig;
+      if (!c.subject && !c.body) return "Configuração pendente";
+      const subj = c.subject.trim() || "(sem assunto)";
+      return subj.length > 60 ? `${subj.slice(0, 60)}…` : subj;
     }
     case "create-task": {
       const c = config as CreateTaskConfig;
@@ -325,6 +612,37 @@ export function summarizeConfig(
     case "webhook": {
       const c = config as WebhookConfig;
       return c.url ? `${c.method} ${c.url}` : "URL pendente";
+    }
+    case "split": {
+      const c = config as SplitConfig;
+      if (!c.field) return "Condição pendente";
+      const needsValue = c.operator !== "exists" && c.operator !== "not_exists";
+      const v = needsValue ? ` ${c.value}` : "";
+      return `${c.field} ${c.operator}${v}`;
+    }
+    case "add-to-flow": {
+      const c = config as AddToFlowConfig;
+      return c.targetFlowId ? `→ fluxo ${c.targetFlowId.slice(0, 8)}` : "Fluxo pendente";
+    }
+    case "remove-from-flow": {
+      const c = config as RemoveFromFlowConfig;
+      return c.targetFlowId ? `← fluxo ${c.targetFlowId.slice(0, 8)}` : "Fluxo pendente";
+    }
+    case "ab-test": {
+      const c = config as ABTestConfig;
+      if (c.variants.length === 0) return "Sem variantes";
+      return c.variants.map((v) => `${v.weight}%`).join(" / ");
+    }
+    case "wait-until": {
+      const c = config as WaitUntilConfig;
+      if (!c.field) return "Condição pendente";
+      const timeout = c.timeoutHours > 0 ? ` (timeout ${c.timeoutHours}h)` : "";
+      return `${c.field} ${c.operator} ${c.value}${timeout}`;
+    }
+    case "smart-message": {
+      const c = config as SmartMessageConfig;
+      if (!c.prompt) return "Prompt pendente";
+      return c.prompt.length > 60 ? `${c.prompt.slice(0, 60)}…` : c.prompt;
     }
   }
 }
