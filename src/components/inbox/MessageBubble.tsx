@@ -50,9 +50,11 @@ function showBubbleTail(position: BubbleGroupPosition): boolean {
 function MessageAttachment({
   presentation,
   isOutbound,
+  onAudioPlaybackChange,
 }: {
   presentation: NonNullable<ReturnType<typeof resolveInboxAttachmentPresentation>>;
   isOutbound: boolean;
+  onAudioPlaybackChange?: (playing: boolean) => void;
 }) {
   const [mediaBlocked, setMediaBlocked] = useState(false);
   const cardClass = isOutbound
@@ -116,6 +118,9 @@ function MessageAttachment({
           controls
           src={presentation.url}
           className={cn("h-10 w-[min(70vw,300px)] max-w-full", isOutbound ? "opacity-95" : "")}
+          onPlay={() => onAudioPlaybackChange?.(true)}
+          onPause={() => onAudioPlaybackChange?.(false)}
+          onEnded={() => onAudioPlaybackChange?.(false)}
           onError={() => setMediaBlocked(true)}
         />
       );
@@ -170,6 +175,8 @@ type MessageBubbleProps = {
   onReply?: (message: WhatsappMessage) => void;
   /** Clique no botão "Encaminhar" da bolha. */
   onForward?: (message: WhatsappMessage) => void;
+  /** Mantem a bolha renderizada enquanto um audio toca, mesmo fora da viewport virtualizada. */
+  onAudioPlaybackChange?: (messageId: string, playing: boolean) => void;
   retryPending?: boolean;
   /** Quando setado, ocorrências dessa query no body são envolvidas em &lt;mark&gt;. */
   highlightQuery?: string;
@@ -298,6 +305,7 @@ function MessageBubbleImpl({
   onDiscard,
   onReply,
   onForward,
+  onAudioPlaybackChange,
   retryPending = false,
   highlightQuery,
 }: MessageBubbleProps) {
@@ -398,7 +406,15 @@ function MessageBubbleImpl({
 
               {presentation ? (
                 <div className={bodyText ? "mb-1" : undefined}>
-                  <MessageAttachment presentation={presentation} isOutbound={isOutbound} />
+                  <MessageAttachment
+                    presentation={presentation}
+                    isOutbound={isOutbound}
+                    onAudioPlaybackChange={
+                      presentation.kind === "audio"
+                        ? (playing) => onAudioPlaybackChange?.(message.id, playing)
+                        : undefined
+                    }
+                  />
                 </div>
               ) : null}
 
@@ -502,6 +518,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps) {
   if (prev.onDiscard !== next.onDiscard) return false;
   if (prev.onReply !== next.onReply) return false;
   if (prev.onForward !== next.onForward) return false;
+  if (prev.onAudioPlaybackChange !== next.onAudioPlaybackChange) return false;
   if (prev.retryPending !== next.retryPending) return false;
   if ((prev.highlightQuery ?? "") !== (next.highlightQuery ?? "")) return false;
   // Identidade do quoted basta — o conteúdo dele não muda em runtime; chega novo objeto = re-render.

@@ -1,4 +1,4 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ArrowDown, ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
 import { ForwardMessageDialog } from "./ForwardMessageDialog";
@@ -124,6 +124,26 @@ export function MessageThread({
     return map;
   }, [flat]);
 
+  const [playingAudioMessageId, setPlayingAudioMessageId] = useState<string | null>(null);
+  const playingAudioIndex = useMemo(() => {
+    if (!playingAudioMessageId) return null;
+    const index = flat.findIndex(
+      (item) => item.kind === "msg" && item.message.id === playingAudioMessageId,
+    );
+    return index >= 0 ? index : null;
+  }, [flat, playingAudioMessageId]);
+
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      if (playingAudioIndex == null || indexes.includes(playingAudioIndex)) {
+        return indexes;
+      }
+      return [...indexes, playingAudioIndex].sort((a, b) => a - b);
+    },
+    [playingAudioIndex],
+  );
+
   const estimateSize = useCallback(
     (index: number) => estimateThreadItemSize(flat[index]),
     [flat],
@@ -134,6 +154,7 @@ export function MessageThread({
     getScrollElement: () => scrollRef.current,
     estimateSize,
     getItemKey: (index) => flat[index]?.key ?? index,
+    rangeExtractor,
     overscan: 8,
   });
 
@@ -216,6 +237,13 @@ export function MessageThread({
   }
 
   const loadOlderArmedRef = useRef(true);
+
+  const handleAudioPlaybackChange = useCallback((messageId: string, playing: boolean) => {
+    setPlayingAudioMessageId((current) => {
+      if (playing) return messageId;
+      return current === messageId ? null : current;
+    });
+  }, []);
 
   const reportScrollState = useCallback(() => {
     const node = scrollRef.current;
@@ -396,6 +424,7 @@ export function MessageThread({
                     onDiscard={onDiscardMessage}
                     onReply={onReplyMessage}
                     onForward={setForwardMessage}
+                    onAudioPlaybackChange={handleAudioPlaybackChange}
                     retryPending={retryingMessageId === item.message.id}
                     highlightQuery={searchOpen ? searchQuery : undefined}
                   />
