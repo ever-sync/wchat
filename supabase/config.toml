@@ -47,6 +47,14 @@ verify_jwt = false
 [functions.webhook-dispatcher]
 verify_jwt = false
 
+# Dispatch de conversões de Ads (Meta CAPI / Google Ads): chamado por cron (x-cron-secret).
+[functions.marketing-ad-conversion-dispatch]
+verify_jwt = false
+
+# Ingestão de eventos externos para automações de marketing via API key.
+[functions.marketing-webhook-ingest]
+verify_jwt = false
+
 # Orquestrador de IA: drenado por cron (x-cron-secret); valida internamente.
 [functions.ai-orchestrator]
 verify_jwt = false

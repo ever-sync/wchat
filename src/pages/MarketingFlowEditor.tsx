@@ -3,14 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import {
   AlertCircle,
   AlertTriangle,
-  ChevronRight,
   FileDown,
-  GripVertical,
   Loader2,
-  Minus,
   Pencil,
   Plus,
   Sparkles,
+  UserPlus,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { MarketingFlowActionsPanel } from "@/components/marketing/MarketingFlowActionsPanel";
+import { MarketingFlowTriggerSettingsPanel } from "@/components/marketing/MarketingFlowTriggerSettingsPanel";
 import {
   ACTION_ICONS,
   DRAG_MIME,
@@ -57,9 +56,17 @@ import {
   parseConfig,
   summarizeConfig,
 } from "@/lib/marketing/flow-action-configs";
+import {
+  getMarketingTriggerDefinition,
+  summarizeMarketingTrigger,
+} from "@/lib/marketing/flow-triggers";
 import { pickConfigComponent } from "@/components/marketing/action-configs";
 import { FlowExecutionsPanel } from "@/components/marketing/FlowExecutionsPanel";
 import { SimulatorDialog } from "@/components/marketing/SimulatorDialog";
+import { FlowCanvas, type NodePositions } from "@/components/marketing/FlowCanvas";
+import { ManualEnrollDialog } from "@/components/marketing/ManualEnrollDialog";
+import { withExplicitGraph, FLOW_DEFINITION_FORMAT } from "@/lib/marketing/flow-graph";
+import type { MarketingFlowEdge } from "@/lib/marketing/flow-types";
 import { cn } from "@/lib/utils";
 
 type FlowTab = "editor" | "configuracoes" | "saida" | "historico";
@@ -113,10 +120,6 @@ function parseStepsFromDefinition(definition: Record<string, unknown> | undefine
     .filter((step): step is FlowStep => step !== null);
 }
 
-const STEP_MOVE_MIME = "application/x-marketing-step-move";
-
-type StepMovePayload = { stepId: string };
-
 type FlowCriteria = { conditions: string[] };
 
 function parseCriteria(criteria: Record<string, unknown> | undefined): FlowCriteria {
@@ -159,6 +162,60 @@ function parseExitConditions(definition: Record<string, unknown> | undefined): s
     .filter((s) => s.length > 0);
 }
 
+/** Reidrata as arestas explicitas do grafo (format >= 2). */
+function parseEdgesFromDefinition(
+  definition: Record<string, unknown> | undefined,
+): MarketingFlowEdge[] {
+  const raw = definition?.edges;
+  if (!Array.isArray(raw)) return [];
+  const out: MarketingFlowEdge[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const from = typeof rec.from === "string" ? rec.from : "";
+    const to = typeof rec.to === "string" ? rec.to : "";
+    if (!from || !to) continue;
+    const branch = typeof rec.branch === "string" && rec.branch ? rec.branch : undefined;
+    out.push(branch ? { from, to, branch } : { from, to });
+  }
+  return out;
+}
+
+/** Reidrata as posicoes dos nos salvas em `definition.positions`. */
+function parsePositionsFromDefinition(
+  definition: Record<string, unknown> | undefined,
+): NodePositions {
+  const raw = definition?.positions;
+  if (!raw || typeof raw !== "object") return {};
+  const out: NodePositions = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const rec = value as Record<string, unknown>;
+    if (typeof rec.x === "number" && typeof rec.y === "number") {
+      out[id] = { x: rec.x, y: rec.y };
+    }
+  }
+  return out;
+}
+
+/**
+ * Monta a definition normalizada com grafo explicito. Respeita as arestas
+ * desenhadas no canvas; se nenhuma foi desenhada (fluxo legado linear), deriva
+ * do legado via withExplicitGraph. Sempre carimba format 2 + positions.
+ */
+function buildGraphDefinition(
+  base: Record<string, unknown>,
+  steps: FlowStep[],
+  edges: MarketingFlowEdge[],
+  positions: NodePositions,
+): Record<string, unknown> {
+  const withSteps = { ...base, steps, positions };
+  if (edges.length > 0) {
+    return { ...withSteps, edges, format: FLOW_DEFINITION_FORMAT };
+  }
+  return withExplicitGraph(withSteps);
+}
+
 function TabButton({
   label,
   active,
@@ -185,192 +242,6 @@ function TabButton({
         />
       ) : null}
     </button>
-  );
-}
-
-function PlusConnector() {
-  return (
-    <div
-      aria-hidden
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm"
-    >
-      <Plus className="h-3.5 w-3.5" aria-hidden />
-    </div>
-  );
-}
-
-function DropZone({
-  index,
-  isDragging,
-  onDrop,
-  onMove,
-}: {
-  index: number;
-  isDragging: boolean;
-  onDrop: (index: number, payload: DragPayload) => void;
-  onMove: (index: number, payload: StepMovePayload) => void;
-}) {
-  const [hover, setHover] = useState(false);
-
-  const acceptsDrag = (types: ReadonlyArray<string> | DOMStringList) => {
-    const arr = Array.from(types as ArrayLike<string>);
-    return arr.includes(DRAG_MIME) || arr.includes(STEP_MOVE_MIME);
-  };
-
-  return (
-    <div
-      onDragOver={(event) => {
-        if (acceptsDrag(event.dataTransfer.types)) {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes(
-            STEP_MOVE_MIME,
-          )
-            ? "move"
-            : "copy";
-        }
-      }}
-      onDragEnter={(event) => {
-        if (acceptsDrag(event.dataTransfer.types)) {
-          setHover(true);
-        }
-      }}
-      onDragLeave={() => setHover(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        setHover(false);
-        const moveRaw = event.dataTransfer.getData(STEP_MOVE_MIME);
-        if (moveRaw) {
-          try {
-            const payload = JSON.parse(moveRaw) as StepMovePayload;
-            onMove(index, payload);
-          } catch {
-            // ignore invalid payload
-          }
-          return;
-        }
-        const raw =
-          event.dataTransfer.getData(DRAG_MIME) ||
-          event.dataTransfer.getData("text/plain");
-        if (!raw) return;
-        try {
-          const payload = JSON.parse(raw) as DragPayload;
-          onDrop(index, payload);
-        } catch {
-          // ignore invalid payload
-        }
-      }}
-      className={cn(
-        "flex h-[72px] shrink-0 items-center justify-center transition-all",
-        isDragging ? "w-32 px-2" : "w-6",
-      )}
-    >
-      <div
-        className={cn(
-          "flex h-full w-full items-center justify-center rounded-xl border-2 border-dashed transition-colors",
-          isDragging
-            ? hover
-              ? "border-primary bg-primary/10"
-              : "border-primary/40 bg-primary/5"
-            : "border-transparent",
-        )}
-      >
-        {!isDragging ? <PlusConnector /> : null}
-      </div>
-    </div>
-  );
-}
-
-function StepSubtitle({
-  subtitle,
-  variant,
-}: {
-  subtitle: string;
-  variant: SubtitleVariant;
-}) {
-  if (variant === "chip") {
-    return (
-      <span className="inline-flex w-fit items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {subtitle}
-      </span>
-    );
-  }
-  if (variant === "primary") {
-    return <span className="text-sm font-semibold text-primary">{subtitle}</span>;
-  }
-  if (variant === "multiline") {
-    return <span className="text-sm leading-snug text-foreground">{subtitle}</span>;
-  }
-  return <span className="text-sm text-muted-foreground">{subtitle}</span>;
-}
-
-function StepCard({
-  step,
-  onRemove,
-  onEdit,
-}: {
-  step: FlowStep;
-  onRemove: (id: string) => void;
-  onEdit: (id: string) => void;
-}) {
-  const Icon = ACTION_ICONS[step.iconKey];
-  const isMultiline =
-    step.subtitleVariant === "multiline" || step.subtitleVariant === "chip";
-
-  return (
-    <div
-      draggable
-      onDragStart={(event) => {
-        const payload: StepMovePayload = { stepId: step.id };
-        event.dataTransfer.setData(STEP_MOVE_MIME, JSON.stringify(payload));
-        event.dataTransfer.effectAllowed = "move";
-      }}
-      onClick={() => onEdit(step.id)}
-      className="group relative flex shrink-0 cursor-grab items-start gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm transition-colors hover:border-primary/50 active:cursor-grabbing"
-    >
-      <GripVertical
-        className="absolute left-1 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-        aria-hidden
-      />
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove(step.id);
-        }}
-        aria-label={`Remover ${step.label}`}
-        className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive group-hover:opacity-100 focus:opacity-100"
-      >
-        <X className="h-3.5 w-3.5" aria-hidden />
-      </button>
-      <span
-        className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white",
-          step.iconClass,
-          isMultiline ? "mt-0.5" : "",
-        )}
-      >
-        {Icon ? (
-          <Icon
-            className={cn(
-              "h-4 w-4",
-              step.iconKey === "star" ? "fill-current" : "",
-            )}
-            aria-hidden
-          />
-        ) : null}
-      </span>
-      <div
-        className={cn(
-          "flex flex-col gap-1",
-          step.subtitleVariant === "multiline" ? "max-w-xs" : "",
-        )}
-      >
-        <span className="text-sm font-semibold text-foreground">{step.label}</span>
-        {step.subtitle && step.subtitleVariant ? (
-          <StepSubtitle subtitle={step.subtitle} variant={step.subtitleVariant} />
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -419,6 +290,76 @@ function CriteriaCard({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function TriggerCard({
+  trigger,
+  onEdit,
+}: {
+  trigger: Record<string, unknown>;
+  onEdit: () => void;
+}) {
+  const type = typeof trigger.type === "string" ? trigger.type : "";
+  const definition = getMarketingTriggerDefinition(type);
+  const summary = summarizeMarketingTrigger(type, trigger.config);
+
+  return (
+    <div className="flex w-[360px] shrink-0 flex-col gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-950/30">
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 dark:text-violet-300">
+          <span className="h-2.5 w-2.5 rounded-full bg-violet-600" aria-hidden />
+          Gatilho inicial
+        </span>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex items-center gap-1 text-sm font-semibold text-violet-700 hover:underline dark:text-violet-300"
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden />
+          Ajustar
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-violet-200 bg-background/90 p-3 dark:border-violet-900/50 dark:bg-background/20">
+        {definition ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="rounded-full bg-violet-600 px-3 py-1 text-white hover:bg-violet-600">
+                {definition.label}
+              </Badge>
+              <Badge variant="outline" className="rounded-full px-3 py-1">
+                {definition.category === "manual"
+                  ? "Manual"
+                  : definition.category === "whatsapp"
+                    ? "WhatsApp"
+                    : definition.category === "forms"
+                      ? "Formulários"
+                      : definition.category === "tags"
+                        ? "Etiquetas"
+                        : definition.category === "crm"
+                          ? "CRM"
+                          : "IA"}
+              </Badge>
+            </div>
+            <p className="text-sm leading-snug text-foreground">{definition.description}</p>
+          </>
+        ) : (
+          <>
+            <Badge variant="outline" className="w-fit rounded-full px-3 py-1">
+              Sem gatilho definido
+            </Badge>
+            <p className="text-sm leading-snug text-muted-foreground">
+              Abra as configurações para escolher a fonte inicial deste fluxo.
+            </p>
+          </>
+        )}
+
+        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          {summary}
+        </div>
       </div>
     </div>
   );
@@ -640,34 +581,6 @@ function StepEditDialog({
   );
 }
 
-const TRIGGER_OPTIONS: { value: string; label: string; description: string }[] = [
-  {
-    value: "manual",
-    label: "Manual",
-    description: "Leads entram apenas se adicionados manualmente ou por outro fluxo.",
-  },
-  {
-    value: "form_submitted",
-    label: "Formulário enviado",
-    description: "Dispara quando um lead envia qualquer formulário de marketing.",
-  },
-  {
-    value: "tag_added",
-    label: "Etiqueta adicionada",
-    description: "Dispara quando uma etiqueta nova é aplicada a um lead.",
-  },
-  {
-    value: "negotiation_created",
-    label: "Negociação criada",
-    description: "Dispara quando uma nova negociação entra no CRM.",
-  },
-  {
-    value: "negotiation_stage_changed",
-    label: "Etapa do CRM alterada",
-    description: "Dispara quando uma negociação muda de etapa no funil.",
-  },
-];
-
 function FlowSettingsPanel({
   flow,
   onPatch,
@@ -680,8 +593,6 @@ function FlowSettingsPanel({
   isPending: boolean;
 }) {
   const settings = parseFlowSettings(flow.definition);
-  const currentTriggerType =
-    typeof flow.trigger.type === "string" ? flow.trigger.type : "";
   const [abandonDraft, setAbandonDraft] = useState(
     settings.autoAbandonDays != null ? String(settings.autoAbandonDays) : "",
   );
@@ -717,42 +628,11 @@ function FlowSettingsPanel({
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="flow-trigger" className="text-sm font-semibold">
-              Gatilho de entrada
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Define o evento que coloca leads dentro deste fluxo.
-            </p>
-          </div>
-          <Select
-            value={currentTriggerType || undefined}
-            onValueChange={(next) => {
-              if (next === currentTriggerType) return;
-              onTriggerChange({ ...flow.trigger, type: next });
-            }}
-            disabled={isPending}
-          >
-            <SelectTrigger id="flow-trigger">
-              <SelectValue placeholder="Selecione um gatilho" />
-            </SelectTrigger>
-            <SelectContent>
-              {TRIGGER_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {currentTriggerType ? (
-            <p className="text-xs text-muted-foreground">
-              {TRIGGER_OPTIONS.find((o) => o.value === currentTriggerType)?.description}
-            </p>
-          ) : null}
-        </div>
-      </div>
+      <MarketingFlowTriggerSettingsPanel
+        flow={flow}
+        onTriggerChange={onTriggerChange}
+        isPending={isPending}
+      />
 
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
@@ -964,10 +844,11 @@ export default function MarketingFlowEditor() {
   const updateFlow = useUpdateMarketingFlow();
   const publishFlow = usePublishMarketingFlow();
   const [tab, setTab] = useState<FlowTab>("editor");
-  const [zoom, setZoom] = useState(1);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [steps, setSteps] = useState<FlowStep[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
+  const [edges, setEdges] = useState<MarketingFlowEdge[]>([]);
+  const [positions, setPositions] = useState<NodePositions>({});
+  const [manualEnrollOpen, setManualEnrollOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
@@ -988,53 +869,49 @@ export default function MarketingFlowEditor() {
     if (hydratedFor.current === flow.id) return;
     const loaded = parseStepsFromDefinition(flow.definition);
     setSteps(loaded);
+    setEdges(parseEdgesFromDefinition(flow.definition));
+    setPositions(parsePositionsFromDefinition(flow.definition));
     stepCounter.current = loaded.length;
     hydratedFor.current = flow.id;
   }, [flow]);
 
-  useEffect(() => {
-    const handleDragStart = (event: DragEvent) => {
-      const types = event.dataTransfer?.types;
-      if (
-        types &&
-        (Array.from(types).includes(DRAG_MIME) || Array.from(types).includes(STEP_MOVE_MIME))
-      ) {
-        setIsDragging(true);
-      }
+  // Solta uma acao no canvas na posicao do cursor (coords ja em flow-space).
+  const handleDropOnCanvas = (
+    payload: DragPayload,
+    point: { x: number; y: number },
+  ) => {
+    stepCounter.current += 1;
+    const newStep: FlowStep = {
+      id: `${stepIdPrefix}-${stepCounter.current}`,
+      actionId: payload.actionId,
+      label: payload.label,
+      iconKey: payload.iconKey,
+      iconClass: payload.iconClass,
+      subtitle: payload.defaultSubtitle,
+      subtitleVariant: payload.defaultSubtitle ? "plain" : undefined,
     };
-    const handleDragEnd = () => setIsDragging(false);
+    setSteps((prev) => [...prev, newStep]);
+    setPositions((prev) => ({ ...prev, [newStep.id]: point }));
+  };
 
-    document.addEventListener("dragstart", handleDragStart);
-    document.addEventListener("dragend", handleDragEnd);
-    document.addEventListener("drop", handleDragEnd);
-    return () => {
-      document.removeEventListener("dragstart", handleDragStart);
-      document.removeEventListener("dragend", handleDragEnd);
-      document.removeEventListener("drop", handleDragEnd);
-    };
-  }, []);
-
-  const handleDropAt = (index: number, payload: DragPayload) => {
-    setSteps((prev) => {
-      stepCounter.current += 1;
-      const newStep: FlowStep = {
-        id: `${stepIdPrefix}-${stepCounter.current}`,
-        actionId: payload.actionId,
-        label: payload.label,
-        iconKey: payload.iconKey,
-        iconClass: payload.iconClass,
-        subtitle: payload.defaultSubtitle,
-        subtitleVariant: payload.defaultSubtitle ? "plain" : undefined,
-      };
-      const next = [...prev];
-      next.splice(index, 0, newStep);
-      return next;
-    });
-    setIsDragging(false);
+  // O canvas (React Flow) emite o grafo normalizado apos cada commit interno.
+  const handleGraphChange = (next: {
+    edges: MarketingFlowEdge[];
+    positions: NodePositions;
+  }) => {
+    setEdges(next.edges);
+    setPositions(next.positions);
   };
 
   const handleRemoveStep = (stepId: string) => {
     setSteps((prev) => prev.filter((step) => step.id !== stepId));
+    setEdges((prev) => prev.filter((e) => e.from !== stepId && e.to !== stepId));
+    setPositions((prev) => {
+      if (!(stepId in prev)) return prev;
+      const next = { ...prev };
+      delete next[stepId];
+      return next;
+    });
   };
 
   const handleUpdateStep = (stepId: string, patch: Partial<FlowStep>) => {
@@ -1047,21 +924,6 @@ export default function MarketingFlowEditor() {
   const editingStep = editingStepId
     ? steps.find((step) => step.id === editingStepId) ?? null
     : null;
-
-  const handleMoveStep = (toIndex: number, payload: StepMovePayload) => {
-    setSteps((prev) => {
-      const fromIndex = prev.findIndex((s) => s.id === payload.stepId);
-      if (fromIndex === -1) return prev;
-      // Quando movendo pra frente, o splice-out desloca os índices subsequentes em 1.
-      const adjustedTo = fromIndex < toIndex ? toIndex - 1 : toIndex;
-      if (fromIndex === adjustedTo) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(adjustedTo, 0, moved);
-      return next;
-    });
-    setIsDragging(false);
-  };
 
   const startEditName = () => {
     if (!flow) return;
@@ -1143,7 +1005,7 @@ export default function MarketingFlowEditor() {
 
   const persist = () => {
     if (!flow) return;
-    const nextDefinition = { ...flow.definition, steps };
+    const nextDefinition = buildGraphDefinition(flow.definition, steps, edges, positions);
     updateFlow.mutate(
       { id: flow.id, patch: { definition: nextDefinition } },
       {
@@ -1160,7 +1022,7 @@ export default function MarketingFlowEditor() {
 
   const buildSnapshot = (currentFlow: MarketingFlowRecord) => ({
     name: currentFlow.name,
-    definition: { ...currentFlow.definition, steps },
+    definition: buildGraphDefinition(currentFlow.definition, steps, edges, positions),
     criteria: currentFlow.criteria,
     trigger: currentFlow.trigger,
   });
@@ -1169,7 +1031,7 @@ export default function MarketingFlowEditor() {
     if (!flow) return null;
     return validateFlow(buildSnapshot(flow));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow, steps]);
+  }, [flow, steps, edges, positions]);
 
   const doPublish = (result: ValidationResult) => {
     if (!flow) return;
@@ -1331,6 +1193,16 @@ export default function MarketingFlowEditor() {
           <Button
             type="button"
             variant="ghost"
+            className="gap-2 text-primary hover:bg-primary/10"
+            onClick={() => setManualEnrollOpen(true)}
+            disabled={!flow}
+          >
+            <UserPlus className="h-4 w-4" aria-hidden />
+            Inscrever leads
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
             className="text-primary hover:bg-primary/10"
             onClick={persist}
             disabled={!flow || updateFlow.isPending}
@@ -1382,71 +1254,49 @@ export default function MarketingFlowEditor() {
 
       {flow && tab === "editor" ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <div className="pointer-events-none absolute right-6 top-6 z-10">
-            <button
-              type="button"
-              onClick={() => setActionsOpen(true)}
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:text-primary"
-            >
-              Ações
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </button>
+          {/* Faixa de entrada: gatilho + critérios (editáveis nas abas/dialogs). */}
+          <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-border bg-card/60 px-6 py-4">
+            <TriggerCard trigger={flow.trigger} onEdit={() => setTab("configuracoes")} />
+            <CriteriaCard
+              conditions={flowCriteria.conditions}
+              onEdit={() => setCriteriaDialogOpen(true)}
+            />
           </div>
 
-          <MarketingFlowActionsPanel open={actionsOpen} onOpenChange={setActionsOpen} />
-
-          <div className="min-h-0 flex-1 overflow-auto">
-            <div
-              className="flex min-w-max items-center gap-3 px-10 py-24"
-              style={{ transform: `scale(${zoom})`, transformOrigin: "left center" }}
-            >
-              <CriteriaCard
-                conditions={flowCriteria.conditions}
-                onEdit={() => setCriteriaDialogOpen(true)}
-              />
-              <DropZone
-                index={0}
-                isDragging={isDragging}
-                onDrop={handleDropAt}
-                onMove={handleMoveStep}
-              />
-              {steps.map((step, index) => (
-                <div key={step.id} className="flex items-center gap-3">
-                  <StepCard
-                    step={step}
-                    onRemove={handleRemoveStep}
-                    onEdit={setEditingStepId}
-                  />
-                  <DropZone
-                    index={index + 1}
-                    isDragging={isDragging}
-                    onDrop={handleDropAt}
-                    onMove={handleMoveStep}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2">
-            <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-primary/10 p-1 shadow-sm">
+          <div className="relative min-h-0 flex-1">
+            <div className="pointer-events-none absolute right-6 top-6 z-10">
               <button
                 type="button"
-                aria-label="Diminuir zoom"
-                onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15"
+                onClick={() => setActionsOpen(true)}
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:text-primary"
               >
-                <Minus className="h-4 w-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                aria-label="Aumentar zoom"
-                onClick={() => setZoom((z) => Math.min(2, Number((z + 0.1).toFixed(2))))}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/15"
-              >
+                Ações
                 <Plus className="h-4 w-4" aria-hidden />
               </button>
             </div>
+
+            <MarketingFlowActionsPanel open={actionsOpen} onOpenChange={setActionsOpen} />
+
+            <FlowCanvas
+              key={`${flow.id}:${steps.map((s) => s.id).join(",")}`}
+              steps={steps}
+              edges={edges}
+              positions={positions}
+              onEditStep={setEditingStepId}
+              onRemoveStep={handleRemoveStep}
+              onGraphChange={handleGraphChange}
+              onDropAction={handleDropOnCanvas}
+            />
+
+            {steps.length === 0 ? (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Comece arrastando uma ação</p>
+                <p className="max-w-sm">
+                  Abra <span className="font-semibold">Ações</span> e arraste para o canvas.
+                  Conecte os cartões para definir o caminho do lead.
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : flow ? (
@@ -1507,6 +1357,15 @@ export default function MarketingFlowEditor() {
         onOpenChange={setSimulatorOpen}
         definition={flow ? { ...flow.definition, steps } : null}
       />
+
+      {flow ? (
+        <ManualEnrollDialog
+          open={manualEnrollOpen}
+          onOpenChange={setManualEnrollOpen}
+          flowId={flow.id}
+          flowActive={flow.status === "ativo"}
+        />
+      ) : null}
     </div>
   );
 }

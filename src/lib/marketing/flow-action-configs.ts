@@ -89,6 +89,33 @@ export type SmartMessageConfig = {
   maxLength: number;
 };
 
+export type SetVariableAssignment = { key: string; value: string };
+export type SetVariableConfig = { assignments: SetVariableAssignment[] };
+
+// ---------------------------------------------------------------- Fase 4 (CRM)
+
+export type UpdateDealTitleConfig = { title: string };
+
+// Valores reais da check constraint de crm_negotiations.status.
+export const DEAL_STATUS_VALUES = [
+  "em_andamento",
+  "vendido",
+  "perdido",
+  "pausado",
+  "nao_pausado",
+] as const;
+export type DealStatus = (typeof DEAL_STATUS_VALUES)[number];
+export type UpdateDealStatusConfig = { status: DealStatus; lossReason?: string };
+
+export type AddNoteConfig = { note: string };
+
+/** valueCents vazio => mantém o valor atual da negociação. */
+export type MarkSaleConfig = { valueCents: string };
+
+// Classificação por IA (Fase 6): ramifica pelo rótulo escolhido pelo Claude.
+export type AiClassifyCategory = { label: string; nextStepId: string };
+export type AiClassifyConfig = { prompt: string; categories: AiClassifyCategory[] };
+
 export type ActionConfigByKind = {
   wait: WaitConfig;
   whatsapp: WhatsAppConfig;
@@ -104,6 +131,12 @@ export type ActionConfigByKind = {
   "ab-test": ABTestConfig;
   "wait-until": WaitUntilConfig;
   "smart-message": SmartMessageConfig;
+  "set-variable": SetVariableConfig;
+  "update-deal-title": UpdateDealTitleConfig;
+  "update-deal-status": UpdateDealStatusConfig;
+  "add-note": AddNoteConfig;
+  "mark-sale": MarkSaleConfig;
+  "ai-classify": AiClassifyConfig;
 };
 
 export type ActionConfigKind = keyof ActionConfigByKind;
@@ -131,6 +164,12 @@ export const ACTION_CONFIG_REGISTRY: Record<string, ActionConfigKind> = {
   "teste-ab": "ab-test",
   "esperar-condicao": "wait-until",
   "mensagem-inteligente": "smart-message",
+  "definir-variavel": "set-variable",
+  "atualizar-nome-negociacao": "update-deal-title",
+  "atualizar-status": "update-deal-status",
+  "adicionar-anotacao": "add-note",
+  "marcar-venda": "mark-sale",
+  "classificar-ia": "ai-classify",
 };
 
 export function getConfigKind(actionId: string): ActionConfigKind | null {
@@ -261,7 +300,39 @@ export function parseConfig<K extends ActionConfigKind>(
         tone: toString(r.tone) || undefined,
         maxLength: Math.max(1, Math.floor(toNumber(r.maxLength, 280))),
       } as ActionConfigByKind[K];
+    case "set-variable": {
+      const raw = Array.isArray(r.assignments) ? r.assignments : [];
+      const assignments: SetVariableAssignment[] = raw.map((a) => {
+        const ar = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+        return { key: toString(ar.key), value: toString(ar.value) };
+      });
+      return { assignments } as ActionConfigByKind[K];
+    }
+    case "update-deal-title":
+      return { title: toString(r.title) } as ActionConfigByKind[K];
+    case "update-deal-status": {
+      const s = toString(r.status);
+      return {
+        status: (DEAL_STATUS_VALUES as readonly string[]).includes(s)
+          ? (s as DealStatus)
+          : "em_andamento",
+        lossReason: toString(r.lossReason) || undefined,
+      } as ActionConfigByKind[K];
+    }
+    case "add-note":
+      return { note: toString(r.note) } as ActionConfigByKind[K];
+    case "mark-sale":
+      return { valueCents: toString(r.valueCents) } as ActionConfigByKind[K];
+    case "ai-classify": {
+      const raw = Array.isArray(r.categories) ? r.categories : [];
+      const categories: AiClassifyCategory[] = raw.map((v) => {
+        const vr = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+        return { label: toString(vr.label), nextStepId: toString(vr.nextStepId) };
+      });
+      return { prompt: toString(r.prompt), categories } as ActionConfigByKind[K];
+    }
   }
+  throw new Error(`Unsupported action config kind: ${String(kind)}`);
 }
 
 export function defaultConfig<K extends ActionConfigKind>(kind: K): ActionConfigByKind[K] {
@@ -561,10 +632,110 @@ export function validateActionConfig(
       }
       return [];
     }
+    case "set-variable": {
+      const c = config as SetVariableConfig;
+      if (c.assignments.filter((a) => a.key.trim()).length === 0) {
+        return [
+          {
+            code: "VAR_EMPTY",
+            severity: "error",
+            message: `“${label}”: defina ao menos uma variável (com nome).`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "update-deal-title": {
+      const c = config as UpdateDealTitleConfig;
+      if (!c.title.trim()) {
+        return [
+          {
+            code: "DEAL_TITLE_EMPTY",
+            severity: "error",
+            message: `“${label}”: defina o novo nome da negociação.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "update-deal-status": {
+      const c = config as UpdateDealStatusConfig;
+      if (!(DEAL_STATUS_VALUES as readonly string[]).includes(c.status)) {
+        return [
+          {
+            code: "DEAL_STATUS_INVALID",
+            severity: "error",
+            message: `“${label}”: selecione um status válido.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "add-note": {
+      const c = config as AddNoteConfig;
+      if (!c.note.trim()) {
+        return [
+          {
+            code: "NOTE_EMPTY",
+            severity: "error",
+            message: `“${label}”: escreva o conteúdo da anotação.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "mark-sale": {
+      const c = config as MarkSaleConfig;
+      if (c.valueCents.trim() && !Number.isFinite(Number(c.valueCents))) {
+        return [
+          {
+            code: "SALE_VALUE_INVALID",
+            severity: "error",
+            message: `“${label}”: valor da venda inválido.`,
+          },
+        ];
+      }
+      return [];
+    }
+    case "ai-classify": {
+      const c = config as AiClassifyConfig;
+      const issues: IssueWithoutStep[] = [];
+      if (!c.prompt.trim()) {
+        issues.push({
+          code: "AI_NO_PROMPT",
+          severity: "error",
+          message: `“${label}”: descreva o que a IA deve classificar.`,
+        });
+      }
+      const valid = c.categories.filter((cat) => cat.label.trim());
+      if (valid.length < 2) {
+        issues.push({
+          code: "AI_FEW_CATEGORIES",
+          severity: "error",
+          message: `“${label}”: defina ao menos 2 categorias.`,
+        });
+      }
+      for (const [i, cat] of c.categories.entries()) {
+        if (cat.label.trim() && !cat.nextStepId) {
+          issues.push({
+            code: "AI_NO_STEP",
+            severity: "error",
+            message: `“${label}”: categoria ${i + 1} ("${cat.label}") sem passo de destino.`,
+          });
+        }
+      }
+      return issues;
+    }
   }
+  throw new Error(`Unsupported action config kind: ${String(kind)}`);
 }
 
 // ---------------------------------------------------------------- Summarize
+
+function truncate(text: string, max: number): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+}
 
 export function summarizeConfig(
   kind: ActionConfigKind,
@@ -644,5 +815,43 @@ export function summarizeConfig(
       if (!c.prompt) return "Prompt pendente";
       return c.prompt.length > 60 ? `${c.prompt.slice(0, 60)}…` : c.prompt;
     }
+    case "set-variable": {
+      const c = config as SetVariableConfig;
+      const keys = c.assignments.map((a) => a.key.trim()).filter(Boolean);
+      return keys.length ? `Definir ${keys.join(", ")}` : "Sem variáveis";
+    }
+    case "update-deal-title": {
+      const c = config as UpdateDealTitleConfig;
+      return c.title.trim() ? truncate(c.title, 50) : "Nome pendente";
+    }
+    case "update-deal-status": {
+      const c = config as UpdateDealStatusConfig;
+      const label_: Record<DealStatus, string> = {
+        em_andamento: "Em andamento",
+        vendido: "Ganha (venda)",
+        perdido: "Perdida",
+        pausado: "Pausada",
+        nao_pausado: "Reativada",
+      };
+      return label_[c.status] ?? "Status";
+    }
+    case "add-note": {
+      const c = config as AddNoteConfig;
+      return c.note.trim() ? truncate(c.note, 50) : "Anotação pendente";
+    }
+    case "mark-sale": {
+      const c = config as MarkSaleConfig;
+      const n = Number(c.valueCents);
+      if (c.valueCents.trim() && Number.isFinite(n)) {
+        return `Venda · ${(n / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`;
+      }
+      return "Marcar venda";
+    }
+    case "ai-classify": {
+      const c = config as AiClassifyConfig;
+      const labels = c.categories.map((cat) => cat.label.trim()).filter(Boolean);
+      return labels.length ? `IA → ${labels.join(" / ")}` : "Classificação por IA";
+    }
   }
+  throw new Error(`Unsupported action config kind: ${String(kind)}`);
 }

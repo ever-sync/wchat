@@ -1,7 +1,7 @@
-import { MessageSquare, Webhook, Zap } from "lucide-react";
+import { Megaphone, MessageSquare, Webhook, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type IntegrationsSettingsSection = "whatsapp" | "automacao" | "webhooks";
+export type IntegrationsSettingsSection = "whatsapp" | "automacao" | "ads" | "webhooks";
 
 const SECTIONS: {
   id: IntegrationsSettingsSection;
@@ -10,13 +10,19 @@ const SECTIONS: {
 }[] = [
   { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
   { id: "automacao", label: "IA e automacao", icon: Zap },
+  { id: "ads", label: "ADS", icon: Megaphone },
   { id: "webhooks", label: "Webhooks & API", icon: Webhook },
 ];
 
 export function parseIntegrationsSectionParam(
   value: string | null,
 ): IntegrationsSettingsSection {
-  if (value === "automacao" || value === "whatsapp" || value === "webhooks") {
+  if (
+    value === "automacao" ||
+    value === "whatsapp" ||
+    value === "ads" ||
+    value === "webhooks"
+  ) {
     return value;
   }
   return "whatsapp";

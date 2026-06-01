@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BookOpen,
@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { extractPdfText } from "@/lib/pdf-text";
 import { cn } from "@/lib/utils";
+import { fetchAllInboxMessages, useInboxChats } from "@/lib/api/whatsapp";
 import {
   type AiChannel,
   type AiDefaultMode,
@@ -70,6 +71,7 @@ import {
   useUpdateAiChannel,
   useUpsertTenantAiConfig,
 } from "@/lib/api/ai-agent";
+import type { InboxChat, WhatsappMessage } from "@/types/domain";
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
   off: "Desligada",
@@ -110,13 +112,15 @@ function nf(n: number): string {
 }
 
 export default function AgenteIA() {
-  const [tab, setTab] = useState("configuracao");
+  const [tab, setTab] = useState("operacional");
 
   // Hooking up state for header info
   const { data: channels = [] } = useAiChannels();
   const { data: sub } = useAiSubscription();
   const { data: usage } = useAiUsageThisMonth();
   const { data: config } = useTenantAiConfig();
+  const { data: knowledgeSources = [] } = useKnowledgeSources();
+  const { data: errors = [] } = useAiErrors();
 
   const isAiActive = channels.some((c) => c.ai_enabled);
 
@@ -126,6 +130,8 @@ export default function AgenteIA() {
   const candidates = [planQuota, selfLimit].filter((v): v is number => v != null);
   const limit = candidates.length > 0 ? Math.min(...candidates) : null;
   const quotaPct = limit ? Math.min(100, Math.round((totalTokens / limit) * 100)) : null;
+  const activeChannels = channels.filter((c) => c.ai_enabled);
+  const configuredChannels = channels.length;
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 md:px-7">
@@ -191,6 +197,14 @@ export default function AgenteIA() {
 
       <Tabs value={tab} onValueChange={setTab} className="flex shrink-0 flex-col gap-4">
         <TabsList className="h-auto w-full shrink-0 flex-nowrap justify-start gap-1 overflow-x-auto rounded-xl border border-border/60 bg-card p-1 shadow-sm">
+          <TabsTrigger value="operacional" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+            <Activity className="h-4 w-4" />
+            Visão operacional
+          </TabsTrigger>
+          <TabsTrigger value="analise" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+            <Sparkles className="h-4 w-4" />
+            Análise de atendimento
+          </TabsTrigger>
           <TabsTrigger value="configuracao" className="shrink-0 gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
             <SlidersHorizontal className="h-4 w-4" />
             Configuração
@@ -213,6 +227,28 @@ export default function AgenteIA() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="operacional" className="mt-0 focus-visible:outline-none">
+          <AiOpsOverview
+            activeChannels={activeChannels.length}
+            configuredChannels={configuredChannels}
+            knowledgeSourcesCount={knowledgeSources.length}
+            openFailures={errors.length}
+            isAiActive={isAiActive}
+            provider={config?.provider ?? "off"}
+            quotaPct={quotaPct}
+            totalTokens={totalTokens}
+            limit={limit}
+            onGo={(nextTab) => setTab(nextTab)}
+          />
+        </TabsContent>
+
+        <TabsContent value="analise" className="mt-0 focus-visible:outline-none">
+          <AnaliseAtendimentoTab
+            onOpenConfig={() => setTab("configuracao")}
+            onOpenTesting={() => setTab("testar")}
+          />
+        </TabsContent>
+
         <TabsContent value="configuracao" className="mt-0 focus-visible:outline-none">
           <ConfiguracaoTab />
         </TabsContent>
@@ -233,6 +269,1096 @@ export default function AgenteIA() {
           <TestarTab />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AiOpsOverview({
+  activeChannels,
+  configuredChannels,
+  knowledgeSourcesCount,
+  openFailures,
+  isAiActive,
+  provider,
+  quotaPct,
+  totalTokens,
+  limit,
+  onGo,
+}: {
+  activeChannels: number;
+  configuredChannels: number;
+  knowledgeSourcesCount: number;
+  openFailures: number;
+  isAiActive: boolean;
+  provider: AiProvider;
+  quotaPct: number | null;
+  totalTokens: number;
+  limit: number | null;
+  onGo: (tab: string) => void;
+}) {
+  const providerLabel = PROVIDER_LABELS[provider];
+
+  const cards = [
+    {
+      label: "Status",
+      value: isAiActive ? "Ligada" : "Desligada",
+      hint: providerLabel,
+      tone: isAiActive ? "emerald" : "amber",
+    },
+    {
+      label: "Canais",
+      value: `${activeChannels}/${configuredChannels}`,
+      hint: activeChannels > 0 ? "Prontos para responder" : "Ainda sem canal ativo",
+      tone: activeChannels > 0 ? "primary" : "muted",
+    },
+    {
+      label: "Base",
+      value: `${knowledgeSourcesCount}`,
+      hint: knowledgeSourcesCount > 0 ? "Fontes cadastradas" : "Ainda vazia",
+      tone: knowledgeSourcesCount > 0 ? "primary" : "muted",
+    },
+    {
+      label: "Falhas",
+      value: `${openFailures}`,
+      hint: openFailures > 0 ? "Precisa de atenção" : "Sem falhas recentes",
+      tone: openFailures > 0 ? "amber" : "muted",
+    },
+  ] as const;
+
+  return (
+    <Card className="border-border/70 shadow-sm">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <Bot className="h-4.5 w-4.5 text-primary" />
+              Visão operacional
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Tudo que você precisa para ligar, revisar e testar a IA sem ruído.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onGo("configuracao")}>
+              Abrir configuração
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onGo("canais")}>
+              Ver canais
+            </Button>
+            <Button size="sm" className="h-8 text-xs" onClick={() => onGo("testar")}>
+              Testar agora
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <div
+            key={card.label}
+              className={cn(
+                "rounded-xl border p-4 shadow-sm",
+                card.tone === "emerald"
+                  ? "border-emerald-500/20 bg-emerald-500/5"
+                  : card.tone === "primary"
+                    ? "border-primary/20 bg-primary/[0.04]"
+                    : "border-border/60 bg-card",
+            )}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{card.label}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-foreground">{card.value}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{card.hint}</p>
+          </div>
+        ))}
+
+        <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm md:col-span-2 xl:col-span-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Consumo de tokens
+              </p>
+              <p className="text-sm font-semibold text-foreground">
+                {nf(totalTokens)} {limit ? `de ${nf(limit)}` : ""} tokens usados
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {quotaPct === null
+                  ? "Sem limite mensal definido."
+                  : quotaPct >= 95
+                    ? "Atenção: a cota está praticamente no limite."
+                    : quotaPct >= 80
+                      ? "Bom observar: o consumo já chegou perto da faixa de alerta."
+                      : "A cota está sob controle por enquanto."}
+              </p>
+            </div>
+            {quotaPct !== null ? (
+              <div className="w-full max-w-md">
+                <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Uso mensal</span>
+                  <span>{quotaPct}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      quotaPct >= 95 ? "bg-destructive" : quotaPct >= 80 ? "bg-amber-500" : "bg-primary",
+                    )}
+                    style={{ width: `${quotaPct}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type AnalysisScope = "conversation" | "period";
+
+type AtendimentoConversationAnalysis = {
+  chatName: string;
+  score: number;
+  resumo: string;
+  problemaPrincipal: string;
+  ajusteRecomendado: string;
+  mensagens: number;
+};
+
+type AtendimentoEvidence = {
+  title: string;
+  quote: string;
+  impact: string;
+};
+
+type AtendimentoAction = {
+  title: string;
+  description: string;
+  kind: "copy_script" | "copy_system" | "open_config" | "open_testing";
+};
+
+type ConversationBundle = {
+  chat: InboxChat;
+  messages: WhatsappMessage[];
+};
+
+type AtendimentoAnalysis = {
+  scope: AnalysisScope;
+  score: number;
+  resumo: string;
+  pontosFortes: string[];
+  problemas: string[];
+  melhoriasScript: string[];
+  melhoriasSistema: string[];
+  prioridadeProxima: string[];
+  conversas: AtendimentoConversationAnalysis[];
+  evidencias: AtendimentoEvidence[];
+  acoes: AtendimentoAction[];
+  raw: string;
+};
+
+const ANALYSIS_SCOPE_LABELS: Record<AnalysisScope, string> = {
+  conversation: "Conversa única",
+  period: "Período",
+};
+
+const ANALYSIS_HISTORY_KEY = "wchat-agente-ia-analysis-history";
+
+type AnalysisHistoryItem = {
+  id: string;
+  createdAt: string;
+  scope: AnalysisScope;
+  score: number;
+  summary: string;
+  scopeLabel: string;
+  chats: number;
+};
+
+function toDateInputValue(date: Date): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function createDateBounds(startValue: string, endValue: string): { start: Date | null; end: Date | null } {
+  const start = startValue ? new Date(`${startValue}T00:00:00`) : null;
+  const end = endValue ? new Date(`${endValue}T23:59:59.999`) : null;
+  return { start, end };
+}
+
+function isWithinBounds(value: string | null | undefined, start: Date | null, end: Date | null): boolean {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  if (start && timestamp < start.getTime()) return false;
+  if (end && timestamp > end.getTime()) return false;
+  return true;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatMessageLine(message: WhatsappMessage): string {
+  const ts = message.createdAt ?? message.receivedAt ?? message.sentAt ?? null;
+  const time = formatDateTime(ts);
+  const speaker =
+    message.direction === "inbound"
+      ? "Cliente"
+      : message.actorType === "ai"
+        ? "IA"
+        : message.actorType === "system"
+          ? "Sistema"
+          : "Atendimento";
+  const body = (message.bodyText ?? "").trim();
+  const fallback = message.mediaUrl ? `[${message.messageType}] mídia anexada` : `[${message.messageType}]`;
+  return `[${time}] ${speaker}: ${body || fallback}`;
+}
+
+function shortenText(value: string, max = 140): string {
+  const text = value.trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
+function normalizeReportLine(value: unknown, max = 120): string {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return shortenText(text, max);
+}
+
+function normalizeArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function normalizeConversationReports(value: unknown): AtendimentoConversationAnalysis[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as Record<string, unknown>;
+      const scoreRaw = Number(entry.score ?? entry.nota ?? 0);
+      return {
+        chatName: String(entry.chat_name ?? entry.chatName ?? entry.nome ?? entry.name ?? "Conversa").trim(),
+        score: Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, Math.round(scoreRaw))) : 0,
+        resumo: normalizeReportLine(entry.resumo ?? entry.summary ?? "", 160),
+        problemaPrincipal: normalizeReportLine(entry.problema_principal ?? entry.main_issue ?? entry.issue ?? "", 140),
+        ajusteRecomendado: normalizeReportLine(entry.ajuste_recomendado ?? entry.recommended_fix ?? entry.fix ?? "", 140),
+        mensagens: Number.isFinite(Number(entry.mensagens ?? entry.messages ?? 0))
+          ? Math.max(0, Math.round(Number(entry.mensagens ?? entry.messages ?? 0)))
+          : 0,
+      };
+    })
+    .filter((item): item is AtendimentoConversationAnalysis => Boolean(item?.chatName || item?.resumo || item?.problemaPrincipal || item?.ajusteRecomendado));
+}
+
+function normalizeEvidenceReports(value: unknown): AtendimentoEvidence[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as Record<string, unknown>;
+      return {
+        title: normalizeReportLine(entry.title ?? entry.titulo ?? entry.label ?? "Evidência", 80),
+        quote: normalizeReportLine(entry.quote ?? entry.trecho ?? entry.excerpt ?? "", 180),
+        impact: normalizeReportLine(entry.impact ?? entry.impacto ?? entry.reason ?? "", 120),
+      };
+    })
+    .filter((item): item is AtendimentoEvidence => Boolean(item?.title || item?.quote || item?.impact));
+}
+
+function normalizeActionReports(value: unknown): AtendimentoAction[] {
+  if (!Array.isArray(value)) return [];
+
+  const allowedKinds = new Set<AtendimentoAction["kind"]>(["copy_script", "copy_system", "open_config", "open_testing"]);
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as Record<string, unknown>;
+      const kind = String(entry.kind ?? entry.tipo ?? entry.action ?? "copy_script");
+      return {
+        title: normalizeReportLine(entry.title ?? entry.titulo ?? entry.label ?? "Ação", 80),
+        description: normalizeReportLine(entry.description ?? entry.descricao ?? entry.text ?? "", 160),
+        kind: (allowedKinds.has(kind as AtendimentoAction["kind"]) ? kind : "copy_script") as AtendimentoAction["kind"],
+      };
+    })
+    .filter((item): item is AtendimentoAction => Boolean(item?.title || item?.description));
+}
+
+function buildScriptActionText(items: string[]): string {
+  return items.join("\n");
+}
+
+function buildAutoEvidence(conversations: ConversationBundle[]): AtendimentoEvidence[] {
+  const evidences: AtendimentoEvidence[] = [];
+
+  for (const bundle of conversations) {
+    const messages = bundle.messages.filter((message) => (message.bodyText ?? "").trim() || message.mediaUrl);
+    if (messages.length === 0) continue;
+
+    const inbound = messages.filter((message) => message.direction === "inbound");
+    const outbound = messages.filter((message) => message.direction === "outbound");
+    const firstInbound = inbound[0];
+    const lastInbound = inbound[inbound.length - 1];
+    const longestInbound = [...inbound].sort((left, right) => (right.bodyText?.length ?? 0) - (left.bodyText?.length ?? 0))[0];
+    const latestOutbound = [...outbound].reverse().find((message) => (message.bodyText ?? "").trim() || message.mediaUrl);
+
+    if (firstInbound) {
+      evidences.push({
+        title: `${bundle.chat.displayName} - abertura do cliente`,
+        quote: shortenText(firstInbound.bodyText ?? firstInbound.mediaUrl ?? "[mensagem]", 180),
+        impact: "Mostra como a conversa começou e qual foi a primeira demanda do cliente.",
+      });
+    }
+
+    if (longestInbound && longestInbound !== firstInbound) {
+      evidences.push({
+        title: `${bundle.chat.displayName} - trecho mais informativo`,
+        quote: shortenText(longestInbound.bodyText ?? longestInbound.mediaUrl ?? "[mensagem]", 180),
+        impact: "Ajuda a identificar o contexto mais rico da conversa e o ponto de maior atrito ou necessidade.",
+      });
+    }
+
+    if (lastInbound && lastInbound !== firstInbound) {
+      evidences.push({
+        title: `${bundle.chat.displayName} - última entrada do cliente`,
+        quote: shortenText(lastInbound.bodyText ?? lastInbound.mediaUrl ?? "[mensagem]", 180),
+        impact: "Mostra o último pedido ou objeção trazida pelo cliente antes do fechamento ou handoff.",
+      });
+    }
+
+    if (latestOutbound) {
+      evidences.push({
+        title: `${bundle.chat.displayName} - última resposta do atendimento`,
+        quote: shortenText(latestOutbound.bodyText ?? latestOutbound.mediaUrl ?? "[mensagem]", 180),
+        impact: "Mostra a resposta mais recente do time ou da IA e ajuda a avaliar aderência ao script.",
+      });
+    }
+  }
+
+  const unique = new Map<string, AtendimentoEvidence>();
+  for (const item of evidences) {
+    const key = `${item.title}::${item.quote}`;
+    if (!unique.has(key)) {
+      unique.set(key, item);
+    }
+  }
+
+  return [...unique.values()].slice(0, 6);
+}
+
+function parseAtendimentoAnalysis(reply: string): AtendimentoAnalysis | null {
+  const trimmed = reply.trim();
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  const candidate = jsonMatch?.[0] ?? trimmed;
+
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const scoreRaw = Number(parsed.score ?? parsed.nota ?? 0);
+    return {
+      scope: String(parsed.scope ?? parsed.escopo ?? "conversation") === "period" ? "period" : "conversation",
+      score: Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, Math.round(scoreRaw))) : 0,
+      resumo: String(parsed.resumo ?? parsed.summary ?? "").trim(),
+      pontosFortes: normalizeArray(parsed.pontos_fortes ?? parsed.pontosFortes ?? parsed.strengths),
+      problemas: normalizeArray(parsed.problemas ?? parsed.issues),
+      melhoriasScript: normalizeArray(parsed.melhorias_script ?? parsed.melhoriasScript),
+      melhoriasSistema: normalizeArray(parsed.melhorias_sistema ?? parsed.melhoriasSistema),
+      prioridadeProxima: normalizeArray(parsed.prioridade_proxima ?? parsed.prioridadeProxima ?? parsed.next_steps),
+      conversas: normalizeConversationReports(parsed.conversas ?? parsed.conversation_reports ?? parsed.reports),
+      evidencias: normalizeEvidenceReports(parsed.evidencias ?? parsed.evidence ?? parsed.trechos),
+      acoes: normalizeActionReports(parsed.acoes ?? parsed.actions),
+      raw: reply,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function AnaliseAtendimentoTab({
+  onOpenConfig,
+  onOpenTesting,
+}: {
+  onOpenConfig: () => void;
+  onOpenTesting: () => void;
+}) {
+  const { toast } = useToast();
+  const { data: config } = useTenantAiConfig();
+  const { data: inboxChats = [], isLoading: inboxChatsLoading } = useInboxChats({ limit: 500 });
+  const [mode, setMode] = useState<AnalysisScope>("conversation");
+  const [chatSearch, setChatSearch] = useState("");
+  const [selectedChatId, setSelectedChatId] = useState("");
+  const [periodStart, setPeriodStart] = useState(() => toDateInputValue(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
+  const [periodEnd, setPeriodEnd] = useState(() => toDateInputValue(new Date()));
+  const [script, setScript] = useState(config?.systemPrompt ?? "");
+  const [objetivo, setObjetivo] = useState("Quero um relatório direto, com score, resumo, problemas, ajustes no script e no sistema.");
+  const [analysis, setAnalysis] = useState<AtendimentoAnalysis | null>(null);
+  const [replyRaw, setReplyRaw] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [history, setHistory] = useState<AnalysisHistoryItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(ANALYSIS_HISTORY_KEY);
+      const parsed = raw ? (JSON.parse(raw) as AnalysisHistoryItem[]) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const run = useRunPlayground({
+    onError: (e) =>
+      toast({ title: "Falha ao analisar atendimento", description: e.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (config?.systemPrompt && !script.trim()) {
+      setScript(config.systemPrompt);
+    }
+  }, [config?.systemPrompt, script]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ANALYSIS_HISTORY_KEY, JSON.stringify(history.slice(0, 6)));
+  }, [history]);
+
+  const filteredChats = useMemo(() => {
+    const search = chatSearch.trim().toLowerCase();
+    if (!search) return inboxChats;
+    return inboxChats.filter((chat) => {
+      const haystack = [
+        chat.displayName,
+        chat.customerName ?? "",
+        chat.remotePhoneE164 ?? "",
+        chat.remotePhoneDigits ?? "",
+        chat.instanceName,
+        chat.assigneeName ?? "",
+        chat.lastMessagePreview ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(search);
+    });
+  }, [chatSearch, inboxChats]);
+
+  const selectedChat = useMemo(
+    () => inboxChats.find((chat) => chat.id === selectedChatId) ?? null,
+    [inboxChats, selectedChatId],
+  );
+
+  const { start: periodStartBound, end: periodEndBound } = useMemo(
+    () => createDateBounds(periodStart, periodEnd),
+    [periodEnd, periodStart],
+  );
+
+  const periodChats = useMemo(() => {
+    return inboxChats
+      .filter((chat) => isWithinBounds(chat.lastMessageAt, periodStartBound, periodEndBound))
+      .sort((left, right) => new Date(right.lastMessageAt ?? 0).getTime() - new Date(left.lastMessageAt ?? 0).getTime());
+  }, [inboxChats, periodEndBound, periodStartBound]);
+
+  useEffect(() => {
+    if (mode !== "conversation") return;
+    if (filteredChats.length === 0) {
+      if (selectedChatId) setSelectedChatId("");
+      return;
+    }
+    if (!selectedChatId || !filteredChats.some((chat) => chat.id === selectedChatId)) {
+      setSelectedChatId(filteredChats[0].id);
+    }
+  }, [filteredChats, mode, selectedChatId]);
+
+  async function analyze() {
+    const scriptText = script.trim() || config?.systemPrompt?.trim() || "Persona padrão da plataforma.";
+    if (run.isPending || isAnalyzing) return;
+
+    const chosenChats = mode === "conversation" ? (selectedChat ? [selectedChat] : []) : periodChats;
+    if (chosenChats.length === 0) {
+      toast({
+        title: "Escolha o escopo",
+        description:
+          mode === "conversation"
+            ? "Selecione uma conversa para gerar o relatório."
+            : "Defina um período com conversas para analisar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+
+    try {
+      const conversations: ConversationBundle[] = await Promise.all(
+        chosenChats.map(async (chat) => {
+          const allMessages = await fetchAllInboxMessages(chat.id);
+          const scopedMessages =
+            mode === "period"
+              ? allMessages.filter((message) =>
+                  isWithinBounds(message.createdAt ?? message.receivedAt ?? message.sentAt, periodStartBound, periodEndBound),
+                )
+              : allMessages;
+          const messages = scopedMessages.length > 0 ? scopedMessages : allMessages.slice(-20);
+          return { chat, messages };
+        }),
+      );
+      const fallbackEvidence = buildAutoEvidence(conversations);
+
+      const conversationTranscript = conversations
+        .map(({ chat, messages }) => {
+          const maxMessages = mode === "conversation" ? 60 : 24;
+          const limited = messages.slice(-Math.min(messages.length, maxMessages));
+          return [
+            `CONVERSA: ${chat.displayName}`,
+            `ID: ${chat.id}`,
+            `INSTÂNCIA: ${chat.instanceName}`,
+            `ÚLTIMA ATIVIDADE: ${formatDateTime(chat.lastMessageAt)}`,
+            `MENSAGENS NO RECORTE: ${limited.length}`,
+            "TRANSCRIÇÃO:",
+            limited.map(formatMessageLine).join("\n"),
+          ].join("\n");
+        })
+        .join("\n\n---\n\n");
+
+      const prompt = [
+        "Você é uma IA auditora de atendimento e operação.",
+        "Gere um relatório executivo e objetivo com base no script e nas conversas abaixo.",
+        "Retorne SOMENTE JSON válido, sem markdown e sem texto fora do JSON.",
+        "Estrutura obrigatória:",
+        '{ "scope": "conversation|period", "score": 0-100, "resumo": "texto curto", "pontos_fortes": ["..."], "problemas": ["..."], "melhorias_script": ["..."], "melhorias_sistema": ["..."], "prioridade_proxima": ["..."], "evidencias": [{ "title": "Título curto", "quote": "Trecho exato ou quase exato da conversa", "impact": "Por que isso importa" }], "acoes": [{ "title": "Ação", "description": "O que fazer agora", "kind": "copy_script|copy_system|open_config|open_testing" }], "conversas": [{ "chat_name": "Conversa", "score": 0-100, "resumo": "texto curto", "problema_principal": "texto curto", "ajuste_recomendado": "texto curto", "mensagens": 0 }] }',
+        "Regras:",
+        "- Seja direto, prático e sem floreio.",
+        "- Escreva cada item em 1 frase curta, fácil de ler por humano.",
+        "- Evite parágrafos longos e evite repetir a mesma ideia em várias linhas.",
+        "- O score deve refletir a qualidade do atendimento e a aderência ao script.",
+        "- As melhorias de sistema devem apontar mudanças no produto, fluxos, automações, telas, alertas ou campos.",
+        "- As melhorias de script devem ajustar linguagem, sequência, perguntas, objeções, CTA e handoff.",
+        "- Inclua evidências reais ou muito próximas do texto analisado sempre que possível.",
+        "- Proponha ações pragmáticas que possam ser copiadas, ajustadas no sistema ou testadas imediatamente.",
+        "- No modo período, compare as conversas e destaque padrões repetidos.",
+        "- No modo conversa, a lista `conversas` deve conter apenas um item.",
+        "",
+        `ESCOPO: ${ANALYSIS_SCOPE_LABELS[mode]}`,
+        `OBJETIVO: ${objetivo.trim() || "Gerar relatório operacional."}`,
+        "",
+        "SCRIPT DE REFERÊNCIA:",
+        scriptText,
+        "",
+        "PERÍODO DE ANÁLISE:",
+        mode === "period" ? `${periodStart || "—"} até ${periodEnd || "—"}` : "não se aplica",
+        "",
+        "CONVERSAS:",
+        conversationTranscript,
+      ].join("\n");
+
+      const res = await run.mutateAsync([{ role: "user", text: prompt }]);
+      setReplyRaw(res.reply || "");
+      const parsed = parseAtendimentoAnalysis(res.reply || "");
+      if (parsed) {
+        setAnalysis({
+          ...parsed,
+          evidencias: parsed.evidencias.length > 0 ? parsed.evidencias : fallbackEvidence,
+        });
+        setHistory((current) => [
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            createdAt: new Date().toISOString(),
+            scope: parsed.scope,
+            score: parsed.score,
+            summary: parsed.resumo,
+            scopeLabel,
+            chats: parsed.conversas.length || chatsInScope,
+          },
+          ...current,
+        ].slice(0, 6));
+        return;
+      }
+
+      setAnalysis({
+        scope: mode,
+        score: 0,
+        resumo: "Não foi possível interpretar a resposta estruturada da IA. Veja o retorno bruto.",
+        pontosFortes: [],
+        problemas: [],
+        melhoriasScript: [],
+        melhoriasSistema: [],
+        prioridadeProxima: [],
+        conversas: [],
+        evidencias: fallbackEvidence,
+        acoes: [],
+        raw: res.reply || "",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  const scoreTone =
+    analysis && analysis.score >= 80
+      ? "emerald"
+      : analysis && analysis.score >= 60
+        ? "amber"
+        : "rose";
+
+  const selectedPeriodLabel = `${periodStart || "—"} até ${periodEnd || "—"}`;
+  const scopeLabel =
+    mode === "conversation"
+      ? selectedChat
+        ? `Conversa: ${selectedChat.displayName}`
+        : "Conversa única"
+      : `Período: ${selectedPeriodLabel}`;
+  const chatsInScope = mode === "conversation" ? (selectedChat ? 1 : 0) : periodChats.length;
+  const messagesInScope = analysis?.conversas.reduce((sum, item) => sum + item.mensagens, 0) ?? 0;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Sparkles className="h-4.5 w-4.5 text-primary" />
+            Análise de atendimento
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Escolha uma conversa ou um período, clique em analisar e leia o relatório com score, problemas e ajustes no script e no sistema.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Objetivo do relatório</Label>
+            <Input
+              value={objetivo}
+              onChange={(e) => setObjetivo(e.target.value)}
+              placeholder="Ex.: reduzir atrito, melhorar conversão, revisar handoff"
+              className="h-10 bg-background text-sm focus-visible:ring-primary/20"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Escopo da análise</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={mode === "conversation" ? "default" : "outline"}
+                className="h-10 justify-start gap-2 text-xs"
+                onClick={() => setMode("conversation")}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Conversa única
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "period" ? "default" : "outline"}
+                className="h-10 justify-start gap-2 text-xs"
+                onClick={() => setMode("period")}
+              >
+                <Clock className="h-4 w-4" />
+                Período
+              </Button>
+            </div>
+          </div>
+
+          {mode === "conversation" ? (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Conversa para analisar</Label>
+              <Input
+                value={chatSearch}
+                onChange={(e) => setChatSearch(e.target.value)}
+                placeholder="Buscar conversa, cliente, telefone ou atendente"
+                className="h-10 bg-background text-sm focus-visible:ring-primary/20"
+              />
+              <Select value={selectedChatId} onValueChange={setSelectedChatId}>
+                <SelectTrigger className="h-10 bg-background text-sm">
+                  <SelectValue placeholder={inboxChatsLoading ? "Carregando conversas..." : "Selecione uma conversa"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredChats.length > 0 ? (
+                    filteredChats.map((chat) => (
+                      <SelectItem key={chat.id} value={chat.id}>
+                        <span className="block max-w-[260px] truncate">
+                          {chat.displayName} · {formatDateTime(chat.lastMessageAt)}
+                        </span>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="px-2 py-4 text-xs text-muted-foreground">Nenhuma conversa encontrada.</div>
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedChat ? (
+                <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">{selectedChat.displayName}</p>
+                  <p className="mt-1">Última atividade: {formatDateTime(selectedChat.lastMessageAt)}</p>
+                  <p>Instância: {selectedChat.instanceName}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Período</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={periodStart}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  className="h-10 bg-background text-sm focus-visible:ring-primary/20"
+                />
+                <Input
+                  type="date"
+                  value={periodEnd}
+                  onChange={(e) => setPeriodEnd(e.target.value)}
+                  className="h-10 bg-background text-sm focus-visible:ring-primary/20"
+                />
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">{periodChats.length} conversas no período</p>
+                <p className="mt-1">Janela: {selectedPeriodLabel}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Script de referência</Label>
+            <Textarea
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder="Cole aqui o script, regras de atendimento ou persona usada pelo time."
+              className="min-h-[180px] bg-background text-sm leading-relaxed focus-visible:ring-primary/20"
+            />
+          </div>
+
+          <Button
+            onClick={() => void analyze()}
+            disabled={isAnalyzing || run.isPending || (mode === "conversation" ? !selectedChat : periodChats.length === 0)}
+            className="h-10 w-full text-sm font-medium"
+          >
+            {isAnalyzing || run.isPending ? "Gerando relatório..." : "Gerar relatório"}
+          </Button>
+
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            A IA usa o script como referência e devolve um relatório direto com score, achados, ajustes no sistema e melhorias no roteiro.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                <FileText className="h-4.5 w-4.5 text-primary" />
+                Relatório de atendimento
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Leitura executiva do que aconteceu, onde está travando e o que ajustar no script e no sistema.
+              </CardDescription>
+            </div>
+            <Badge
+              className={cn(
+                "w-fit border text-xs font-semibold",
+                scoreTone === "emerald"
+                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : scoreTone === "amber"
+                    ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    : "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+              )}
+            >
+              {analysis ? `${analysis.score}/100` : "Sem análise"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {analysis ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-border/60 bg-card p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Escopo</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{scopeLabel}</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Conversas</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{analysis.conversas.length || chatsInScope}</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Mensagens</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{messagesInScope || "—"}</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prioridade</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {analysis.prioridadeProxima[0] ?? "Sem prioridade definida"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Resumo executivo</p>
+                <p className="mt-1 text-sm leading-relaxed text-foreground">{analysis.resumo || "—"}</p>
+              </div>
+
+              {analysis.evidencias.length > 0 ? (
+                <div className="rounded-xl border border-border/60 bg-card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidências</p>
+                    <p className="text-[11px] text-muted-foreground">Trechos que sustentam o relatório</p>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {analysis.evidencias.map((item, index) => (
+                      <div key={`${item.title}-${index}`} className="rounded-xl border border-border/60 bg-background p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{item.impact || "Evidência extraída do atendimento analisado."}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(item.quote || "");
+                                toast({ title: "Trecho copiado", description: item.title });
+                              } catch {
+                                toast({ title: "Não foi possível copiar", description: "Seu navegador bloqueou a área de transferência.", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            Copiar trecho
+                          </Button>
+                        </div>
+                        {item.quote ? (
+                          <blockquote className="mt-3 rounded-lg border border-dashed border-border/70 bg-muted/20 p-3 text-xs leading-relaxed text-foreground">
+                            {item.quote}
+                          </blockquote>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <ReportList title="Pontos fortes" items={analysis.pontosFortes} tone="emerald" />
+                <ReportList title="Problemas encontrados" items={analysis.problemas} tone="rose" />
+                <ReportList title="Ajustes no script" items={analysis.melhoriasScript} tone="primary" />
+                <ReportList title="Ajustes no sistema" items={analysis.melhoriasSistema} tone="amber" />
+              </div>
+
+              <ReportList title="Próxima prioridade" items={analysis.prioridadeProxima} tone="secondary" />
+
+              {analysis.acoes.length > 0 ? (
+                <div className="rounded-xl border border-border/60 bg-card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ações imediatas</p>
+                    <p className="text-[11px] text-muted-foreground">Executar agora ou salvar para depois</p>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {analysis.acoes.map((item, index) => {
+                      const actionTitle =
+                        item.kind === "copy_script"
+                          ? "Copiar para script"
+                          : item.kind === "copy_system"
+                            ? "Copiar para sistema"
+                            : item.kind === "open_config"
+                              ? "Abrir configuração"
+                              : "Abrir testes";
+                      return (
+                        <div key={`${item.title}-${index}`} className="rounded-xl border border-border/60 bg-background p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                              <p className="text-xs leading-relaxed text-muted-foreground">{item.description || "Ação sugerida pela IA."}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={async () => {
+                                  const text = `${item.title}\n${item.description}`.trim();
+                                  try {
+                                    await navigator.clipboard.writeText(text);
+                                    toast({ title: "Ação copiada", description: item.title });
+                                  } catch {
+                                    toast({ title: "Não foi possível copiar", description: "Seu navegador bloqueou a área de transferência.", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                Copiar
+                              </Button>
+                              {item.kind === "open_config" ? (
+                                <Button type="button" variant="default" size="sm" className="h-7 px-2 text-[11px]" onClick={onOpenConfig}>
+                                  {actionTitle}
+                                </Button>
+                              ) : item.kind === "open_testing" ? (
+                                <Button type="button" variant="default" size="sm" className="h-7 px-2 text-[11px]" onClick={onOpenTesting}>
+                                  {actionTitle}
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(item.description || item.title);
+                                      toast({ title: "Conteúdo copiado", description: item.title });
+                                    } catch {
+                                      toast({ title: "Não foi possível copiar", description: "Seu navegador bloqueou a área de transferência.", variant: "destructive" });
+                                    }
+                                  }}
+                                >
+                                  {actionTitle}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {analysis.conversas.length > 0 ? (
+                <div className="rounded-xl border border-border/60 bg-card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Conversas analisadas</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {analysis.scope === "period"
+                        ? "Padrões recorrentes do período"
+                        : "Leitura detalhada da conversa escolhida"}
+                    </p>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {analysis.conversas.map((item) => (
+                      <div key={item.chatName} className="rounded-xl border border-border/60 bg-background p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">{item.chatName}</p>
+                            <p className="text-xs text-muted-foreground">{item.resumo || "Sem resumo informado."}</p>
+                          </div>
+                          <Badge variant="outline" className="text-[11px] font-semibold">
+                            {item.score}/100
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                          <div>
+                            <p className="font-semibold text-foreground">Problema principal</p>
+                            <p className="mt-1 leading-relaxed">{item.problemaPrincipal || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground">Ajuste recomendado</p>
+                            <p className="mt-1 leading-relaxed">{item.ajusteRecomendado || "—"}</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-muted-foreground">{item.mensagens} mensagens no recorte</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {replyRaw ? (
+                <details className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Ver resposta bruta da IA</summary>
+                  <pre className="mt-3 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                    {replyRaw}
+                  </pre>
+                </details>
+              ) : null}
+
+              {history.length > 0 ? (
+                <div className="rounded-xl border border-border/60 bg-muted/15 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Histórico recente</p>
+                    <p className="text-[11px] text-muted-foreground">Últimos relatórios gerados</p>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {history.map((item) => (
+                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{item.summary}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {item.scopeLabel} · {item.chats} conversa(s) · {formatDateTime(item.createdAt)}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-[11px] font-semibold">
+                          {item.score}/100
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-6">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-semibold text-foreground">Relatório ainda não gerado</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Escolha uma conversa ou um período, clique em <span className="font-medium text-foreground">Gerar relatório</span> e a IA devolve os ajustes do script e do sistema.
+                </p>
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                  <div className="rounded-lg border border-border/60 bg-background p-3">1. Defina o escopo.</div>
+                  <div className="rounded-lg border border-border/60 bg-background p-3">2. Revise o script base.</div>
+                  <div className="rounded-lg border border-border/60 bg-background p-3">3. Clique para analisar.</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ReportList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "emerald" | "rose" | "primary" | "amber" | "secondary";
+}) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-500/20 bg-emerald-500/5"
+      : tone === "rose"
+        ? "border-rose-500/20 bg-rose-500/5"
+        : tone === "amber"
+          ? "border-amber-500/20 bg-amber-500/5"
+          : tone === "primary"
+            ? "border-primary/20 bg-primary/[0.04]"
+            : "border-border/60 bg-card";
+
+  return (
+    <div className={cn("rounded-xl border p-4", toneClass)}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-2">
+          {items.map((item, index) => (
+            <li key={`${title}-${index}`} className="flex gap-2 text-sm text-foreground">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+              <span className="leading-relaxed">{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">Sem itens sugeridos.</p>
+      )}
     </div>
   );
 }
@@ -587,10 +1713,10 @@ function ConfiguracaoTab() {
   const { data, isLoading } = useTenantAiConfig();
   const upsert = useUpsertTenantAiConfig({
     onSuccess: () => toast({ title: "Configuração salva com sucesso!" }),
-    onError: (error) =>
-      toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" }),
+    onError: (error) => toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" }),
   });
   const [form, setForm] = useState<TenantAiConfig | null>(null);
+  const [activeSection, setActiveSection] = useState<"persona" | "lgpd" | "provider" | "control" | "smart">("persona");
 
   useEffect(() => {
     if (data) setForm(data);
@@ -601,6 +1727,7 @@ function ConfiguracaoTab() {
   }
 
   const set = (patch: Partial<TenantAiConfig>) => setForm((prev) => (prev ? { ...prev, ...patch } : prev));
+  const currentLength = form.systemPrompt?.length ?? 0;
 
   const TEMPLATES = {
     geral: "Você é o assistente virtual cordial e profissional da nossa empresa. Responda às perguntas dos clientes de forma objetiva, simpática e profissional. Utilize apenas as informações da base de conhecimento para responder. Se não souber a resposta ou se o cliente solicitar um atendente humano, informe que irá encaminhá-lo para a nossa equipe de suporte.",
@@ -608,311 +1735,256 @@ function ConfiguracaoTab() {
     suporte: "Você é o agente de suporte técnico de nível 1. Ajude o cliente a resolver problemas com paciência e clareza, orientando-o passo a passo. Faça perguntas de esclarecimento se necessário e consulte sempre as políticas e manuais da base de conhecimento.",
   };
 
-  const currentLength = form.systemPrompt?.length ?? 0;
+  const menu = [
+    { id: "persona", label: "Persona / Instruções", icon: Sparkles },
+    { id: "lgpd", label: "Transparência e Avisos", icon: Info },
+    { id: "provider", label: "Provedor & Conexão", icon: Cpu },
+    { id: "control", label: "Configurações de Controle", icon: SlidersHorizontal },
+    { id: "smart", label: "Recursos Inteligentes", icon: Layers },
+  ] as const;
 
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="space-y-4">
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="px-5 pb-3 pt-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                    <Sparkles className="h-4.5 w-4.5 text-primary" />
-                    Persona / Instruções do Agente
-                  </CardTitle>
-                  <CardDescription className="mt-1 text-xs">
-                    Molde o tom de voz, regras de atendimento e como a IA deve se comportar.
-                  </CardDescription>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
-                    onClick={() => set({ systemPrompt: TEMPLATES.geral })}
-                  >
-                    Geral
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
-                    onClick={() => set({ systemPrompt: TEMPLATES.vendas })}
-                  >
-                    Vendas
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-[11px] h-7 px-2.5 bg-muted/30 border-border/60 hover:bg-muted"
-                    onClick={() => set({ systemPrompt: TEMPLATES.suporte })}
-                  >
-                    Suporte
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 px-5 pb-5">
-              <div className="space-y-2">
-                <Textarea
-                  id="ai-persona"
-                  value={form.systemPrompt}
-                  onChange={(e) => set({ systemPrompt: e.target.value })}
-                  placeholder="Ex.: Você é a Ana, atendente virtual da nossa loja. Responda sempre com cordialidade e simplicidade..."
-                  className="min-h-[168px] font-sans text-sm leading-relaxed border-border focus-visible:ring-primary/30 md:min-h-[190px]"
-                />
-                <div className="flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
-                  <span>Em branco usará a persona padrão da plataforma.</span>
-                  <span className={cn("font-medium", currentLength > 4000 ? "text-destructive" : "text-muted-foreground")}>
-                    {currentLength} caracteres
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+  const sectionStyles = "border-border/70 shadow-sm";
 
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="px-5 pb-3 pt-5">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                <Info className="h-4.5 w-4.5 text-primary" />
-                Transparência e Avisos (LGPD)
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Notifique o cliente de forma clara que ele está interagindo com um robô inteligente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-5 pb-5">
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 bg-muted/10 p-4">
-                <div className="min-w-0 space-y-0.5">
-                  <span className="text-sm font-semibold text-foreground">Divulgação de IA ativa</span>
-                  <p className="text-xs text-muted-foreground">
-                    Envia um aviso automático no início do primeiro atendimento para cada cliente.
-                  </p>
-                </div>
-                <Switch
-                  checked={form.disclosureEnabled}
-                  onCheckedChange={(v) => set({ disclosureEnabled: v })}
-                />
-              </div>
-
-              {form.disclosureEnabled && (
-                <div className="space-y-2 animate-accordion-down">
-                  <Label htmlFor="ai-disclosure-msg" className="text-xs font-semibold text-muted-foreground">
-                    Mensagem de aviso customizada
-                  </Label>
-                  <Textarea
-                    id="ai-disclosure-msg"
-                    value={form.disclosureMessage}
-                    onChange={(e) => set({ disclosureMessage: e.target.value })}
-                    placeholder="Olá! Você está sendo atendido por um assistente virtual com IA. Se preferir falar com um humano, é só solicitar."
-                    className="min-h-[80px] text-sm focus-visible:ring-primary/30"
-                    rows={3}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Deixe em branco para usar a mensagem padrão do sistema.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="px-5 pb-3 pt-5">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                <Cpu className="h-4.5 w-4.5 text-primary" />
-                Provedor & Conexão
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Defina o cérebro do agente e onde as mensagens serão processadas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-5 pb-5">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold">Modo de atuação</Label>
-                <Select value={form.provider} onValueChange={(v) => set({ provider: v as AiProvider })}>
-                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm focus:ring-primary/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off">{PROVIDER_LABELS.off}</SelectItem>
-                    <SelectItem value="native">{PROVIDER_LABELS.native}</SelectItem>
-                    <SelectItem value="n8n">{PROVIDER_LABELS.n8n}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground leading-normal">
-                  <strong>Nativa</strong> processa no WChat. <strong>Externa</strong> envia para n8n.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold">Tecnologia (LLM)</Label>
-                <Select
-                  value={form.llmProvider}
-                  onValueChange={(v) => {
-                    const provider = v as LlmProvider;
-                    set({ llmProvider: provider, model: LLM_MODELS[provider][0].value });
-                  }}
-                >
-                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="anthropic">{LLM_PROVIDER_LABELS.anthropic}</SelectItem>
-                    <SelectItem value="openai">{LLM_PROVIDER_LABELS.openai}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold">Modelo principal</Label>
-                <Select value={form.model} onValueChange={(v) => set({ model: v })}>
-                  <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelOptions(form.llmProvider, form.model).map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="px-5 pb-3 pt-5">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                <SlidersHorizontal className="h-4.5 w-4.5 text-primary" />
-                Configurações de Controle
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Ajuste os limites operacionais e tempo de resposta.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 px-5 pb-5 sm:grid-cols-3 xl:grid-cols-1">
-              <div className="space-y-2">
-                <Label htmlFor="ai-debounce" className="text-xs font-semibold flex items-center gap-1.5">
-                  Tempo de Espera (s)
-                  <span title="Tempo que a IA aguarda novas mensagens do cliente antes de responder (evita respostas picadas).">
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  </span>
-                </Label>
-                <Input
-                  id="ai-debounce"
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={form.debounceSeconds}
-                  onChange={(e) => set({ debounceSeconds: Number(e.target.value) })}
-                  className="h-10 bg-background focus-visible:ring-primary/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ai-maxtokens" className="text-xs font-semibold flex items-center gap-1.5">
-                  Máximo de Tokens/Resp
-                  <span title="Tamanho máximo aproximado que cada resposta da IA pode conter (previne respostas excessivamente longas).">
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  </span>
-                </Label>
-                <Input
-                  id="ai-maxtokens"
-                  type="number"
-                  min={256}
-                  max={8192}
-                  value={form.maxOutputTokens}
-                  onChange={(e) => set({ maxOutputTokens: Number(e.target.value) })}
-                  className="h-10 bg-background focus-visible:ring-primary/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ai-limit" className="text-xs font-semibold flex items-center gap-1.5">
-                  Teto Mensal de Tokens
-                  <span title="Limite de tokens mensal auto-imposto para controlar custos extras.">
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  </span>
-                </Label>
-                <Input
-                  id="ai-limit"
-                  type="number"
-                  min={0}
-                  value={form.monthlyTokenLimit ?? ""}
-                  onChange={(e) => set({ monthlyTokenLimit: e.target.value === "" ? null : Number(e.target.value) })}
-                  placeholder="Sem limite"
-                  className="h-10 bg-background focus-visible:ring-primary/20"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="px-5 pb-3 pt-5">
+  const content =
+    activeSection === "persona" ? (
+      <Card className={sectionStyles}>
+        <CardHeader className="px-5 pb-3 pt-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
               <CardTitle className="flex items-center gap-2 text-base font-semibold">
                 <Sparkles className="h-4.5 w-4.5 text-primary" />
-                Recursos Inteligentes
+                Persona / Instruções do Agente
               </CardTitle>
-              <CardDescription className="text-xs">
-                Aumente a eficiência e reduza custos com roteamento dinâmico.
+              <CardDescription className="mt-1 text-xs">
+                Molde o tom de voz, regras de atendimento e como a IA deve se comportar.
               </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-5 pb-5">
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-                <div className="space-y-0.5 min-w-0 flex-1">
-                  <span className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    Roteamento Dinâmico
-                  </span>
-                  <p className="text-[10px] text-muted-foreground leading-normal">
-                    Mensagens simples (ex: "ok", "obrigado") usam o Claude Haiku (até 6x mais barato) em vez do modelo principal.
-                  </p>
-                </div>
-                <Switch
-                  checked={form.enableModelRouting}
-                  onCheckedChange={(v) => set({ enableModelRouting: v })}
-                  className="mt-0.5 scale-90"
-                />
-              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] bg-muted/30 border-border/60 hover:bg-muted" onClick={() => set({ systemPrompt: TEMPLATES.geral })}>Geral</Button>
+              <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] bg-muted/30 border-border/60 hover:bg-muted" onClick={() => set({ systemPrompt: TEMPLATES.vendas })}>Vendas</Button>
+              <Button size="sm" variant="outline" className="h-7 px-2.5 text-[11px] bg-muted/30 border-border/60 hover:bg-muted" onClick={() => set({ systemPrompt: TEMPLATES.suporte })}>Suporte</Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 px-5 pb-5">
+          <div className="space-y-2">
+            <Textarea
+              id="ai-persona"
+              value={form.systemPrompt}
+              onChange={(e) => set({ systemPrompt: e.target.value })}
+              placeholder="Ex.: Você é a Ana, atendente virtual da nossa loja. Responda sempre com cordialidade e simplicidade..."
+              className="min-h-[168px] font-sans text-sm leading-relaxed border-border focus-visible:ring-primary/30 md:min-h-[190px]"
+            />
+            <div className="flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
+              <span>Em branco usará a persona padrão da plataforma.</span>
+              <span className={cn("font-medium", currentLength > 4000 ? "text-destructive" : "text-muted-foreground")}>{currentLength} caracteres</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    ) : activeSection === "lgpd" ? (
+      <Card className={sectionStyles}>
+        <CardHeader className="px-5 pb-3 pt-5">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Info className="h-4.5 w-4.5 text-primary" />
+            Transparência e Avisos (LGPD)
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Notifique o cliente de forma clara que ele está interagindo com um robô inteligente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 px-5 pb-5">
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border/50 bg-muted/10 p-4">
+            <div className="min-w-0 space-y-0.5">
+              <span className="text-sm font-semibold text-foreground">Divulgação de IA ativa</span>
+              <p className="text-xs text-muted-foreground">Envia um aviso automático no início do primeiro atendimento para cada cliente.</p>
+            </div>
+            <Switch checked={form.disclosureEnabled} onCheckedChange={(v) => set({ disclosureEnabled: v })} />
+          </div>
+          {form.disclosureEnabled && (
+            <div className="space-y-2 animate-accordion-down">
+              <Label htmlFor="ai-disclosure-msg" className="text-xs font-semibold text-muted-foreground">Mensagem de aviso customizada</Label>
+              <Textarea
+                id="ai-disclosure-msg"
+                value={form.disclosureMessage}
+                onChange={(e) => set({ disclosureMessage: e.target.value })}
+                placeholder="Olá! Você está sendo atendido por um assistente virtual com IA. Se preferir falar com um humano, é só solicitar."
+                className="min-h-[80px] text-sm focus-visible:ring-primary/30"
+                rows={3}
+              />
+              <p className="text-[10px] text-muted-foreground">Deixe em branco para usar a mensagem padrão do sistema.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    ) : activeSection === "provider" ? (
+      <Card className={sectionStyles}>
+        <CardHeader className="px-5 pb-3 pt-5">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Cpu className="h-4.5 w-4.5 text-primary" />
+            Provedor & Conexão
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Defina o cérebro do agente e onde as mensagens serão processadas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 px-5 pb-5">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Modo de atuação</Label>
+            <Select value={form.provider} onValueChange={(v) => set({ provider: v as AiProvider })}>
+              <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm focus:ring-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">{PROVIDER_LABELS.off}</SelectItem>
+                <SelectItem value="native">{PROVIDER_LABELS.native}</SelectItem>
+                <SelectItem value="n8n">{PROVIDER_LABELS.n8n}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground leading-normal"><strong>Nativa</strong> processa no WChat. <strong>Externa</strong> envia para n8n.</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Tecnologia (LLM)</Label>
+            <Select value={form.llmProvider} onValueChange={(v) => { const provider = v as LlmProvider; set({ llmProvider: provider, model: LLM_MODELS[provider][0].value }); }}>
+              <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anthropic">{LLM_PROVIDER_LABELS.anthropic}</SelectItem>
+                <SelectItem value="openai">{LLM_PROVIDER_LABELS.openai}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Modelo principal</Label>
+            <Select value={form.model} onValueChange={(v) => set({ model: v })}>
+              <SelectTrigger className="h-10 w-full border-border/85 bg-background text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions(form.llmProvider, form.model).map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+    ) : activeSection === "control" ? (
+      <Card className={sectionStyles}>
+        <CardHeader className="px-5 pb-3 pt-5">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <SlidersHorizontal className="h-4.5 w-4.5 text-primary" />
+            Configurações de Controle
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Ajuste os limites operacionais e tempo de resposta.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 px-5 pb-5 sm:grid-cols-3 xl:grid-cols-1">
+          <div className="space-y-2">
+            <Label htmlFor="ai-debounce" className="text-xs font-semibold flex items-center gap-1.5">
+              Tempo de Espera (s)
+              <span title="Tempo que a IA aguarda novas mensagens do cliente antes de responder (evita respostas picadas).">
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </span>
+            </Label>
+            <Input id="ai-debounce" type="number" min={0} max={120} value={form.debounceSeconds} onChange={(e) => set({ debounceSeconds: Number(e.target.value) })} className="h-10 bg-background focus-visible:ring-primary/20" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-maxtokens" className="text-xs font-semibold flex items-center gap-1.5">
+              Máximo de Tokens/Resp
+              <span title="Tamanho máximo aproximado que cada resposta da IA pode conter (previne respostas excessivamente longas).">
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </span>
+            </Label>
+            <Input id="ai-maxtokens" type="number" min={256} max={8192} value={form.maxOutputTokens} onChange={(e) => set({ maxOutputTokens: Number(e.target.value) })} className="h-10 bg-background focus-visible:ring-primary/20" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-limit" className="text-xs font-semibold flex items-center gap-1.5">
+              Teto Mensal de Tokens
+              <span title="Limite de tokens mensal auto-imposto para controlar custos extras.">
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </span>
+            </Label>
+            <Input id="ai-limit" type="number" min={0} value={form.monthlyTokenLimit ?? ""} onChange={(e) => set({ monthlyTokenLimit: e.target.value === "" ? null : Number(e.target.value) })} placeholder="Sem limite" className="h-10 bg-background focus-visible:ring-primary/20" />
+          </div>
+        </CardContent>
+      </Card>
+    ) : (
+      <Card className={sectionStyles}>
+        <CardHeader className="px-5 pb-3 pt-5">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Sparkles className="h-4.5 w-4.5 text-primary" />
+            Recursos Inteligentes
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Aumente a eficiência e reduza custos com roteamento dinâmico.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 px-5 pb-5">
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+            <div className="space-y-0.5 min-w-0 flex-1">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1">Roteamento Dinâmico</span>
+              <p className="text-[10px] text-muted-foreground leading-normal">Mensagens simples (ex: "ok", "obrigado") usam o Claude Haiku (até 6x mais barato) em vez do modelo principal.</p>
+            </div>
+            <Switch checked={form.enableModelRouting} onCheckedChange={(v) => set({ enableModelRouting: v })} className="mt-0.5 scale-90" />
+          </div>
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+            <div className="space-y-0.5 min-w-0 flex-1">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1">Pensamento Adaptativo</span>
+              <p className="text-[10px] text-muted-foreground leading-normal">IA reflete e raciocina antes de responder a perguntas complexas da base de conhecimento (adiciona +2-5s de latência).</p>
+            </div>
+            <Switch checked={form.enableThinking} onCheckedChange={(v) => set({ enableThinking: v })} className="mt-0.5 scale-90" />
+          </div>
+        </CardContent>
+      </Card>
+    );
 
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-                <div className="space-y-0.5 min-w-0 flex-1">
-                  <span className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    Pensamento Adaptativo
-                  </span>
-                  <p className="text-[10px] text-muted-foreground leading-normal">
-                    IA reflete e raciocina antes de responder a perguntas complexas da base de conhecimento (adiciona +2-5s de latência).
-                  </p>
-                </div>
-                <Switch
-                  checked={form.enableThinking}
-                  onCheckedChange={(v) => set({ enableThinking: v })}
-                  className="mt-0.5 scale-90"
-                />
-              </div>
-            </CardContent>
-          </Card>
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="space-y-4">
+        {content}
+        <div className="flex items-center justify-end border-t border-border/70 bg-background py-3">
+          <Button onClick={() => upsert.mutate(form)} disabled={upsert.isPending} className="px-6 font-semibold shadow-sm bg-primary hover:bg-primary/95 text-primary-foreground min-w-[150px]">
+            {upsert.isPending ? "Salvando configurações..." : "Salvar Configuração"}
+          </Button>
         </div>
       </div>
 
-      {/* Save Button Row */}
-      <div className="flex items-center justify-end border-t border-border/70 bg-background py-3">
-        <Button
-          onClick={() => upsert.mutate(form)}
-          disabled={upsert.isPending}
-          className="px-6 font-semibold shadow-sm bg-primary hover:bg-primary/95 text-primary-foreground min-w-[150px]"
-        >
-          {upsert.isPending ? "Salvando configurações..." : "Salvar Configuração"}
-        </Button>
-      </div>
+      <aside className="h-fit xl:sticky xl:top-4">
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Layers className="h-4.5 w-4.5 text-primary" />
+              Seções desta aba
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Clique em uma opção para trocar o bloco exibido.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {menu.map((item) => {
+              const Icon = item.icon;
+              const active = activeSection === item.id;
+              return (
+                <Button
+                  key={item.id}
+                  variant={active ? "secondary" : "ghost"}
+                  className="h-9 justify-start gap-2 px-3 text-xs font-medium"
+                  onClick={() => setActiveSection(item.id)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Button>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </aside>
     </div>
   );
 }
-
 function ConhecimentoTab() {
   const { toast } = useToast();
   const { data: sources = [], isLoading, isError, error } = useKnowledgeSources();

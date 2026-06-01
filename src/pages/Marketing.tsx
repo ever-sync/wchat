@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketingAutomations } from "@/components/marketing/MarketingAutomations";
+import { MarketingCampaigns } from "@/components/marketing/MarketingCampaigns";
 import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTab";
 import { cn } from "@/lib/utils";
 
@@ -160,7 +161,7 @@ export default function Marketing() {
         </TabsList>
 
         <TabsContent value="campanhas" className="mt-0">
-          <ComingSoon icon={Send} title="Campanhas" />
+          <MarketingCampaigns />
         </TabsContent>
 
         <TabsContent value="automacoes" className="mt-0">

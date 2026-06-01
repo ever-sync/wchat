@@ -66,3 +66,50 @@ Modos: `inline` (padrão), `popup`, `slide-right`, `slide-left`, `top-bar`, `exi
 ## 7. App standalone `/formularios`
 
 Continua na pasta, **não versionado**. Antes de remover, faça backup ou commit — não há histórico git.
+
+---
+
+# Worker das Automações de Marketing (Fase 0)
+
+Liga o motor de execução dos fluxos. Sem isso os leads entram nos fluxos (gatilhos
+criam jobs `queued`), mas nada é processado e o card "Worker" fica Inativo.
+
+## 1. Banco
+
+```bash
+npm run db:push
+```
+
+Aplica `20260628190000_marketing_flow_worker_ops.sql`: tabela de heartbeat
+(`marketing_flow_worker_heartbeats`), RPC `get_marketing_flow_worker_last_seen()`
+e — se os GUCs abaixo estiverem setados — o agendamento `marketing-flow-worker-tick`.
+
+## 2. Edge function
+
+```bash
+npx supabase functions deploy marketing-flow-worker
+```
+
+Reusa o secret `CRON_SECRET` já existente (mesma convenção do dispatch de e-mail).
+
+## 3. GUCs + cron (rodar UMA vez no SQL Editor)
+
+A migration **não** versiona o secret. Configure os GUCs e reaplique:
+
+```sql
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+
+alter database postgres
+  set app.settings.functions_base_url = 'https://oaqeabqfgbeprrgqdmsk.supabase.co/functions/v1';
+alter database postgres
+  set app.settings.cron_secret = '<MESMO valor do CRON_SECRET das functions>';
+```
+
+Depois `npm run db:push` de novo (migration idempotente: lê os GUCs e agenda o tick
+de 1/min). Sem os GUCs, a tabela de heartbeat é criada mas o tick é pulado.
+
+## 4. Verificar
+
+- Card **"Worker: Ativo"** (verde) em até ~1 min, mesmo com a fila vazia.
+- Ativar um fluxo, disparar o gatilho → job sai de `queued` e "Última atividade" se move.

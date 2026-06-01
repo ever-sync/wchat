@@ -1012,18 +1012,35 @@ async function resolveMediaContent(admin: Admin, rows: Array<Record<string, unkn
     if (type === "audio") {
       const cached = typeof payload.transcription === "string" ? payload.transcription : "";
       if (cached.trim()) {
-        row.body_text = cached;
+        const transcript = cached.replace(/^\[(?:áudio|audio)[^\]]*\]\s*/i, "").trim();
+        row.body_text = transcript || cached.trim();
+        if (transcript) {
+          await admin
+            .from("whatsapp_chats")
+            .update({
+              last_message_preview: transcript,
+              last_message_at: row.created_at ?? new Date().toISOString(),
+            })
+            .eq("id", row.chat_id);
+        }
         continue;
       }
       try {
         const text = await transcribeAudio(mediaUrl);
         if (text) {
-          const value = `[áudio do cliente] ${text}`;
-          row.body_text = value;
+          const transcript = text.trim();
+          row.body_text = transcript;
           await admin
             .from("whatsapp_messages")
-            .update({ payload_json: { ...payload, transcription: value } })
+            .update({ body_text: transcript, payload_json: { ...payload, transcription: transcript } })
             .eq("id", row.id);
+          await admin
+            .from("whatsapp_chats")
+            .update({
+              last_message_preview: transcript,
+              last_message_at: row.created_at ?? new Date().toISOString(),
+            })
+            .eq("id", row.chat_id);
         }
       } catch (err) {
         console.error("resolveMediaContent(audio):", err);

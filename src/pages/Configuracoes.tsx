@@ -60,6 +60,7 @@ import {
 import { PlatformLogSection } from "@/components/settings/PlatformLogSection";
 import { AuditLogSection } from "@/components/settings/AuditLogSection";
 import { WebhooksSettingsSection } from "@/components/settings/WebhooksSettingsSection";
+import { AdsSettings } from "@/components/settings/AdsSettings";
 import { TeamsSettingsSection } from "@/components/settings/TeamsSettingsSection";
 import { TwoFactorSettingsCard } from "@/components/settings/TwoFactorSettingsCard";
 import { getCurrentTenantId } from "@/lib/api/tenant";
@@ -298,7 +299,12 @@ export default function Configuracoes() {
               p.delete("secao");
             }
           } else if (next === "integracoes") {
-            if (secao !== "whatsapp" && secao !== "automacao") {
+            if (
+              secao !== "whatsapp" &&
+              secao !== "automacao" &&
+              secao !== "ads" &&
+              secao !== "webhooks"
+            ) {
               p.delete("secao");
             }
           } else if (next === "configuracao-chat") {
@@ -1233,6 +1239,8 @@ export default function Configuracoes() {
           />
           </>
               ) : null}
+
+              {integrationsSection === "ads" ? <AdsSettings /> : null}
 
               {integrationsSection === "webhooks" ? (
                 <WebhooksSettingsSection canEdit={canEditConfiguracoes} />

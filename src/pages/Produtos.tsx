@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { formatBRL } from "@/lib/format";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,6 +153,10 @@ function productToInput(p: Product): ProductUpsertInput {
 const screen =
   "min-h-0 flex-1 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:pb-8";
 
+// Aba estilo "sublinhado" (premium) sobrescrevendo o pill padrão do shadcn.
+const UNDERLINE_TAB =
+  "rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 pt-1 text-sm font-medium text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
+
 export default function Produtos() {
   const { toast } = useToast();
   const { can } = useRolePermissions();
@@ -171,9 +175,14 @@ export default function Produtos() {
   );
 
   const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | "produto" | "servico">("all");
   const productQuery = useProducts({ search });
 
-  const products = productQuery.data ?? [];
+  const products = useMemo(() => productQuery.data ?? [], [productQuery.data]);
+  const filteredProducts = useMemo(
+    () => (kindFilter === "all" ? products : products.filter((p) => (p.tipo ?? "produto") === kindFilter)),
+    [products, kindFilter],
+  );
   const productIds = useMemo(() => products.map((p) => p.id).sort(), [products]);
   const { data: assignmentMap } = useProductCategoryAssignments(productIds);
 
@@ -198,6 +207,53 @@ export default function Produtos() {
   const setProductCats = useSetProductCategories();
 
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+
+  // Seleção em massa (catálogo) — apenas quando o papel pode excluir.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Remove da seleção os ids que não existem mais (após excluir/recarregar).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const live = new Set(products.map((p) => p.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (live.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [products]);
+
+  const allFilteredSelected =
+    filteredProducts.length > 0 && filteredProducts.every((p) => selectedIds.has(p.id));
+  const someFilteredSelected = filteredProducts.some((p) => selectedIds.has(p.id));
+  const headerChecked: boolean | "indeterminate" = allFilteredSelected
+    ? true
+    : someFilteredSelected
+      ? "indeterminate"
+      : false;
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      filteredProducts.forEach((p) => (checked ? next.add(p.id) : next.delete(p.id)));
+      return next;
+    });
+  };
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectionColumns = canDeleteProdutos ? 7 : 6;
 
   const [newCategoryNome, setNewCategoryNome] = useState("");
   const [categoryToDelete, setCategoryToDelete] = useState<{ id: string; nome: string } | null>(null);
@@ -362,11 +418,14 @@ export default function Produtos() {
   return (
     <div className={screen}>
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--wchat-purple-700))] text-primary-foreground shadow-[0_6px_16px_-8px_hsl(262_60%_40%/0.7)]">
+            <Package className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="space-y-0.5">
             <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Serviços e produtos</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastro com nome e valor; campos extras e categorias na aba correspondente.
+              Seu catálogo de venda no WhatsApp. Campos extras e categorias ficam nas abas ao lado.
             </p>
           </div>
         </div>
@@ -384,24 +443,29 @@ export default function Produtos() {
         ) : null}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as PageTab)} className="space-y-4">
-          <TabsList className="h-auto flex-wrap rounded-[10px] bg-muted/60 p-1">
-            <TabsTrigger value="produtos" className="rounded-[8px] px-4">
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-transparent p-0">
+            <TabsTrigger value="produtos" className={UNDERLINE_TAB}>
               Catálogo
             </TabsTrigger>
-            <TabsTrigger value="campos" className="rounded-[8px] px-4" disabled={extrasDisabled}>
+            <TabsTrigger value="campos" className={UNDERLINE_TAB} disabled={extrasDisabled}>
               Campos personalizados
             </TabsTrigger>
-            <TabsTrigger value="categorias" className="rounded-[8px] px-4" disabled={extrasDisabled}>
+            <TabsTrigger value="categorias" className={UNDERLINE_TAB} disabled={extrasDisabled}>
               Categorias
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="produtos" className="space-y-4 focus-visible:outline-none">
-            <Card className="overflow-hidden rounded-[10px] border-border shadow-sm">
-              <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-border bg-card py-4">
+            <Card className="overflow-hidden rounded-xl border-border shadow-sm">
+              <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 py-4">
                 <div>
-                  <CardTitle className="text-base">Seus produtos</CardTitle>
-                  <CardDescription>Nome e valor são os dados principais de cada item.</CardDescription>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    Seus produtos
+                    <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      {filteredProducts.length} {filteredProducts.length === 1 ? "item" : "itens"}
+                    </span>
+                  </CardTitle>
+                  <CardDescription>Clique numa linha para editar · selecione para ações em massa.</CardDescription>
                 </div>
                 <Button
                   type="button"
@@ -415,48 +479,171 @@ export default function Produtos() {
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
+                {canDeleteProdutos && selectedIds.size > 0 ? (
+                  <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-4 py-3">
+                    <span className="text-sm font-medium text-primary">
+                      {selectedIds.size} selecionado{selectedIds.size > 1 ? "s" : ""}
+                    </span>
+                    <div className="flex-1" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-[8px]"
+                      onClick={clearSelection}
+                    >
+                      Limpar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 rounded-[8px] border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setBulkDeleteOpen(true)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir selecionados
+                    </Button>
+                  </div>
+                ) : (
                 <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
                   <Input
-                    placeholder="Buscar por nome…"
+                    placeholder="Buscar por nome ou código…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="max-w-xs rounded-[10px]"
                   />
+                  <div className="inline-flex items-center rounded-[10px] border border-border bg-muted/60 p-0.5">
+                    {([
+                      { v: "all", label: "Todos" },
+                      { v: "produto", label: "Produtos" },
+                      { v: "servico", label: "Serviços" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setKindFilter(opt.v)}
+                        aria-pressed={kindFilter === opt.v}
+                        className={cn(
+                          "rounded-[8px] px-3 py-1.5 text-sm font-medium transition-colors",
+                          kindFilter === opt.v
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                )}
                 <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="[&_th]:text-[11px] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider">
                       <TableRow className="hover:bg-transparent">
-                        <TableHead>Nome</TableHead>
-                        <TableHead className="w-[140px]">Valor</TableHead>
-                        <TableHead className="hidden min-w-[160px] sm:table-cell">Categoria</TableHead>
-                        <TableHead className="w-[120px]" />
+                        {canDeleteProdutos ? (
+                          <TableHead className="w-[44px]">
+                            <Checkbox
+                              checked={headerChecked}
+                              onCheckedChange={(v) => toggleSelectAll(v === true)}
+                              aria-label="Selecionar todos"
+                              disabled={filteredProducts.length === 0}
+                            />
+                          </TableHead>
+                        ) : null}
+                        <TableHead>Item</TableHead>
+                        <TableHead className="hidden w-[110px] sm:table-cell">Tipo</TableHead>
+                        <TableHead className="hidden min-w-[160px] md:table-cell">Categorias</TableHead>
+                        <TableHead className="hidden w-[110px] text-right sm:table-cell">Estoque</TableHead>
+                        <TableHead className="w-[150px] text-right">Valor de venda</TableHead>
+                        <TableHead className="w-[110px]" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {productQuery.isLoading ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={selectionColumns} className="py-10 text-center text-muted-foreground">
                             <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                             Carregando…
                           </TableCell>
                         </TableRow>
-                      ) : products.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                            Nenhum produto encontrado.
+                      ) : filteredProducts.length === 0 ? (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={selectionColumns} className="py-16">
+                            <div className="flex flex-col items-center gap-3 text-center">
+                              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                                <Package className="h-7 w-7" />
+                              </div>
+                              {products.length === 0 ? (
+                                <>
+                                  <div className="space-y-1">
+                                    <p className="text-base font-semibold text-foreground">Nenhum produto ainda</p>
+                                    <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+                                      Cadastre seu primeiro item para enviá-lo em conversas, vincular a negociações e medir o catálogo.
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    className="gap-2 rounded-[10px]"
+                                    disabled={!canEditProdutos}
+                                    onClick={openCreate}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                    Cadastrar primeiro produto
+                                  </Button>
+                                </>
+                              ) : (
+                                <div className="space-y-1">
+                                  <p className="text-base font-semibold text-foreground">Nenhum item encontrado</p>
+                                  <p className="text-sm text-muted-foreground">Ajuste a busca ou o filtro de tipo.</p>
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        products.map((p) => {
+                        filteredProducts.map((p) => {
                           const catIds = assignmentMap?.get(p.id) ?? [];
+                          const tipo = p.tipo ?? "produto";
+                          const isServico = tipo === "servico";
                           return (
-                          <TableRow key={p.id} className="border-border">
-                            <TableCell className="font-medium">{p.nome}</TableCell>
-                            <TableCell className="tabular-nums text-muted-foreground">
-                              {p.precoVenda > 0 ? formatMoney(p.precoVenda) : "—"}
+                          <TableRow
+                            key={p.id}
+                            data-state={selectedIds.has(p.id) ? "selected" : undefined}
+                            className={cn(
+                              "group border-border transition-colors hover:bg-primary/[0.04]",
+                              selectedIds.has(p.id) && "bg-primary/10 hover:bg-primary/10",
+                            )}
+                          >
+                            {canDeleteProdutos ? (
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedIds.has(p.id)}
+                                  onCheckedChange={(v) => toggleSelectOne(p.id, v === true)}
+                                  aria-label={`Selecionar ${p.nome}`}
+                                />
+                              </TableCell>
+                            ) : null}
+                            <TableCell>
+                              <div className="font-medium text-foreground">{p.nome}</div>
+                              {p.codigo ? (
+                                <div className="mt-0.5 text-xs tabular-nums text-muted-foreground">#{p.codigo}</div>
+                              ) : null}
                             </TableCell>
                             <TableCell className="hidden sm:table-cell">
+                              {isServico ? (
+                                <Badge variant="secondary" className="gap-1.5 font-normal">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden />
+                                  Serviço
+                                </Badge>
+                              ) : (
+                                <Badge className="gap-1.5 border-primary/20 bg-primary/10 font-normal text-primary hover:bg-primary/10">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                                  Produto
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
                               <div className="flex flex-wrap gap-1">
                                 {catIds.length === 0 ? (
                                   <span className="text-xs text-muted-foreground">—</span>
@@ -469,18 +656,42 @@ export default function Produtos() {
                                 )}
                               </div>
                             </TableCell>
+                            <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                              {isServico ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : p.qtdEstoque <= 0 ? (
+                                <span className="font-medium text-destructive">Esgotado</span>
+                              ) : p.qtdEstoque <= 5 ? (
+                                <span className="font-medium text-amber-600 dark:text-amber-400">
+                                  {p.qtdEstoque} un
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">{p.qtdEstoque} un</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="font-semibold tabular-nums text-foreground">
+                                {p.precoVenda > 0 ? formatMoney(p.precoVenda) : "—"}
+                              </div>
+                              {!isServico && p.precoCompra > 0 ? (
+                                <div className="text-xs tabular-nums text-muted-foreground">
+                                  custo {formatMoney(p.precoCompra)}
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                                 <Button
                                   type="button"
                                   variant="ghost"
-                                  size="sm"
-                                  className="h-8 gap-1 rounded-[8px]"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-[8px]"
+                                  aria-label={`Editar ${p.nome}`}
+                                  title="Editar"
                                   disabled={!canEditProdutos}
                                   onClick={() => openEdit(p)}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
-                                  Editar
                                 </Button>
                                 <Button
                                   type="button"
@@ -488,6 +699,7 @@ export default function Produtos() {
                                   size="icon"
                                   className="h-8 w-8 rounded-[8px] text-destructive hover:text-destructive"
                                   aria-label={`Excluir ${p.nome}`}
+                                  title="Excluir"
                                   disabled={!canDeleteProdutos}
                                   onClick={() => setProductToDelete(p)}
                                 >
@@ -1015,6 +1227,67 @@ export default function Produtos() {
               }}
             >
               {deleteProducts.isPending ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkDeleteOpen && canDeleteProdutos}
+        onOpenChange={(open) => {
+          if (!open) setBulkDeleteOpen(false);
+        }}
+      >
+        <AlertDialogContent className="rounded-[12px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {selectedIds.size} {selectedIds.size > 1 ? "itens" : "item"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Os itens selecionados serão removidos do catálogo. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-[10px]" disabled={deleteProducts.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-[10px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteProducts.isPending || !canDeleteProdutos}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!canDeleteProdutos || selectedIds.size === 0) {
+                  return;
+                }
+                const ids = [...selectedIds];
+                void (async () => {
+                  try {
+                    const count = await deleteProducts.mutateAsync(ids);
+                    if (linkProductId && ids.includes(linkProductId)) {
+                      setLinkProductId("");
+                      setLinkCats([]);
+                    }
+                    if (editingId && ids.includes(editingId)) {
+                      setDialogOpen(false);
+                      setEditingId(null);
+                    }
+                    clearSelection();
+                    setBulkDeleteOpen(false);
+                    toast({
+                      title: "Itens excluídos",
+                      description: `${count} ${count === 1 ? "item removido" : "itens removidos"} do catálogo.`,
+                    });
+                  } catch (err) {
+                    toast({
+                      title: "Não foi possível excluir",
+                      description: err instanceof Error ? err.message : "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  }
+                })();
+              }}
+            >
+              {deleteProducts.isPending ? "Excluindo…" : "Excluir selecionados"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -19,18 +19,95 @@ export function isMarketingFlowStatus(value: unknown): value is MarketingFlowSta
 // ---------------------------------------------------------------- Gatilhos
 
 export const MARKETING_FLOW_TRIGGER_TYPES = [
+  "manual",
+  "whatsapp_message_received",
+  "chat_assigned",
+  "ai_paused",
+  "ai_resumed",
   "form_submitted",
   "tag_added",
+  "tag_removed",
   "negotiation_created",
   "negotiation_stage_changed",
-  "manual",
+  "webhook_received",
 ] as const;
 export type MarketingFlowTriggerType = (typeof MARKETING_FLOW_TRIGGER_TYPES)[number];
+
+export const MARKETING_FLOW_TRIGGER_LABELS: Record<MarketingFlowTriggerType, string> = {
+  manual: "Manual",
+  whatsapp_message_received: "Mensagem recebida no WhatsApp",
+  chat_assigned: "Conversa atribuída",
+  ai_paused: "IA pausada",
+  ai_resumed: "IA retomada",
+  form_submitted: "Formulário enviado",
+  tag_added: "Etiqueta adicionada",
+  tag_removed: "Etiqueta removida",
+  negotiation_created: "Negociação criada",
+  negotiation_stage_changed: "Etapa do CRM alterada",
+  webhook_received: "Evento externo recebido",
+};
 
 export type MarketingFlowTrigger = {
   type: MarketingFlowTriggerType;
   config?: Record<string, unknown>;
 };
+
+export function isMarketingFlowTriggerType(
+  value: unknown,
+): value is MarketingFlowTriggerType {
+  return (
+    typeof value === "string" &&
+    (MARKETING_FLOW_TRIGGER_TYPES as readonly string[]).includes(value)
+  );
+}
+
+/** Resolve o rótulo de um gatilho a partir do `trigger.type` (jsonb solto). */
+export function triggerLabelFromValue(value: unknown): string {
+  return isMarketingFlowTriggerType(value)
+    ? MARKETING_FLOW_TRIGGER_LABELS[value]
+    : "Sem gatilho";
+}
+
+// ---------------------------------------------------------------- Executores
+
+/**
+ * actionIds que o worker realmente executa (switch de executeStep em
+ * supabase/functions/marketing-flow-worker/index.ts). Os demais actionIds de
+ * flow-actions.ts existem no editor mas ainda nao tem executor — usar num fluxo
+ * publicado faria o passo falhar. Mantenha esta lista em sincronia com o worker.
+ */
+export const MARKETING_FLOW_EXECUTABLE_ACTIONS = [
+  "espera",
+  "webhook",
+  "criar-tarefa-negociacao",
+  "adicionar-tags",
+  "remover-tag",
+  "whatsapp",
+  "email",
+  "criar-negociacao",
+  "mover-negociacao",
+  "dividir-caminho",
+  "dividir-por-segmentacao",
+  "adicionar-leads-outros-fluxos",
+  "remover-leads-outros-fluxos",
+  "teste-ab",
+  "esperar-condicao",
+  "mensagem-inteligente",
+  "unir-caminho",
+  "definir-variavel",
+  "atualizar-nome-negociacao",
+  "atualizar-status",
+  "adicionar-anotacao",
+  "marcar-venda",
+  "classificar-ia",
+] as const;
+export type MarketingFlowExecutableAction =
+  (typeof MARKETING_FLOW_EXECUTABLE_ACTIONS)[number];
+
+/** Indica se a acao tem executor no worker (pode rodar em um fluxo publicado). */
+export function isExecutableMarketingFlowAction(actionId: string): boolean {
+  return (MARKETING_FLOW_EXECUTABLE_ACTIONS as readonly string[]).includes(actionId);
+}
 
 // ---------------------------------------------------------------- Criterios
 
@@ -101,8 +178,19 @@ export type MarketingFlowSettings = {
   autoAbandonDays?: number | null;
 };
 
+/** Aresta dirigida do grafo (format >= 2). `branch` rotula a saida. */
+export type MarketingFlowEdge = {
+  from: string;
+  to: string;
+  branch?: string;
+};
+
 export type MarketingFlowDefinition = {
   steps: MarketingFlowStep[];
+  /** Arestas explicitas do grafo. Presente em fluxos format >= 2. */
+  edges?: MarketingFlowEdge[];
+  /** Versao do formato da definicao. >= 2 = grafo com arestas explicitas. */
+  format?: number;
   settings?: MarketingFlowSettings;
   exitConditions?: string[];
 };

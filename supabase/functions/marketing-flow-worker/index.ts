@@ -64,6 +64,13 @@ type StepResult = {
    * apenas atualiza run_at e dispara step_waiting.
    */
   rescheduleIn?: number;
+  /**
+   * Dados a mesclar no `context` do participant (Fase 3 — dados entre passos).
+   * Ex.: webhook grava `{ webhook: { [stepId]: { status, body } } }`; a acao
+   * "definir-variavel" grava `{ vars: { ... } }`. Passos seguintes leem via
+   * template `{{contexto.webhook.<stepId>.body.campo}}` / `{{contexto.vars.x}}`.
+   */
+  contextPatch?: Record<string, unknown>;
   detail?: Record<string, unknown>;
 };
 
@@ -127,6 +134,18 @@ Deno.serve(async (request) => {
       retried++;
     }
   }
+
+  // Heartbeat: registra que o worker rodou — mesmo sem jobs — pro card "Worker"
+  // do app nao depender de max(locked_at) (que so existe quando ha fila).
+  await admin.from("marketing_flow_worker_heartbeats").upsert(
+    {
+      worker_key: "default",
+      last_seen: new Date().toISOString(),
+      worker_id: workerId,
+      claimed: list.length,
+    },
+    { onConflict: "worker_key" },
+  );
 
   return jsonResponse({
     ok: true,
@@ -196,8 +215,9 @@ async function processJob(admin: AdminClient, job: Job): Promise<JobOutcome> {
     return "success";
   }
 
-  // 4b) Sucesso: marca done + agenda proximo.
-  await markDone(admin, job, step, steps, participant, result);
+  // 4b) Sucesso: marca done + agenda proximo (via grafo).
+  const linearNext = buildLinearNextMap(published, steps);
+  await markDone(admin, job, step, steps, participant, result, linearNext);
   return "success";
 }
 
@@ -224,26 +244,128 @@ function parseSteps(published: unknown): Step[] {
     .filter((s): s is Step => s !== null);
 }
 
+// Grafo (Fase 2): mapa "no -> proximo no linear". Executores ja resolvem os
+// ramos (split/teste-ab/esperar-condicao) via nextStepId; aqui resolvemos
+// apenas a saida linear/default e a reconvergencia (unir-caminho). Em fluxos
+// format >= 2 usamos as arestas explicitas (branch ausente = linear); em fluxos
+// legados a saida linear e o proximo no do array. Espelha src/lib/marketing/
+// flow-graph.ts (boundary Deno x Vite impede import direto).
+function buildLinearNextMap(
+  published: unknown,
+  steps: Step[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  const ids = new Set(steps.map((s) => s.id));
+  const pub = (published && typeof published === "object")
+    ? (published as Record<string, unknown>)
+    : {};
+  const fmt = Number(pub.format ?? 0);
+  const edges = pub.edges;
+
+  if (fmt >= 2 && Array.isArray(edges)) {
+    // Arestas explicitas: a primeira sem `branch` (ou a unica) e a linear.
+    const byFrom = new Map<string, { to: string; branch?: string }[]>();
+    for (const e of edges) {
+      const rec = (e && typeof e === "object") ? (e as Record<string, unknown>) : {};
+      const from = typeof rec.from === "string" ? rec.from : "";
+      const to = typeof rec.to === "string" ? rec.to : "";
+      if (!from || !to || !ids.has(from) || !ids.has(to)) continue;
+      const branch = typeof rec.branch === "string" ? rec.branch : undefined;
+      if (!byFrom.has(from)) byFrom.set(from, []);
+      byFrom.get(from)!.push({ to, branch });
+    }
+    for (const [from, outs] of byFrom) {
+      const linear = outs.find((o) => o.branch == null) ?? outs[0];
+      if (linear) map.set(from, linear.to);
+    }
+    return map;
+  }
+
+  // Legado: linear = proximo no do array.
+  steps.forEach((s, i) => {
+    const next = steps[i + 1]?.id;
+    if (next) map.set(s.id, next);
+  });
+  return map;
+}
+
+// Aplica um filtro de formatacao a um valor resolvido (Fase 3).
+// Suportados: date (pt-BR), datetime, currency (BRL), upper, lower.
+function applyTemplateFilter(value: unknown, filter: string): string {
+  const name = filter.trim().toLowerCase();
+  if (name === "upper") return String(value ?? "").toUpperCase();
+  if (name === "lower") return String(value ?? "").toLowerCase();
+  if (name === "date" || name === "datetime") {
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) return String(value ?? "");
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      ...(name === "datetime" ? { hour: "2-digit", minute: "2-digit" } : {}),
+    });
+  }
+  if (name === "currency") {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value ?? "");
+    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+  return String(value ?? "");
+}
+
 // Renderiza variaveis {{cliente.nome}}, {{negociacao.titulo}}, {{contexto.X}}.
+// Fase 3: suporta filtros com pipe — fallback `{{x | "padrao"}}` (string entre
+// aspas) e formatadores `{{valor | currency}}` / `{{data | date}}` / upper / lower.
 function renderTemplate(
   text: string,
   ctx: { customer: Record<string, unknown> | null; negotiation: Record<string, unknown> | null; context: Record<string, unknown> },
 ): string {
   return text.replace(/\{\{([^}]+)\}\}/g, (_, raw: string) => {
-    const path = raw.trim().split(".");
-    if (path.length === 0) return "";
-    const [root, ...rest] = path;
+    // Separa expressao de filtros: `path | filtro1 | "fallback"`.
+    const segments = raw.split("|").map((s) => s.trim());
+    const path = segments[0];
+    const filters = segments.slice(1);
+
+    const parts = path.split(".");
     let source: unknown;
+    const [root, ...rest] = parts;
     if (root === "cliente") source = ctx.customer ?? {};
     else if (root === "negociacao") source = ctx.negotiation ?? {};
     else if (root === "contexto") source = ctx.context ?? {};
-    else return "";
-    for (const part of rest) {
-      if (source == null || typeof source !== "object") return "";
-      source = (source as Record<string, unknown>)[part];
+    else source = undefined;
+    if (source !== undefined) {
+      for (const part of rest) {
+        if (source == null || typeof source !== "object") {
+          source = undefined;
+          break;
+        }
+        source = (source as Record<string, unknown>)[part];
+      }
     }
-    if (source == null) return "";
-    return String(source);
+
+    // Filtros: string entre aspas = fallback (usado quando o valor e vazio);
+    // identificador = formatador.
+    let fallback = "";
+    const formatters: string[] = [];
+    for (const f of filters) {
+      const quoted = f.match(/^["'](.*)["']$/);
+      if (quoted) fallback = quoted[1];
+      else if (f) formatters.push(f);
+    }
+
+    const isEmpty =
+      source == null ||
+      (typeof source !== "object" && String(source) === "") ||
+      (typeof source === "object" && Object.keys(source as object).length === 0);
+    if (isEmpty) return fallback;
+
+    if (formatters.length > 0) {
+      // Aplica formatadores em cadeia sobre o valor original.
+      let out = source;
+      for (const fmt of formatters) out = applyTemplateFilter(out, fmt);
+      return String(out);
+    }
+    return typeof source === "object" ? JSON.stringify(source) : String(source);
   });
 }
 
@@ -352,6 +474,7 @@ async function markDone(
   allSteps: Step[],
   participant: Participant,
   result: StepResult,
+  linearNext: Map<string, string>,
 ) {
   await admin
     .from("marketing_flow_jobs")
@@ -362,12 +485,16 @@ async function markDone(
     result: result.detail ?? null,
   });
 
-  const idx = allSteps.findIndex((s) => s.id === currentStep.id);
-  const nextStep = result.nextStepId
-    ? allSteps.find((s) => s.id === result.nextStepId)
-    : idx >= 0
-      ? allSteps[idx + 1]
-      : undefined;
+  // Dados entre passos (Fase 3): mescla o contextPatch no context do participant.
+  const nextContext = result.contextPatch
+    ? deepMerge(participant.context ?? {}, result.contextPatch)
+    : null;
+
+  // Branch escolhido pelo executor (split/teste-ab/esperar-condicao) tem
+  // prioridade; senao segue a aresta linear do grafo (que cobre reconvergencia
+  // / unir-caminho, em vez do antigo "proximo do array").
+  const nextId = result.nextStepId ?? linearNext.get(currentStep.id);
+  const nextStep = nextId ? allSteps.find((s) => s.id === nextId) : undefined;
 
   if (!nextStep) {
     await admin
@@ -377,6 +504,7 @@ async function markDone(
         exited_at: new Date().toISOString(),
         current_step_id: null,
         next_run_at: null,
+        ...(nextContext ? { context: nextContext } : {}),
       })
       .eq("id", participant.id);
     await insertEvent(admin, job, "participant_completed", null, null, {});
@@ -404,6 +532,7 @@ async function markDone(
       current_step_id: nextStep.id,
       next_run_at: runAt,
       status: waitMs > 0 ? "waiting" : "active",
+      ...(nextContext ? { context: nextContext } : {}),
     })
     .eq("id", participant.id);
 
@@ -545,7 +674,9 @@ async function executeStep(
     case "espera":
       return runWait(step.config);
     case "webhook":
-      return await runWebhook(step.config);
+      return await runWebhook(admin, step, participant);
+    case "definir-variavel":
+      return await runSetVariable(admin, step, participant);
     case "criar-tarefa-negociacao":
       return await runCreateTask(admin, step.config, participant);
     case "adicionar-tags":
@@ -560,6 +691,14 @@ async function executeStep(
       return await runCreateDeal(admin, step, participant);
     case "mover-negociacao":
       return await runMoveDeal(admin, step, participant);
+    case "atualizar-nome-negociacao":
+      return await runUpdateDealTitle(admin, step, participant);
+    case "atualizar-status":
+      return await runUpdateDealStatus(admin, step, participant);
+    case "adicionar-anotacao":
+      return await runAddNote(admin, step, participant);
+    case "marcar-venda":
+      return await runMarkSale(admin, step, participant);
     case "dividir-caminho":
     case "dividir-por-segmentacao":
       return await runSplit(admin, step, participant);
@@ -573,15 +712,102 @@ async function executeStep(
       return await runWaitUntil(admin, step, participant);
     case "mensagem-inteligente":
       return await runSmartMessage(admin, step, participant);
+    case "pausar-ia":
+      return await runPauseAi(admin, participant);
+    case "retomar-ia":
+      return await runResumeAi(admin, participant);
+    case "classificar-ia":
+      return await runAiClassify(admin, step, participant);
+    case "unir-caminho":
+      // No de reconvergencia: nao faz acao, apenas segue a saida linear do grafo.
+      return { detail: { merge: true } };
     default:
-      // Demais actions (mensagem-inteligente, sms, etc.) seguem sem executor
-      // e completam como skipped pro fluxo nao travar.
-      return { detail: { skipped: true, reason: `executor pendente para ${step.actionId}` } };
+      // Sem executor: falha explicita (PermanentError -> step_failed + participant
+      // failed) em vez de "skipped" silencioso, que fazia o passo passar sem fazer
+      // nada e o fluxo "concluir" como se tivesse executado. A publicacao ja
+      // bloqueia fluxos com acao nao suportada (flow-validation); isto e defesa
+      // em profundidade para versoes publicadas antes dessa regra.
+      throw new PermanentError(
+        `ação "${step.actionId}" não tem executor implementado no worker`,
+      );
   }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function getParticipantChatId(participant: Participant): string | null {
+  const context = asRecord(participant.context);
+  const rawChatId = context.chat_id ?? context.chatId ?? context.whatsapp_chat_id;
+  if (typeof rawChatId !== "string") return null;
+  const chatId = rawChatId.trim();
+  return chatId.length > 0 ? chatId : null;
+}
+
+async function resolveChatResumeMode(admin: AdminClient, chatId: string): Promise<"qualifying" | "full"> {
+  const { data: chat, error: chatError } = await admin
+    .from("whatsapp_chats")
+    .select("instance_id")
+    .eq("id", chatId)
+    .maybeSingle();
+  if (chatError || !chat?.instance_id) return "full";
+
+  const { data: instance } = await admin
+    .from("whatsapp_instances")
+    .select("ai_default_mode")
+    .eq("id", chat.instance_id as string)
+    .maybeSingle();
+
+  return String(instance?.ai_default_mode ?? "full") === "qualifying" ? "qualifying" : "full";
+}
+
+async function updateChatAiMode(admin: AdminClient, chatId: string, aiMode: string): Promise<void> {
+  const { error } = await admin.from("whatsapp_chats").update({ ai_mode: aiMode }).eq("id", chatId);
+  if (error) {
+    throw new Error(`falha ao atualizar ai_mode do chat ${chatId}: ${error.message}`);
+  }
+}
+
+async function runPauseAi(admin: AdminClient, participant: Participant): Promise<StepResult> {
+  const chatId = getParticipantChatId(participant);
+  if (!chatId) {
+    throw new PermanentError("participante sem chat_id no contexto para pausar IA");
+  }
+
+  await updateChatAiMode(admin, chatId, "handoff");
+  return { detail: { chat_id: chatId, ai_mode: "handoff" } };
+}
+
+async function runResumeAi(admin: AdminClient, participant: Participant): Promise<StepResult> {
+  const chatId = getParticipantChatId(participant);
+  if (!chatId) {
+    throw new PermanentError("participante sem chat_id no contexto para retomar IA");
+  }
+
+  const aiMode = await resolveChatResumeMode(admin, chatId);
+  await updateChatAiMode(admin, chatId, aiMode);
+  return { detail: { chat_id: chatId, ai_mode: aiMode } };
+}
+
+/** Merge profundo de objetos planos (arrays e escalares sao substituidos). */
+function deepMerge(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const prev = out[key];
+    if (
+      value && typeof value === "object" && !Array.isArray(value) &&
+      prev && typeof prev === "object" && !Array.isArray(prev)
+    ) {
+      out[key] = deepMerge(prev as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 function runWait(config: unknown): StepResult {
@@ -596,8 +822,12 @@ function runWait(config: unknown): StepResult {
   return { waitMs, detail: { days, hours, minutes } };
 }
 
-async function runWebhook(config: unknown): Promise<StepResult> {
-  const c = asRecord(config);
+async function runWebhook(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  const c = asRecord(step.config);
   const url = String(c.url ?? "").trim();
   if (!url) throw new PermanentError("Webhook sem URL");
   const method = String(c.method ?? "POST").toUpperCase();
@@ -607,6 +837,12 @@ async function runWebhook(config: unknown): Promise<StepResult> {
     throw new PermanentError("URL do webhook inválida");
   }
 
+  // Renderiza URL e corpo com variaveis do contexto (Fase 3).
+  const customer = await loadCustomer(admin, participant.customer_id);
+  const negotiation = await loadNegotiation(admin, participant.negotiation_id);
+  const renderCtx = { customer, negotiation, context: participant.context ?? {} };
+  const renderedUrl = renderTemplate(url, renderCtx);
+
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (typeof c.headers === "string") {
     for (const line of c.headers.split("\n")) {
@@ -614,31 +850,91 @@ async function runWebhook(config: unknown): Promise<StepResult> {
       if (colon <= 0) continue;
       const key = line.slice(0, colon).trim();
       const value = line.slice(colon + 1).trim();
-      if (key) headers[key] = value;
+      if (key) headers[key] = renderTemplate(value, renderCtx);
     }
   }
 
   const init: RequestInit = { method, headers };
   if (method !== "GET" && method !== "HEAD") {
-    init.body = typeof c.body === "string" && c.body.length > 0 ? c.body : "{}";
+    init.body =
+      typeof c.body === "string" && c.body.length > 0
+        ? renderTemplate(c.body, renderCtx)
+        : "{}";
   }
 
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await fetch(renderedUrl, init);
   } catch (e) {
     // erro de rede = temporario
     throw new Error(`erro de rede: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // Captura a resposta pra disponibilizar aos proximos passos. Limita o
+  // tamanho pra nao inflar o jsonb do participant.
+  const rawText = (await response.text()).slice(0, 8000);
+  let parsedBody: unknown = rawText;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      parsedBody = JSON.parse(rawText);
+    } catch {
+      parsedBody = rawText;
+    }
+  }
+
+  // Grava em contexto.webhook.<stepId> (acessivel via template nos proximos passos).
+  const contextPatch = {
+    webhook: {
+      [step.id]: {
+        status: response.status,
+        body: parsedBody,
+        at: new Date().toISOString(),
+      },
+    },
+  };
+
   if (response.status >= 200 && response.status < 300) {
-    return { detail: { status: response.status } };
+    return { contextPatch, detail: { status: response.status } };
   }
   if (response.status >= 400 && response.status < 500) {
     throw new PermanentError(`HTTP ${response.status}`);
   }
   // 5xx = temporario
   throw new Error(`HTTP ${response.status}`);
+}
+
+/**
+ * Acao "definir-variavel" (Fase 3): grava valores em contexto.vars.* para uso
+ * nos passos seguintes. Cada atribuicao tem `key` e `value` (template renderizado).
+ */
+async function runSetVariable(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  const c = asRecord(step.config);
+  const raw = Array.isArray(c.assignments) ? c.assignments : [];
+  const assignments = raw
+    .map((a) => {
+      const ar = asRecord(a);
+      return { key: String(ar.key ?? "").trim(), value: String(ar.value ?? "") };
+    })
+    .filter((a) => a.key);
+  if (assignments.length === 0) {
+    throw new PermanentError("Definir variável sem atribuições");
+  }
+
+  const customer = await loadCustomer(admin, participant.customer_id);
+  const negotiation = await loadNegotiation(admin, participant.negotiation_id);
+  const renderCtx = { customer, negotiation, context: participant.context ?? {} };
+
+  const vars: Record<string, unknown> = {};
+  for (const a of assignments) {
+    vars[a.key] = renderTemplate(a.value, renderCtx);
+  }
+
+  return { contextPatch: { vars }, detail: { keys: assignments.map((a) => a.key) } };
 }
 
 async function runCreateTask(
@@ -1016,6 +1312,153 @@ async function runMoveDeal(
   };
 }
 
+// ---------------------------------------------------------------- CRM negociacao (Fase 4)
+
+// Valores reais da check constraint de crm_negotiations.status.
+const DEAL_STATUSES = ["em_andamento", "vendido", "perdido", "pausado", "nao_pausado"] as const;
+
+async function runUpdateDealTitle(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.negotiation_id) {
+    throw new PermanentError("Participante sem negociação para renomear");
+  }
+  const c = asRecord(step.config);
+  const titleTemplate = String(c.title ?? "").trim();
+  if (!titleTemplate) throw new PermanentError("Novo nome da negociação não definido");
+
+  const customer = await loadCustomer(admin, participant.customer_id);
+  const negotiation = await loadNegotiation(admin, participant.negotiation_id);
+  const title = renderTemplate(titleTemplate, {
+    customer,
+    negotiation,
+    context: participant.context ?? {},
+  }).trim();
+  if (!title) throw new PermanentError("Nome renderizado vazio");
+
+  const { error } = await admin
+    .from("crm_negotiations")
+    .update({ title })
+    .eq("id", participant.negotiation_id)
+    .eq("tenant_id", participant.tenant_id);
+  if (error) throw new Error(error.message);
+  return { detail: { title } };
+}
+
+async function runUpdateDealStatus(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.negotiation_id) {
+    throw new PermanentError("Participante sem negociação para atualizar status");
+  }
+  const c = asRecord(step.config);
+  const status = String(c.status ?? "").trim();
+  if (!(DEAL_STATUSES as readonly string[]).includes(status)) {
+    throw new PermanentError(`Status inválido: "${status}"`);
+  }
+
+  const updates: Record<string, unknown> = { status };
+  // O trigger crm_negotiations_require_lost_reason exige lost_reason quando
+  // status vira 'perdido' — sem ele o UPDATE falha. Anexa um motivo padrao.
+  if (status === "perdido") {
+    const reason = String(c.lossReason ?? "").trim();
+    updates.lost_reason = reason || "Perdido automaticamente pelo fluxo de marketing";
+  }
+
+  const { error } = await admin
+    .from("crm_negotiations")
+    .update(updates)
+    .eq("id", participant.negotiation_id)
+    .eq("tenant_id", participant.tenant_id);
+  if (error) throw new Error(error.message);
+  return { detail: { status } };
+}
+
+async function runAddNote(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.negotiation_id) {
+    throw new PermanentError("Participante sem negociação para anotar");
+  }
+  const c = asRecord(step.config);
+  const noteTemplate = String(c.note ?? "").trim();
+  if (!noteTemplate) throw new PermanentError("Anotação vazia");
+
+  // Idempotencia: evita anotacao duplicada em retry pos-crash.
+  if (await alreadyCompleted(admin, participant.flow_id, participant.id, step.id)) {
+    return { detail: { skipped: true, reason: "step ja completado (idempotencia)" } };
+  }
+
+  const customer = await loadCustomer(admin, participant.customer_id);
+  const negotiation = await loadNegotiation(admin, participant.negotiation_id);
+  const body = renderTemplate(noteTemplate, {
+    customer,
+    negotiation,
+    context: participant.context ?? {},
+  }).trim();
+  if (!body) throw new PermanentError("Anotação renderizada vazia");
+
+  // Anotacao automatica do fluxo: crm_activities aceita created_by null
+  // (on delete set null). Nao usamos crm_negotiation_comments porque exige
+  // created_by NOT NULL (um usuario), que o fluxo nao tem.
+  const { error } = await admin.from("crm_activities").insert({
+    tenant_id: participant.tenant_id,
+    customer_id: participant.customer_id,
+    negotiation_id: participant.negotiation_id,
+    activity_type: "comment",
+    title: "Anotação do fluxo de marketing",
+    body,
+    created_by: null,
+  });
+  if (error) throw new Error(error.message);
+  return { detail: { note_length: body.length } };
+}
+
+async function runMarkSale(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.negotiation_id) {
+    throw new PermanentError("Participante sem negociação para marcar venda");
+  }
+  // Idempotencia: nao marca venda duas vezes.
+  if (await alreadyCompleted(admin, participant.flow_id, participant.id, step.id)) {
+    return { detail: { skipped: true, reason: "step ja completado (idempotencia)" } };
+  }
+
+  const c = asRecord(step.config);
+  // valueCents opcional: quando ausente, mantem o total_value atual.
+  const raw = c.valueCents;
+  const hasValue = raw != null && String(raw).trim() !== "";
+  const valueCents = hasValue ? Math.floor(Number(raw)) : null;
+  if (hasValue && (!Number.isFinite(valueCents) || (valueCents ?? 0) < 0)) {
+    throw new PermanentError("Valor da venda inválido");
+  }
+
+  // "Venda" = status 'vendido'. total_value e numeric em reais; converte de
+  // centavos quando informado.
+  const updates: Record<string, unknown> = {
+    status: "vendido",
+    last_interaction_at: new Date().toISOString(),
+  };
+  if (valueCents != null) updates.total_value = valueCents / 100;
+
+  const { error } = await admin
+    .from("crm_negotiations")
+    .update(updates)
+    .eq("id", participant.negotiation_id)
+    .eq("tenant_id", participant.tenant_id);
+  if (error) throw new Error(error.message);
+  return { detail: { sale: true, value_cents: valueCents } };
+}
+
 // ---------------------------------------------------------------- Split (Fase 7)
 
 function readFieldPath(
@@ -1344,4 +1787,93 @@ async function runSmartMessage(
     step.id,
   );
   return { detail: { generated_length: generated.length, ...result } };
+}
+
+// ---------------------------------------------------------------- Classificacao por IA (Fase 6)
+
+/**
+ * Ramifica o fluxo pela classificacao do lead feita por Claude. Combina IA +
+ * grafo (retorna nextStepId, como split/teste-ab) + dados entre passos (grava
+ * a categoria escolhida em contexto.ai.<stepId>). Config:
+ *   { prompt, categories: [{ label, nextStepId }] }
+ * O modelo recebe a lista de rotulos e responde com um deles; casamos por
+ * igualdade (case-insensitive) e, em fallback, por "contains".
+ */
+async function runAiClassify(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  const c = asRecord(step.config);
+  const promptTemplate = String(c.prompt ?? "").trim();
+  if (!promptTemplate) throw new PermanentError("Classificação por IA sem prompt");
+
+  const rawCats = Array.isArray(c.categories) ? c.categories : [];
+  const categories = rawCats
+    .map((v) => {
+      const vr = asRecord(v);
+      return {
+        label: String(vr.label ?? "").trim(),
+        nextStepId: String(vr.nextStepId ?? "").trim(),
+      };
+    })
+    .filter((v) => v.label && v.nextStepId);
+  if (categories.length < 2) {
+    throw new PermanentError("Classificação por IA precisa de ao menos 2 categorias com destino");
+  }
+
+  const customer = await loadCustomer(admin, participant.customer_id);
+  const negotiation = await loadNegotiation(admin, participant.negotiation_id);
+  const renderedPrompt = renderTemplate(promptTemplate, {
+    customer,
+    negotiation,
+    context: participant.context ?? {},
+  });
+
+  const labels = categories.map((cat) => cat.label);
+  let chosen: string;
+  try {
+    const response = await createMessage({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 20,
+      temperature: 0,
+      system: [
+        {
+          type: "text",
+          text:
+            `Você classifica leads em UMA categoria. Categorias válidas: ${labels
+              .map((l) => `"${l}"`)
+              .join(", ")}. ` +
+            `Responda APENAS com o rótulo exato de uma das categorias, sem aspas, sem explicação.`,
+        },
+      ],
+      tools: [],
+      messages: [{ role: "user", content: [{ type: "text", text: renderedPrompt }] }],
+    });
+    const block = response.content.find((b) => b.type === "text") as
+      | { type: "text"; text?: string }
+      | undefined;
+    chosen = (block?.text ?? "").trim();
+    if (!chosen) throw new Error("Resposta vazia da IA");
+  } catch (e) {
+    // Falha de IA = temporario (retry pelo backoff padrao).
+    throw new Error(`IA indisponivel: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Casa o rotulo: igualdade case-insensitive; senao "contains" nos dois sentidos.
+  const lc = chosen.toLowerCase();
+  let match =
+    categories.find((cat) => cat.label.toLowerCase() === lc) ??
+    categories.find(
+      (cat) => lc.includes(cat.label.toLowerCase()) || cat.label.toLowerCase().includes(lc),
+    );
+  // Fallback determinístico: primeira categoria (nunca trava o lead).
+  const fellBack = !match;
+  if (!match) match = categories[0];
+
+  return {
+    nextStepId: match.nextStepId,
+    contextPatch: { ai: { [step.id]: { category: match.label, raw: chosen } } },
+    detail: { category: match.label, raw: chosen, fell_back: fellBack },
+  };
 }

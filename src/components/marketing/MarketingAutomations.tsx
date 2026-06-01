@@ -5,6 +5,7 @@ import {
   Download,
   FileUp,
   Filter,
+  Gauge,
   Loader2,
   MoreVertical,
   Plus,
@@ -70,6 +71,7 @@ import {
   isMarketingFlowStatus,
 } from "@/lib/marketing/flow-types";
 import { statsFor, useMarketingFlowStats } from "@/lib/api/marketing-flow-stats";
+import { ChannelLimitsDialog } from "@/components/marketing/ChannelLimitsDialog";
 import { cn } from "@/lib/utils";
 
 type SortField = "createdAt" | "updatedAt";
@@ -191,6 +193,7 @@ export function MarketingAutomations() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [deleteTarget, setDeleteTarget] = useState<MarketingFlowRecord | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [channelLimitsOpen, setChannelLimitsOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<MarketingFlowStatus>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -447,6 +450,15 @@ export function MarketingAutomations() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            type="button"
+            variant="secondary"
+            className="gap-2"
+            onClick={() => setChannelLimitsOpen(true)}
+          >
+            <Gauge className="h-4 w-4" aria-hidden />
+            Limites de envio
+          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -750,6 +762,8 @@ export function MarketingAutomations() {
           </button>
         </div>
       </div>
+
+      <ChannelLimitsDialog open={channelLimitsOpen} onOpenChange={setChannelLimitsOpen} />
 
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="max-w-xl">

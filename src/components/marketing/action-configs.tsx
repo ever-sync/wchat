@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   SPLIT_OPERATORS,
   WEBHOOK_METHODS,
+  DEAL_STATUS_VALUES,
   getConfigKind,
   type ABTestConfig,
   type ABTestVariant,
@@ -28,17 +29,25 @@ import {
   type CreateDealConfig,
   type CreateTaskConfig,
   type EmailConfig,
+  type AddNoteConfig,
+  type MarkSaleConfig,
   type MoveDealConfig,
   type RemoveFromFlowConfig,
+  type SetVariableAssignment,
+  type SetVariableConfig,
   type SmartMessageConfig,
   type SplitConfig,
   type SplitOperator,
+  type UpdateDealStatusConfig,
+  type UpdateDealTitleConfig,
+  type AiClassifyConfig,
   type TagConfig,
   type WaitConfig,
   type WaitUntilConfig,
   type WebhookConfig,
   type WebhookMethod,
   type WhatsAppConfig,
+  type DealStatus,
 } from "@/lib/marketing/flow-action-configs";
 import { useMarketingFlows } from "@/lib/api/marketing-flows";
 
@@ -860,6 +869,277 @@ export function SmartMessageActionConfig({
   );
 }
 
+// ---------------------------------------------------------------- Set Variable
+
+export function SetVariableActionConfig({
+  value,
+  onChange,
+}: ConfigProps<SetVariableConfig>) {
+  const assignments = value.assignments.length > 0 ? value.assignments : [{ key: "", value: "" }];
+  const set = (next: SetVariableAssignment[]) => onChange({ assignments: next });
+
+  const update = (index: number, patch: Partial<SetVariableAssignment>) => {
+    set(assignments.map((assignment, i) => (i === index ? { ...assignment, ...patch } : assignment)));
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {assignments.map((assignment, index) => (
+        <div key={index} className="grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
+          <div className="flex flex-col gap-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Nome</Label>
+            <Input
+              value={assignment.key}
+              onChange={(event) => update(index, { key: event.target.value })}
+              placeholder="variavel"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide">Valor</Label>
+            <Input
+              value={assignment.value}
+              onChange={(event) => update(index, { value: event.target.value })}
+              placeholder="{{cliente.nome}}"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => set(assignments.filter((_, i) => i !== index))}
+              disabled={assignments.length === 1}
+            >
+              Remover
+            </Button>
+          </div>
+        </div>
+      ))}
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => set([...assignments, { key: "", value: "" }])}
+        >
+          Adicionar variável
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Update Deal Title
+
+export function UpdateDealTitleActionConfig({
+  value,
+  onChange,
+}: ConfigProps<UpdateDealTitleConfig>) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label className="text-xs font-semibold uppercase tracking-wide">Novo nome</Label>
+      <Input
+        value={value.title}
+        onChange={(event) => onChange({ title: event.target.value })}
+        placeholder="Negociação - {{cliente.nome}}"
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Update Deal Status
+
+const DEAL_STATUS_LABELS: Record<DealStatus, string> = {
+  em_andamento: "Em andamento",
+  vendido: "Vendido",
+  perdido: "Perdido",
+  pausado: "Pausado",
+  nao_pausado: "Retomar",
+};
+
+export function UpdateDealStatusActionConfig({
+  value,
+  onChange,
+}: ConfigProps<UpdateDealStatusConfig>) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">Status</Label>
+        <Select value={value.status} onValueChange={(next) => onChange({ ...value, status: next as DealStatus })}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o status" />
+          </SelectTrigger>
+          <SelectContent>
+            {DEAL_STATUS_VALUES.map((status) => (
+              <SelectItem key={status} value={status}>
+                {DEAL_STATUS_LABELS[status]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {value.status === "perdido" ? (
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Motivo da perda</Label>
+          <Input
+            value={value.lossReason ?? ""}
+            onChange={(event) => onChange({ ...value, lossReason: event.target.value })}
+            placeholder="Sem orçamento"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Add Note
+
+export function AddNoteActionConfig({ value, onChange }: ConfigProps<AddNoteConfig>) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label className="text-xs font-semibold uppercase tracking-wide">Anotação</Label>
+      <Textarea
+        value={value.note}
+        onChange={(event) => onChange({ note: event.target.value })}
+        rows={5}
+        placeholder="Escreva uma observação para a negociação."
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Mark Sale
+
+export function MarkSaleActionConfig({ value, onChange }: ConfigProps<MarkSaleConfig>) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label className="text-xs font-semibold uppercase tracking-wide">
+        Valor da venda (centavos, opcional)
+      </Label>
+      <Input
+        type="number"
+        min={0}
+        value={value.valueCents}
+        onChange={(event) => onChange({ valueCents: event.target.value })}
+        placeholder="19900"
+      />
+      <p className="text-xs text-muted-foreground">
+        Se ficar vazio, a automação mantém o valor atual da negociação.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- AI Classify
+
+export function AiClassifyActionConfig({
+  value,
+  onChange,
+  context,
+}: ConfigProps<AiClassifyConfig>) {
+  const steps = context?.steps ?? [];
+  const set = (next: AiClassifyConfig) => onChange(next);
+
+  const updateCategory = (index: number, patch: Partial<AiClassifyConfig["categories"][number]>) => {
+    set({
+      ...value,
+      categories: value.categories.map((category, i) =>
+        i === index ? { ...category, ...patch } : category,
+      ),
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">Prompt</Label>
+        <Textarea
+          value={value.prompt}
+          onChange={(event) => set({ ...value, prompt: event.target.value })}
+          rows={4}
+          placeholder="Classifique a conversa como Quente, Morno ou Frio."
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <Label className="text-xs font-semibold uppercase tracking-wide">Categorias</Label>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              set({
+                ...value,
+                categories: [...value.categories, { label: "", nextStepId: "" }],
+              })
+            }
+          >
+            Adicionar categoria
+          </Button>
+        </div>
+
+        {value.categories.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Adicione ao menos duas categorias para o fluxo ramificar.
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-3">
+          {value.categories.map((category, index) => (
+            <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-[1fr_1fr_auto]">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Rótulo
+                </Label>
+                <Input
+                  value={category.label}
+                  onChange={(event) => updateCategory(index, { label: event.target.value })}
+                  placeholder="Quente"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Próximo passo
+                </Label>
+                <Select
+                  value={category.nextStepId || undefined}
+                  onValueChange={(next) => updateCategory(index, { nextStepId: next })}
+                  disabled={steps.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={steps.length === 0 ? "Adicione passos primeiro" : "Selecionar passo"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {steps.map((step) => (
+                      <SelectItem key={step.id} value={step.id}>
+                        {step.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    set({
+                      ...value,
+                      categories: value.categories.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  Remover
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Registry
 
 type AnyConfigComponent = ComponentType<{
@@ -883,6 +1163,12 @@ const COMPONENTS: { [K in ActionConfigKind]: ComponentType<ConfigProps<ActionCon
   "ab-test": ABTestActionConfig,
   "wait-until": WaitUntilActionConfig,
   "smart-message": SmartMessageActionConfig,
+  "set-variable": SetVariableActionConfig,
+  "update-deal-title": UpdateDealTitleActionConfig,
+  "update-deal-status": UpdateDealStatusActionConfig,
+  "add-note": AddNoteActionConfig,
+  "mark-sale": MarkSaleActionConfig,
+  "ai-classify": AiClassifyActionConfig,
 };
 
 export function pickConfigComponent(actionId: string): AnyConfigComponent | null {

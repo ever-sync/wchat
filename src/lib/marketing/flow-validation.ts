@@ -7,11 +7,15 @@
 // - Trigger/criteria sao WARNING nesta fase porque ainda nao existe UI
 //   dedicada (vem nas fases 3+). Quando essa UI chegar, as regras viram error.
 
-import type { MarketingFlowStep } from "@/lib/marketing/flow-types";
+import {
+  isExecutableMarketingFlowAction,
+  type MarketingFlowStep,
+} from "@/lib/marketing/flow-types";
 import {
   getConfigKind,
   validateActionConfig,
 } from "@/lib/marketing/flow-action-configs";
+import { analyzeFlowGraph, buildFlowGraph } from "@/lib/marketing/flow-graph";
 
 export type ValidationSeverity = "error" | "warning";
 
@@ -132,6 +136,18 @@ export function validateFlow(snapshot: FlowSnapshotForValidation): ValidationRes
   }
 
   for (const step of steps) {
+    // Acao sem executor no worker = erro de publicacao: rodaria e falharia em
+    // runtime (step_failed). Bloqueia a ativacao antes de chegar la.
+    if (!isExecutableMarketingFlowAction(step.actionId)) {
+      errors.push({
+        code: "STEP_NO_EXECUTOR",
+        severity: "error",
+        message: `“${step.label}”: esta ação ainda não pode ser executada e não pode fazer parte de um fluxo ativo.`,
+        stepId: step.id,
+      });
+      continue;
+    }
+
     // Actions com config estruturado (Fase 2+) validam via schema do config;
     // demais (mensagem-inteligente, esperar-agendar-hora etc.) caem no
     // subtitle-based ACTION_SCHEMAS ate ganharem config proprio.
@@ -142,6 +158,37 @@ export function validateFlow(snapshot: FlowSnapshotForValidation): ValidationRes
     for (const issue of issues) {
       const target = issue.severity === "error" ? errors : warnings;
       target.push({ ...issue, stepId: step.id });
+    }
+  }
+
+  // Analise estrutural do grafo (Fase 2): alvo quebrado e no inalcancavel sao
+  // erro (o lead trava/some); ciclo e warning. So roda com 2+ passos.
+  if (steps.length > 1) {
+    const graph = buildFlowGraph(definition);
+    const stepLabel = new Map(steps.map((s) => [s.id, s.label]));
+    for (const issue of analyzeFlowGraph(graph)) {
+      if (issue.code === "GRAPH_BROKEN_TARGET") {
+        errors.push({
+          code: issue.code,
+          severity: "error",
+          message: `“${stepLabel.get(issue.nodeId ?? "") ?? "Passo"}”: aponta para um passo que não existe mais.`,
+          stepId: issue.nodeId,
+        });
+      } else if (issue.code === "GRAPH_UNREACHABLE") {
+        errors.push({
+          code: issue.code,
+          severity: "error",
+          message: `“${stepLabel.get(issue.nodeId ?? "") ?? "Passo"}”: nenhum caminho leva até este passo — ele nunca será executado.`,
+          stepId: issue.nodeId,
+        });
+      } else if (issue.code === "GRAPH_CYCLE") {
+        warnings.push({
+          code: issue.code,
+          severity: "warning",
+          message: `“${stepLabel.get(issue.nodeId ?? "") ?? "Passo"}”: faz parte de um ciclo — confirme se os leads conseguem sair do fluxo.`,
+          stepId: issue.nodeId,
+        });
+      }
     }
   }
 

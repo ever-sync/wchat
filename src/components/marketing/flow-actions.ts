@@ -116,6 +116,19 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     ],
   },
   {
+    id: "inteligencia",
+    label: "Inteligência",
+    items: [
+      {
+        id: "classificar-ia",
+        label: "Classificar com IA",
+        iconKey: "sparkles",
+        iconClass: "bg-fuchsia-600",
+        badge: { kind: "conheca" },
+      },
+    ],
+  },
+  {
     id: "espera",
     label: "Espera",
     items: [
@@ -280,6 +293,12 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     items: [
       { id: "webhook", label: "Webhook", iconKey: "webhook", iconClass: "bg-slate-500" },
       { id: "zapier", label: "Zapier", iconKey: "plug", iconClass: "bg-orange-600" },
+      {
+        id: "definir-variavel",
+        label: "Definir variável",
+        iconKey: "case-sensitive",
+        iconClass: "bg-indigo-600",
+      },
     ],
   },
   {
