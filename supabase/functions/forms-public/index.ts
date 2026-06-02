@@ -47,16 +47,26 @@ type SubmitWebhookPayload = {
   };
 };
 
+type FormInteractionEventPayload = {
+  intent: "interaction";
+  event_type: string;
+  session_id: string;
+  step_id?: string | null;
+  field_name?: string | null;
+  field_label?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
 const WEBHOOK_TIMEOUT_MS = 5000;
 
 const rateBuckets = new Map<string, number[]>();
 const MAX_PER_MINUTE = 20;
 
-function allowRate(key: string): boolean {
+function allowRate(key: string, limit = MAX_PER_MINUTE): boolean {
   const now = Date.now();
   const windowMs = 60_000;
   const previous = (rateBuckets.get(key) ?? []).filter((t) => now - t < windowMs);
-  if (previous.length >= MAX_PER_MINUTE) return false;
+  if (previous.length >= limit) return false;
   previous.push(now);
   rateBuckets.set(key, previous);
   return true;
@@ -104,6 +114,55 @@ function normalizeWebhookUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeEventType(value: unknown): string {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const allowed = new Set(["view", "step_view", "field_focus", "field_change", "step_next", "step_back", "submit", "abandon"]);
+  return allowed.has(normalized) ? normalized : "";
+}
+
+function normalizeEventSessionId(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function sanitizeEventMetadata(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return {};
+  const input = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(input)) {
+    if (raw == null) continue;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (trimmed) out[key] = trimmed;
+      continue;
+    }
+    if (typeof raw === "number" || typeof raw === "boolean") {
+      out[key] = raw;
+      continue;
+    }
+    if (Array.isArray(raw)) {
+      out[key] = raw.slice(0, 20).map((item) => (typeof item === "string" || typeof item === "number" || typeof item === "boolean" ? item : String(item)));
+      continue;
+    }
+  }
+  return out;
+}
+
+function coalesceBoolean(
+  settings: unknown,
+  key: string,
+  fallback: boolean,
+): boolean {
+  if (!settings || typeof settings !== "object") return fallback;
+  const raw = (settings as Record<string, unknown>)[key];
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "string") {
+    const lowered = raw.trim().toLowerCase();
+    if (["true", "t", "1", "yes", "sim"].includes(lowered)) return true;
+    if (["false", "f", "0", "no", "nao", "não"].includes(lowered)) return false;
+  }
+  return fallback;
 }
 
 function buildSubmitWebhookPayload(input: {
@@ -252,14 +311,17 @@ Deno.serve(async (request) => {
     const formId = String(body.formId ?? body.form ?? "");
     if (!formId) return jsonResponse({ error: "formId requerido" }, 400);
 
-    if (!allowRate(`${formId}:${ip}`)) {
+    const intent = typeof body.intent === "string" ? body.intent.trim().toLowerCase() : "";
+    const isInteractionEvent = intent === "interaction";
+
+    if (!allowRate(`${isInteractionEvent ? "interaction" : "submit"}:${formId}:${ip}`, isInteractionEvent ? 120 : MAX_PER_MINUTE)) {
       return jsonResponse({ error: "Muitas tentativas. Aguarde um minuto e tente novamente." }, 429);
     }
 
     const { data: form, error } = await admin
       .from("marketing_forms")
       .select(
-        "id, tenant_id, name, is_active, allowed_domains, fields, email_template_id, submit_message, submit_webhook_url, submit_redirect_url",
+        "id, tenant_id, name, is_active, allowed_domains, fields, settings, email_template_id, submit_message, submit_webhook_url, submit_redirect_url",
       )
       .eq("id", formId)
       .maybeSingle();
@@ -270,6 +332,31 @@ Deno.serve(async (request) => {
     }
     if (!originAllowed(request, form.allowed_domains)) {
       return jsonResponse({ error: "Este site não está autorizado a enviar este formulário." }, 403);
+    }
+    const allowDuplicates = coalesceBoolean(form.settings, "allowDuplicates", true);
+
+    if (isInteractionEvent) {
+      const eventType = normalizeEventType(body.event_type ?? body.eventType ?? body.event);
+      const sessionId = normalizeEventSessionId(body.session_id ?? body.sessionId);
+      if (!eventType) return jsonResponse({ error: "event_type requerido" }, 400);
+      if (!sessionId) return jsonResponse({ error: "session_id requerido" }, 400);
+
+      const { error: insertError } = await admin.from("marketing_form_events").insert({
+        tenant_id: form.tenant_id,
+        form_id: formId,
+        session_id: sessionId,
+        event_type: eventType,
+        step_id: typeof body.step_id === "string" ? body.step_id.trim() : typeof body.stepId === "string" ? body.stepId.trim() : null,
+        field_name: typeof body.field_name === "string" ? body.field_name.trim() : typeof body.fieldName === "string" ? body.fieldName.trim() : null,
+        field_label: typeof body.field_label === "string" ? body.field_label.trim() : typeof body.fieldLabel === "string" ? body.fieldLabel.trim() : null,
+        metadata: sanitizeEventMetadata(body.metadata ?? body.meta),
+      });
+      if (insertError) {
+        console.error("[forms-public] interaction event error:", insertError.message);
+        return jsonResponse({ error: "Não foi possível registrar o evento." }, 500);
+      }
+
+      return jsonResponse({ success: true, event_type: eventType });
     }
 
     const rawData = body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : {};
@@ -299,6 +386,12 @@ Deno.serve(async (request) => {
       }
       const { data: dup } = await dupQuery;
       isDuplicate = Array.isArray(dup) && dup.length > 0;
+      if (isDuplicate && allowDuplicates === false) {
+        return jsonResponse(
+          { error: "Este formulário não aceita duplicados. Já encontramos um cadastro com os mesmos dados." },
+          409,
+        );
+      }
     }
 
     // --- Lead scoring ---

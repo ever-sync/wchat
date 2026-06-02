@@ -38,21 +38,29 @@ import { useDistinctCustomerTags } from "@/lib/api/customers";
 import { validateBuilderFields } from "@/lib/marketing/form-validation";
 import {
   createDefaultField,
+  buildDefaultFormSteps,
   DEFAULT_FORM_THEME,
   formFieldGapToCss,
   formFieldGapLabel,
   groupFormFieldsIntoRows,
+  isFormStepVisible,
   formFieldWidthToGridSpan,
+  stepFieldIds,
+  stepRoutingRules,
+  createDefaultFormStep,
   type FormField,
   type FormFieldType,
   type FormFieldGap,
   type FormSettings,
   type FormTheme,
+  type FormStep,
   type MarketingFormRecord,
 } from "@/lib/marketing/form-types";
 import { ContactFieldPalette } from "./ContactFieldPalette";
 import { SortableFieldItem } from "./SortableFieldItem";
 import { FieldEditor } from "./FieldEditor";
+import { ConditionalLogicEditor } from "./ConditionalLogicEditor";
+import { StepRoutingEditor } from "./StepRoutingEditor";
 import { EmbedSnippetDialog } from "./EmbedSnippetDialog";
 import { ABTestPanel } from "./ABTestPanel";
 import { EmailTemplatesDialog } from "./EmailTemplatesDialog";
@@ -61,6 +69,16 @@ const TENANT_DEFAULT = "__tenant_default__";
 
 function parseTagList(value: string): string[] {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
+}
+
+function normalizeSteps(input: FormStep[] | undefined): FormStep[] {
+  return (input ?? []).map((step, index) => ({
+    id: step.id ?? `step_${index + 1}_${Math.random().toString(36).slice(2, 6)}`,
+    title: step.title?.trim() || `Etapa ${index + 1}`,
+    fieldIds: stepFieldIds(step),
+    conditionalLogic: step.conditionalLogic,
+    routingRules: stepRoutingRules(step),
+  }));
 }
 
 function PreviewField({ field }: { field: FormField }) {
@@ -115,6 +133,8 @@ function FormPreview({
   submitMessage,
   theme,
   fieldGap,
+  multiStep,
+  steps,
   conversational,
 }: {
   fields: FormField[];
@@ -122,6 +142,8 @@ function FormPreview({
   submitMessage: string;
   theme: FormTheme;
   fieldGap: FormFieldGap;
+  multiStep: boolean;
+  steps: FormStep[];
   conversational: boolean;
 }) {
   const visibleFields = fields.filter((f) => f.type !== "hidden");
@@ -131,20 +153,67 @@ function FormPreview({
   const btnStyle = { backgroundColor: theme.primaryColor, borderRadius: `${theme.borderRadius}px` };
   const isCompact = device === "mobile";
   const gap = formFieldGapToCss(fieldGap);
+  const configuredSteps = useMemo(() => {
+    if (!multiStep) return [];
+    const source = steps.length > 0 ? steps : buildDefaultFormSteps(fields);
+    return source.map((item, index) => ({
+      id: item.id ?? `step_${index + 1}`,
+      title: item.title || `Etapa ${index + 1}`,
+      fieldIds: stepFieldIds(item),
+      conditionalLogic: item.conditionalLogic,
+      routingRules: item.routingRules,
+    }));
+  }, [fields, multiStep, steps]);
+  const stepFields = useMemo(() => {
+    if (!multiStep || configuredSteps.length === 0) return visibleFields;
+    const ids = stepFieldIds(configuredSteps[Math.min(step, configuredSteps.length - 1)]);
+    return fields.filter((field) => ids.includes(field.id) && field.type !== "hidden");
+  }, [configuredSteps, fields, multiStep, step, visibleFields]);
 
   return (
-    <div className="h-full overflow-y-auto p-4">
+    <div className={device === "mobile" ? "h-full overflow-y-auto p-2 sm:p-4" : "h-full overflow-y-auto p-4"}>
       <div
-        className="mx-auto rounded-xl border p-4 shadow-sm"
+        className={
+          device === "mobile"
+            ? "mx-auto rounded-[1.9rem] border bg-muted/20 p-2.5 shadow-inner"
+            : "mx-auto rounded-xl border p-4 shadow-sm"
+        }
         style={{
-          maxWidth: device === "mobile" ? 420 : 760,
+          maxWidth: device === "mobile" ? 390 : 760,
           backgroundColor: theme.backgroundColor,
           color: theme.textColor,
           borderRadius: `${theme.borderRadius}px`,
         }}
       >
-        <h3 className="mb-1 text-base font-semibold">Pré-visualização{conversational ? " · conversacional" : ""}</h3>
-        <p className="mb-4 text-xs opacity-70">Visualização local do rascunho atual.</p>
+        <h3 className={device === "mobile" ? "mb-1 text-sm font-semibold" : "mb-1 text-base font-semibold"}>
+          Pré-visualização{conversational ? " · conversacional" : ""}
+        </h3>
+        <p className={device === "mobile" ? "mb-3 text-[11px] opacity-70" : "mb-4 text-xs opacity-70"}>
+          Visualização local do rascunho atual{multiStep ? " · etapas e blocos" : ""}.
+        </p>
+
+        {configuredSteps.length > 0 ? (
+          <div className={device === "mobile" ? "mb-3 flex gap-2 overflow-x-auto pb-1" : "mb-4 flex flex-wrap gap-2"}>
+            {configuredSteps.map((item, index) => {
+              const active = index === Math.min(step, configuredSteps.length - 1);
+              return (
+                <button
+                  key={item.id ?? index}
+                  type="button"
+                  className="shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+                  onClick={() => setStep(index)}
+                  style={{
+                    borderColor: active ? theme.primaryColor : "rgba(148,163,184,0.35)",
+                    color: active ? theme.primaryColor : "inherit",
+                    backgroundColor: active ? "rgba(109, 40, 217, 0.06)" : "transparent",
+                  }}
+                >
+                  {item.title}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {visibleFields.length === 0 ? (
           <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm opacity-60">
@@ -153,9 +222,11 @@ function FormPreview({
         ) : conversational ? (
           <div className="space-y-3">
             <p className="text-xs opacity-60">
-              Pergunta {safeStep + 1} de {visibleFields.length}
+              {multiStep && configuredSteps.length > 0
+                ? `Etapa ${Math.min(step + 1, configuredSteps.length)} de ${configuredSteps.length}`
+                : `Pergunta ${safeStep + 1} de ${visibleFields.length}`}
             </p>
-            <PreviewField field={visibleFields[safeStep]} />
+            <PreviewField field={(multiStep && configuredSteps.length > 0 ? stepFields : visibleFields)[0] ?? visibleFields[safeStep]} />
             <div className="mt-2 flex gap-2">
               {safeStep > 0 ? (
                 <button
@@ -172,6 +243,48 @@ function FormPreview({
                   className="flex-1 px-3 py-2 text-sm font-medium text-white"
                   style={btnStyle}
                   onClick={() => setStep((s) => Math.min(visibleFields.length - 1, s + 1))}
+                >
+                  Avançar
+                </button>
+              ) : (
+                <button type="button" className="flex-1 px-3 py-2 text-sm font-medium text-white" style={btnStyle} disabled>
+                  Enviar
+                </button>
+              )}
+            </div>
+            <p className="text-center text-xs opacity-60">{submitMessage || "Obrigado!"}</p>
+          </div>
+        ) : multiStep && configuredSteps.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap }}>
+            <div className="rounded-lg border bg-card px-3 py-2">
+              <p className="text-xs font-medium">
+                {configuredSteps[Math.min(step, configuredSteps.length - 1)]?.title ?? `Etapa ${step + 1}`}
+              </p>
+              <p className="text-[11px] opacity-60">
+                {Math.min(step + 1, configuredSteps.length)} de {configuredSteps.length} blocos
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap }}>
+              {(stepFields.length > 0 ? stepFields : visibleFields).map((field) => (
+                <PreviewField key={field.id} field={field} />
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {step > 0 ? (
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm font-medium"
+                  onClick={() => setStep((s) => Math.max(0, s - 1))}
+                >
+                  Voltar
+                </button>
+              ) : null}
+              {step < configuredSteps.length - 1 ? (
+                <button
+                  type="button"
+                  className="flex-1 px-3 py-2 text-sm font-medium text-white"
+                  style={btnStyle}
+                  onClick={() => setStep((s) => Math.min(configuredSteps.length - 1, s + 1))}
                 >
                   Avançar
                 </button>
@@ -244,6 +357,11 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const [view, setView] = useState<"canvas" | "preview">("canvas");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const fieldGap = settings.fieldGap ?? 3;
+  const formSteps = useMemo(() => {
+    if (!settings.multiStep) return [];
+    const source = normalizeSteps(settings.steps);
+    return source.length > 0 ? source : buildDefaultFormSteps(fields);
+  }, [fields, settings.multiStep, settings.steps]);
 
   const validation = useMemo(() => validateBuilderFields(fields), [fields]);
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
@@ -251,6 +369,10 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const selectedFunnel = useMemo(
     () => funnels.find((f) => f.id === targetFunnelId) ?? null,
     [funnels, targetFunnelId],
+  );
+  const selectedStepIndex = useMemo(
+    () => formSteps.findIndex((step) => stepFieldIds(step).includes(selectedId ?? "")),
+    [formSteps, selectedId],
   );
 
   const sensors = useSensors(
@@ -301,6 +423,72 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
     markDirty();
   }
 
+  function updateSelectedField(updates: Partial<FormField>) {
+    if (!selectedId) return;
+    updateField(selectedId, updates);
+  }
+
+  function updateSteps(nextSteps: FormStep[]) {
+    setSettings((prev) => ({ ...prev, steps: nextSteps }));
+    markDirty();
+  }
+
+  function ensureMultiStepFromBlocks() {
+    const nextSteps = buildDefaultFormSteps(fields);
+    setSettings((prev) => ({ ...prev, multiStep: true, steps: nextSteps }));
+    markDirty();
+  }
+
+  function addBlankStep() {
+    const next = [...formSteps, createDefaultFormStep(formSteps.length, [])];
+    updateSteps(next);
+  }
+
+  function renameStep(index: number, title: string) {
+    const next = formSteps.map((step, i) => (i === index ? { ...step, title } : step));
+    updateSteps(next);
+  }
+
+  function updateStepLogic(index: number, conditionalLogic: FormStep["conditionalLogic"]) {
+    const next = formSteps.map((step, i) => (i === index ? { ...step, conditionalLogic } : step));
+    updateSteps(next);
+  }
+
+  function updateStepRoutingRules(index: number, routingRules: FormStep["routingRules"]) {
+    const next = formSteps.map((step, i) => (i === index ? { ...step, routingRules } : step));
+    updateSteps(next);
+  }
+
+  function moveSelectedFieldToStep(index: number) {
+    if (!selectedField) return;
+    const next = formSteps.map((step, stepIndex) => {
+      const ids = stepFieldIds(step).filter((fieldId) => fieldId !== selectedField.id);
+      if (stepIndex === index && !ids.includes(selectedField.id)) {
+        ids.push(selectedField.id);
+      }
+      return { ...step, fieldIds: ids };
+    });
+    updateSteps(next);
+  }
+
+  function removeFieldFromStep(index: number, fieldId: string) {
+    const next = formSteps.map((step, stepIndex) => {
+      if (stepIndex !== index) return step;
+      return { ...step, fieldIds: stepFieldIds(step).filter((id) => id !== fieldId) };
+    });
+    updateSteps(next);
+  }
+
+  function assignFieldToStep(fieldId: string, stepIndex: number) {
+    const next = formSteps.map((step, index) => ({
+      ...step,
+      fieldIds: index === stepIndex
+        ? [...stepFieldIds(step), fieldId]
+        : stepFieldIds(step).filter((id) => id !== fieldId),
+    }));
+    updateSteps(next);
+  }
+
   function removeField(id: string) {
     setFields((prev) => prev.filter((f) => f.id !== id));
     if (selectedId === id) setSelectedId(null);
@@ -328,6 +516,8 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
     }
     markDirty();
   }
+
+  const moveSelectedFieldStepLabel = selectedStepIndex >= 0 ? `Mover para etapa ${selectedStepIndex + 1}` : "Mover para etapa";
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -470,6 +660,8 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                   submitMessage={submitMessage}
                   theme={theme}
                   fieldGap={fieldGap}
+                  multiStep={!!settings.multiStep}
+                  steps={formSteps}
                   conversational={!!settings.conversational}
                 />
               )}
@@ -487,6 +679,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
               </div>
               <FieldEditor
                 field={selectedField}
+                allFields={fields}
                 errors={selectedFieldErrors}
                 onUpdate={(updates) => selectedId && updateField(selectedId, updates)}
               />
@@ -831,6 +1024,181 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
             {/* Comportamento */}
             <div className="space-y-3">
               <p className="text-sm font-semibold">Comportamento</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm">Formulário em etapas</Label>
+                  <p className="text-xs text-muted-foreground">Divide o fluxo em blocos para reduzir atrito.</p>
+                </div>
+                <Switch
+                  checked={!!settings.multiStep}
+                  onCheckedChange={(checked) => {
+                    setSettings((prev) => ({
+                      ...prev,
+                      multiStep: checked,
+                      steps: checked
+                        ? normalizeSteps(prev.steps).length > 0
+                          ? normalizeSteps(prev.steps)
+                          : buildDefaultFormSteps(fields)
+                        : prev.steps,
+                    }));
+                    markDirty();
+                  }}
+                />
+              </div>
+              {settings.multiStep ? (
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Etapas e blocos</p>
+                      <p className="text-xs text-muted-foreground">
+                        Agrupe os campos em blocos visuais e depois ajuste etapa por etapa.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={ensureMultiStepFromBlocks}>
+                        Gerar blocos
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={addBlankStep}>
+                        Nova etapa
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {formSteps.length === 0 ? (
+                      <p className="rounded-lg border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+                        Ainda sem etapas. Gere blocos a partir das quebras de linha ou adicione uma etapa vazia.
+                      </p>
+                    ) : (
+                      formSteps.map((step, index) => {
+                        const ids = stepFieldIds(step);
+                        const stepFields = fields.filter((field) => ids.includes(field.id));
+                        return (
+                          <div key={step.id ?? `${index}`} className="rounded-lg border bg-card p-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <Badge variant="secondary" className="shrink-0">
+                                  Etapa {index + 1}
+                                </Badge>
+                                <Input
+                                  value={step.title}
+                                  onChange={(e) => renameStep(index, e.target.value)}
+                                  className="h-8 min-w-0 flex-1"
+                                  placeholder={`Etapa ${index + 1}`}
+                                />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {selectedField ? (
+                                  <Button size="sm" variant="outline" className="h-8" onClick={() => moveSelectedFieldToStep(index)}>
+                                    {moveSelectedFieldStepLabel}
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8"
+                                  onClick={() =>
+                                    updateSteps(
+                                      formSteps.filter((_, stepIndex) => stepIndex !== index).map((item, stepIndex) => ({
+                                        ...item,
+                                        title: item.title || `Etapa ${stepIndex + 1}`,
+                                      })),
+                                    )
+                                  }
+                                  disabled={formSteps.length <= 1}
+                                >
+                                  Remover etapa
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {stepFields.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">Sem campos ainda.</span>
+                              ) : (
+                                stepFields.map((field) => (
+                                  <button
+                                    key={field.id}
+                                    type="button"
+                                    onClick={() => setSelectedId(field.id)}
+                                    className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                                    title="Selecionar campo"
+                                  >
+                                    {field.label}
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeFieldFromStep(index, field.id);
+                                      }}
+                                      className="rounded-full px-1 text-muted-foreground/50 transition-colors hover:text-red-500"
+                                    >
+                                      ×
+                                    </span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                              <span>{stepFields.length} campo(s)</span>
+                              <span>·</span>
+                              <button
+                                type="button"
+                                className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                                onClick={() => {
+                                  const currentIds = new Set(ids);
+                                  const nextField = fields.find((field) => !currentIds.has(field.id) && field.type !== "hidden");
+                                  if (nextField) {
+                                    assignFieldToStep(nextField.id, index);
+                                  }
+                                }}
+                              >
+                                Adicionar próximo campo
+                              </button>
+                            </div>
+
+                            <div className="mt-3 rounded-lg border bg-background/80 p-3">
+                              <ConditionalLogicEditor
+                                title="Visibilidade da etapa"
+                                description="Use esta regra para esconder a etapa inteira dependendo das respostas anteriores."
+                                logic={step.conditionalLogic}
+                                availableFields={fields.filter((candidate) => candidate.type !== "hidden")}
+                                onChange={(conditionalLogic) => updateStepLogic(index, conditionalLogic)}
+                              />
+                            </div>
+
+                            <div className="mt-3 rounded-lg border bg-background/80 p-3">
+                              <StepRoutingEditor
+                                title="Salto automático"
+                                description="Quando as respostas baterem, o formulário pula para a etapa escolhida."
+                                rules={step.routingRules}
+                                availableFields={fields.filter((candidate) => candidate.type !== "hidden")}
+                                steps={formSteps}
+                                currentStepId={step.id}
+                                onChange={(routingRules) => updateStepRoutingRules(index, routingRules)}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm">Permitir duplicados</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Reenvios do mesmo contato são aceitos ou bloqueados automaticamente.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!settings.allowDuplicates}
+                  onCheckedChange={(v) => {
+                    setSettings((p) => ({ ...p, allowDuplicates: v }));
+                    markDirty();
+                  }}
+                />
+              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm">Perfil progressivo</Label>

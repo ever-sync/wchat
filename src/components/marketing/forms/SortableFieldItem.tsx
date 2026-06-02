@@ -68,6 +68,11 @@ export function SortableFieldItem({
               nova linha
             </Badge>
           ) : null}
+          {field.conditionalLogic ? (
+            <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px] font-normal text-primary">
+              condicional
+            </Badge>
+          ) : null}
           <span className="truncate font-mono text-[11px] text-muted-foreground">{field.name}</span>
           {errorCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[11px] text-amber-600">

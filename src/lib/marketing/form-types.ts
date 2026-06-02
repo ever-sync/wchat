@@ -19,6 +19,20 @@ export interface FormFieldOption {
 
 export type FormFieldWidth = 33 | 66 | 100;
 export type FormFieldGap = 2 | 3 | 4 | 6;
+export type FormConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "not_contains"
+  | "is_empty"
+  | "is_not_empty"
+  | "greater_than"
+  | "less_than";
+
+export type FormConditionJoin = "all" | "any";
+export type FormConditionCompareTarget =
+  | { kind: "value"; value: string }
+  | { kind: "field"; field: string };
 
 export function formFieldWidthToGridSpan(width: FormFieldWidth | undefined): number {
   switch (width) {
@@ -55,6 +69,29 @@ export function formFieldGapLabel(gap: FormFieldGap): string {
     default:
       return "Confortável — 12px";
   }
+}
+
+export interface FormFieldCondition {
+  field: string;
+  operator: FormConditionOperator;
+  value: string;
+  compareTarget?: FormConditionCompareTarget;
+}
+
+export interface FormFieldConditionGroup {
+  join: FormConditionJoin;
+  conditions: FormFieldCondition[];
+}
+
+export interface FormFieldConditionalLogic {
+  groups: FormFieldConditionGroup[];
+}
+
+export interface FormStepRoutingRule {
+  id?: string;
+  label?: string;
+  goToStepId: string;
+  conditionalLogic: FormFieldConditionalLogic;
 }
 
 export function groupFormFieldsIntoRows(fields: FormField[], compact = false): FormField[][] {
@@ -116,14 +153,16 @@ export interface FormField {
     maxLength?: number;
     pattern?: string;
   };
-  conditionalLogic?: {
-    showIf: { field: string; operator: string; value: string };
-  };
+  conditionalLogic?: FormFieldConditionalLogic;
 }
 
 export interface FormStep {
+  id?: string;
   title: string;
-  fields: string[];
+  fieldIds?: string[];
+  fields?: string[];
+  conditionalLogic?: FormFieldConditionalLogic;
+  routingRules?: FormStepRoutingRule[];
 }
 
 export interface FormAutoWinnerConfig {
@@ -270,6 +309,138 @@ export function createDefaultField(type: FormFieldType): FormField {
     ];
   }
   return field;
+}
+
+export function createDefaultFormStep(index: number, fieldIds: string[] = []): FormStep {
+  return {
+    id: `step_${shortId()}`,
+    title: `Etapa ${index + 1}`,
+    fieldIds,
+  };
+}
+
+export function stepFieldIds(step: FormStep | null | undefined): string[] {
+  if (!step) return [];
+  if (Array.isArray(step.fieldIds)) return step.fieldIds;
+  if (Array.isArray(step.fields)) return step.fields;
+  return [];
+}
+
+export function stepRoutingRules(step: FormStep | null | undefined): FormStepRoutingRule[] {
+  return Array.isArray(step?.routingRules) ? step!.routingRules! : [];
+}
+
+export function buildDefaultFormSteps(fields: FormField[]): FormStep[] {
+  const visibleFields = fields.filter((field) => field.type !== "hidden");
+  if (visibleFields.length === 0) {
+    return [createDefaultFormStep(0, [])];
+  }
+
+  const groups: FormField[][] = [];
+  let current: FormField[] = [];
+  for (const field of visibleFields) {
+    if (field.lineBreakBefore && current.length > 0) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(field);
+  }
+  if (current.length > 0) groups.push(current);
+
+  return groups.map((group, index) => createDefaultFormStep(index, group.map((field) => field.id)));
+}
+
+function normalizeConditionValue(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function compareValues(actual: string, expected: string, operator: FormConditionOperator): boolean {
+  const actualNumber = Number(actual.replace(",", "."));
+  const expectedNumber = Number(expected.replace(",", "."));
+  const canCompareNumbers = Number.isFinite(actualNumber) && Number.isFinite(expectedNumber);
+
+  switch (operator) {
+    case "equals":
+      return actual === expected;
+    case "not_equals":
+      return actual !== expected;
+    case "contains":
+      return actual.includes(expected);
+    case "not_contains":
+      return !actual.includes(expected);
+    case "greater_than":
+      if (canCompareNumbers) return actualNumber > expectedNumber;
+      return actual > expected;
+    case "less_than":
+      if (canCompareNumbers) return actualNumber < expectedNumber;
+      return actual < expected;
+    default:
+      return true;
+  }
+}
+
+export function fieldConditionMatches(
+  fieldValue: unknown,
+  condition: FormFieldCondition,
+  values: Record<string, unknown> = {},
+): boolean {
+  if (condition.operator === "is_empty") {
+    if (fieldValue === undefined || fieldValue === null) return true;
+    if (Array.isArray(fieldValue)) return fieldValue.length === 0;
+    return String(fieldValue).trim() === "";
+  }
+
+  if (condition.operator === "is_not_empty") {
+    return !fieldConditionMatches(fieldValue, { ...condition, operator: "is_empty" });
+  }
+
+  const compareValue =
+    condition.compareTarget?.kind === "field"
+      ? values[condition.compareTarget.field]
+      : condition.compareTarget?.kind === "value"
+        ? condition.compareTarget.value
+        : condition.value;
+  const actual = Array.isArray(fieldValue)
+    ? fieldValue.map((item) => normalizeConditionValue(item)).join(" | ")
+    : normalizeConditionValue(fieldValue);
+  const expectedValue = normalizeConditionValue(compareValue);
+
+  if (!actual) {
+    return false;
+  }
+
+  return compareValues(actual, expectedValue, condition.operator);
+}
+
+export function conditionGroupMatches(
+  group: FormFieldConditionGroup,
+  values: Record<string, unknown>,
+): boolean {
+  if (group.conditions.length === 0) return true;
+  if (group.join === "any") {
+    return group.conditions.some((condition) => fieldConditionMatches(values[condition.field], condition, values));
+  }
+  return group.conditions.every((condition) => fieldConditionMatches(values[condition.field], condition, values));
+}
+
+export function conditionalLogicMatches(
+  logic: FormFieldConditionalLogic | undefined,
+  values: Record<string, unknown>,
+): boolean {
+  if (!logic || logic.groups.length === 0) return true;
+  return logic.groups.some((group) => conditionGroupMatches(group, values));
+}
+
+export function isFormFieldVisible(field: FormField, values: Record<string, unknown>): boolean {
+  return conditionalLogicMatches(field.conditionalLogic, values);
+}
+
+export function isFormStepVisible(step: FormStep, values: Record<string, unknown>): boolean {
+  return conditionalLogicMatches(step.conditionalLogic, values);
+}
+
+export function getVisibleFormFields(fields: FormField[], values: Record<string, unknown>): FormField[] {
+  return fields.filter((field) => field.type === "hidden" || isFormFieldVisible(field, values));
 }
 
 // ----------------------------------------------------- Campos do contato

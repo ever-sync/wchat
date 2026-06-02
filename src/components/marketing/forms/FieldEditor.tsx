@@ -4,20 +4,18 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import {
-  fieldNeedsOptions,
-  type FormField,
-  type FormFieldWidth,
-} from "@/lib/marketing/form-types";
+import { fieldNeedsOptions, type FormField, type FormFieldWidth } from "@/lib/marketing/form-types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConditionalLogicEditor } from "./ConditionalLogicEditor";
 
 interface FieldEditorProps {
   field: FormField | null;
+  allFields?: FormField[];
   errors?: string[];
   onUpdate: (updates: Partial<FormField>) => void;
 }
 
-export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) {
+export function FieldEditor({ field, allFields = [], errors = [], onUpdate }: FieldEditorProps) {
   if (!field) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
@@ -32,6 +30,7 @@ export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) 
   const hasPlaceholder = !["hidden", "checkbox", "radio", "date"].includes(field.type);
   const hasValidation = ["text", "textarea", "email", "phone"].includes(field.type);
   const width = (field.layoutWidth ?? 100) as FormFieldWidth;
+  const availableConditionFields = allFields.filter((candidate) => candidate.id !== field.id && candidate.type !== "hidden");
 
   function addOption() {
     if (!field) return;
@@ -252,6 +251,19 @@ export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) 
           </div>
         </>
       )}
+
+      {field.type !== "hidden" ? (
+        <>
+          <Separator />
+          <ConditionalLogicEditor
+            title="Visibilidade condicional"
+            description="Mostra este campo apenas quando outras respostas combinarem."
+            logic={field.conditionalLogic}
+            availableFields={availableConditionFields}
+            onChange={(conditionalLogic) => onUpdate({ conditionalLogic })}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

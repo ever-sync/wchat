@@ -1,12 +1,23 @@
 // Validação de formulários: do builder (config) e de submissão (respostas).
 // Portado de formularios/lib/forms/builder-validation.ts + lib/services/form-validator.ts.
 
-import { fieldNeedsOptions, type FormField } from "@/lib/marketing/form-types";
+import {
+  fieldNeedsOptions,
+  isFormFieldVisible,
+  isFormStepVisible,
+  stepFieldIds,
+  type FormField,
+  type FormStep,
+} from "@/lib/marketing/form-types";
 
 export interface BuilderValidationResult {
   fieldErrors: Record<string, string[]>;
   hasErrors: boolean;
   totalErrors: number;
+}
+
+export interface SubmissionValidationOptions {
+  steps?: FormStep[];
 }
 
 const NAME_REGEX = /^[a-z][a-z0-9_]*$/;
@@ -111,20 +122,38 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function validateFormSubmission(
   fields: FormField[],
   data: Record<string, unknown>,
+  options: SubmissionValidationOptions = {},
 ): Record<string, string> {
   const errors: Record<string, string> = {};
+  const visibleStepFieldIds = new Set<string>();
+  if (Array.isArray(options.steps) && options.steps.length > 0) {
+    for (const step of options.steps) {
+      if (!isFormStepVisible(step, data)) continue;
+      for (const fieldId of stepFieldIds(step)) visibleStepFieldIds.add(fieldId);
+    }
+  }
+
+  function isEmptySubmissionValue(value: unknown): boolean {
+    if (value === undefined || value === null) return true;
+    if (Array.isArray(value)) {
+      return value.length === 0 || value.every((item) => String(item ?? "").trim() === "");
+    }
+    return String(value).trim() === "";
+  }
 
   for (const field of fields) {
     if (field.type === "hidden") continue;
+    if (visibleStepFieldIds.size > 0 && !visibleStepFieldIds.has(field.id)) continue;
+    if (!isFormFieldVisible(field, data)) continue;
 
     const value = data[field.name];
 
-    if (field.required && (value === undefined || value === null || value === "")) {
+    if (field.required && isEmptySubmissionValue(value)) {
       errors[field.name] = `${field.label} é obrigatório`;
       continue;
     }
 
-    if (!value) continue;
+    if (isEmptySubmissionValue(value)) continue;
 
     if (field.type === "email" && !EMAIL_REGEX.test(String(value))) {
       errors[field.name] = `${field.label} deve ser um e-mail válido`;

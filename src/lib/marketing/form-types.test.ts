@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formFieldGapToCss, formFieldGapLabel, formFieldWidthToGridSpan } from "./form-types";
+import {
+  conditionalLogicMatches,
+  formFieldGapToCss,
+  formFieldGapLabel,
+  formFieldWidthToGridSpan,
+  isFormStepVisible,
+  type FormField,
+  type FormFieldConditionalLogic,
+  type FormStep,
+} from "./form-types";
 
 describe("formFieldWidthToGridSpan", () => {
   it("mapeia 100, 66 e 33 para spans de grid", () => {
@@ -22,5 +31,68 @@ describe("formFieldGap helpers", () => {
     expect(formFieldGapLabel(3)).toContain("12px");
     expect(formFieldGapLabel(4)).toContain("16px");
     expect(formFieldGapLabel(6)).toContain("24px");
+  });
+});
+
+describe("conditionalLogicMatches", () => {
+  const values = {
+    origem: "instagram",
+    canal: "instagram",
+    score: "85",
+    cidade: "São Paulo",
+  };
+
+  it("aceita grupos com E e OU", () => {
+    const logic: FormFieldConditionalLogic = {
+      groups: [
+        {
+          join: "all",
+          conditions: [
+            { field: "origem", operator: "equals", value: "instagram" },
+            { field: "cidade", operator: "contains", value: "paulo" },
+          ],
+        },
+        {
+          join: "all",
+          conditions: [{ field: "score", operator: "greater_than", value: "90" }],
+        },
+      ],
+    };
+
+    expect(conditionalLogicMatches(logic, values)).toBe(true);
+  });
+
+  it("compara com outro campo e entende vazio", () => {
+    const logic: FormFieldConditionalLogic = {
+      groups: [
+        {
+          join: "all",
+          conditions: [
+            { field: "origem", operator: "equals", value: "", compareTarget: { kind: "field", field: "canal" } },
+            { field: "cidade", operator: "is_not_empty", value: "" },
+          ],
+        },
+      ],
+    };
+
+    expect(conditionalLogicMatches(logic, values)).toBe(true);
+  });
+});
+
+describe("isFormStepVisible", () => {
+  it("oculta etapas por regra condicional", () => {
+    const step: FormStep = {
+      title: "Etapa secreta",
+      conditionalLogic: {
+        groups: [
+          {
+            join: "all",
+            conditions: [{ field: "origem", operator: "equals", value: "google" }],
+          },
+        ],
+      },
+    };
+
+    expect(isFormStepVisible(step, { origem: "instagram" })).toBe(false);
   });
 });
