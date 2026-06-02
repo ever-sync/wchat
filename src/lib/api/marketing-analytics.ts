@@ -79,6 +79,8 @@ export interface MarketingStepAbandonmentInsight {
   abandons: number;
   stepViews: number;
   abandonmentRate: number;
+  previousAbandons: number;
+  previousStepViews: number;
 }
 
 export interface MarketingFieldAbandonmentInsight {
@@ -89,6 +91,22 @@ export interface MarketingFieldAbandonmentInsight {
   abandons: number;
   interactions: number;
   abandonmentRate: number;
+  previousAbandons: number;
+  previousInteractions: number;
+}
+
+export interface MarketingAbandonmentTrendInsight {
+  kind: "step" | "field" | "form";
+  formId: string;
+  formName: string;
+  title: string;
+  subtitle: string;
+  current: number;
+  previous: number;
+  delta: number;
+  currentRate: number;
+  previousRate: number;
+  severity: "ok" | "warning" | "critical";
 }
 
 export interface MarketingAnalytics {
@@ -115,6 +133,7 @@ export interface MarketingAnalytics {
   recentUpdates: Array<Pick<MarketingFormInsight, "formId" | "formName" | "updatedAt" | "attentionLevel">>;
   abandonmentByStep: MarketingStepAbandonmentInsight[];
   abandonmentByField: MarketingFieldAbandonmentInsight[];
+  abandonmentTrends: MarketingAbandonmentTrendInsight[];
   trackedSessions: number;
 }
 
@@ -170,6 +189,7 @@ function emptyAnalytics(periodDays = 30): MarketingAnalytics {
     recentUpdates: [],
     abandonmentByStep: [],
     abandonmentByField: [],
+    abandonmentTrends: [],
     trackedSessions: 0,
   };
 }
@@ -233,6 +253,64 @@ type FormEventRow = {
   metadata: Record<string, unknown> | null;
   created_at: string;
 };
+
+type FormAbandonmentMaps = {
+  stepViewMap: Map<string, number>;
+  abandonStepMap: Map<string, number>;
+  fieldInteractionMap: Map<string, number>;
+  abandonFieldMap: Map<string, number>;
+  trackedSessionCount: number;
+};
+
+function buildFormAbandonmentMaps(formEvents: Array<Record<string, unknown>>): FormAbandonmentMaps {
+  const trackedSessions = new Set<string>();
+  const stepViewMap = new Map<string, number>();
+  const abandonStepMap = new Map<string, number>();
+  const fieldInteractionMap = new Map<string, number>();
+  const abandonFieldMap = new Map<string, number>();
+
+  for (const event of formEvents) {
+    const formId = toString(event.form_id);
+    const sessionId = toString(event.session_id);
+    const eventType = toString(event.event_type);
+    if (!formId || !sessionId || !eventType) continue;
+    trackedSessions.add(`${formId}:${sessionId}`);
+
+    const stepId = toString(event.step_id);
+    const fieldName = toString(event.field_name);
+    const keyPrefix = `${formId}:`;
+
+    if (eventType === "step_view" && stepId) {
+      const key = `${keyPrefix}${stepId}`;
+      stepViewMap.set(key, (stepViewMap.get(key) ?? 0) + 1);
+    }
+
+    if (eventType === "field_focus" || eventType === "field_change") {
+      if (!fieldName) continue;
+      const key = `${keyPrefix}${fieldName}`;
+      fieldInteractionMap.set(key, (fieldInteractionMap.get(key) ?? 0) + 1);
+    }
+
+    if (eventType === "abandon") {
+      if (stepId) {
+        const key = `${keyPrefix}${stepId}`;
+        abandonStepMap.set(key, (abandonStepMap.get(key) ?? 0) + 1);
+      }
+      if (fieldName) {
+        const key = `${keyPrefix}${fieldName}`;
+        abandonFieldMap.set(key, (abandonFieldMap.get(key) ?? 0) + 1);
+      }
+    }
+  }
+
+  return {
+    stepViewMap,
+    abandonStepMap,
+    fieldInteractionMap,
+    abandonFieldMap,
+    trackedSessionCount: trackedSessions.size,
+  };
+}
 
 async function fetchNegotiationStats(ids: string[]): Promise<Map<string, { title: string; status: string; totalValue: number }>> {
   const result = new Map<string, { title: string; status: string; totalValue: number }>();
@@ -311,7 +389,7 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
   const previousSinceIso = new Date(Date.now() - periodDays * 2 * 24 * 60 * 60 * 1000).toISOString();
   const previousUntilIso = sinceIso;
 
-  const [formsRes, currentLeadsRes, previousLeadsRes, formReportRows, formEventRows] = await Promise.all([
+  const [formsRes, currentLeadsRes, previousLeadsRes, formReportRows, currentFormEventRows, previousFormEventRows] = await Promise.all([
     supabase
       .from("marketing_forms")
       .select(
@@ -341,18 +419,28 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
       .gte("created_at", sinceIso)
       .order("created_at", { ascending: false })
       .limit(8000),
+    supabase
+      .from("marketing_form_events")
+      .select("form_id, session_id, event_type, step_id, field_name, field_label, metadata, created_at")
+      .eq("tenant_id", tenantId)
+      .gte("created_at", previousSinceIso)
+      .lt("created_at", previousUntilIso)
+      .order("created_at", { ascending: false })
+      .limit(8000),
   ]);
 
   if (formsRes.error) throw new Error(formsRes.error.message);
   if (currentLeadsRes.error) throw new Error(currentLeadsRes.error.message);
   if (previousLeadsRes.error) throw new Error(previousLeadsRes.error.message);
-  if (formEventRows.error) throw new Error(formEventRows.error.message);
+  if (currentFormEventRows.error) throw new Error(currentFormEventRows.error.message);
+  if (previousFormEventRows.error) throw new Error(previousFormEventRows.error.message);
 
   const forms = (formsRes.data ?? []) as Array<Record<string, unknown>>;
   const leads = (currentLeadsRes.data ?? []) as Array<Record<string, unknown>>;
   const previousLeads = (previousLeadsRes.data ?? []) as Array<Record<string, unknown>>;
   const formReports = (formReportRows ?? []) as CampaignFormRow[];
-  const formEvents = (formEventRows.data ?? []) as Array<Record<string, unknown>>;
+  const formEvents = (currentFormEventRows.data ?? []) as Array<Record<string, unknown>>;
+  const previousFormEvents = (previousFormEventRows.data ?? []) as Array<Record<string, unknown>>;
 
   const formReportMap = new Map(
     formReports.map((row) => [
@@ -534,46 +622,15 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
       return [formId, { stepTitleById, fieldLabelByName }] as const;
     }),
   );
-
-  const trackedSessionSet = new Set<string>();
-  const stepViewMap = new Map<string, number>();
-  const abandonStepMap = new Map<string, number>();
-  const fieldInteractionMap = new Map<string, number>();
-  const abandonFieldMap = new Map<string, number>();
-
-  for (const event of formEvents) {
-    const formId = toString(event.form_id);
-    const sessionId = toString(event.session_id);
-    const eventType = toString(event.event_type);
-    if (!formId || !sessionId || !eventType) continue;
-    trackedSessionSet.add(`${formId}:${sessionId}`);
-
-    const stepId = toString(event.step_id);
-    const fieldName = toString(event.field_name);
-    const keyPrefix = `${formId}:`;
-
-    if (eventType === "step_view" && stepId) {
-      const key = `${keyPrefix}${stepId}`;
-      stepViewMap.set(key, (stepViewMap.get(key) ?? 0) + 1);
-    }
-
-    if (eventType === "field_focus" || eventType === "field_change") {
-      if (!fieldName) continue;
-      const key = `${keyPrefix}${fieldName}`;
-      fieldInteractionMap.set(key, (fieldInteractionMap.get(key) ?? 0) + 1);
-    }
-
-    if (eventType === "abandon") {
-      if (stepId) {
-        const key = `${keyPrefix}${stepId}`;
-        abandonStepMap.set(key, (abandonStepMap.get(key) ?? 0) + 1);
-      }
-      if (fieldName) {
-        const key = `${keyPrefix}${fieldName}`;
-        abandonFieldMap.set(key, (abandonFieldMap.get(key) ?? 0) + 1);
-      }
-    }
-  }
+  const currentEventMaps = buildFormAbandonmentMaps(formEvents);
+  const previousEventMaps = buildFormAbandonmentMaps(previousFormEvents);
+  const {
+    stepViewMap,
+    abandonStepMap,
+    fieldInteractionMap,
+    abandonFieldMap,
+    trackedSessionCount,
+  } = currentEventMaps;
 
   const abandonmentByStep = Array.from(abandonStepMap.entries())
     .map(([key, abandons]) => {
@@ -582,6 +639,9 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
       const meta = formMetaById.get(formId);
       const stepTitle = meta?.stepTitleById.get(stepId) ?? stepId;
       const stepViews = stepViewMap.get(key) ?? 0;
+      const previousKey = key;
+      const previousStepViews = previousEventMaps.stepViewMap.get(previousKey) ?? 0;
+      const previousAbandons = previousEventMaps.abandonStepMap.get(previousKey) ?? 0;
       return {
         formId,
         formName: String(form?.name ?? "Formulário"),
@@ -590,6 +650,8 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
         abandons,
         stepViews,
         abandonmentRate: stepViews > 0 ? clampPercent((abandons / stepViews) * 100) : clampPercent(abandons > 0 ? 100 : 0),
+        previousAbandons,
+        previousStepViews,
       };
     })
     .sort((a, b) => b.abandons - a.abandons || b.abandonmentRate - a.abandonmentRate)
@@ -602,6 +664,8 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
       const meta = formMetaById.get(formId);
       const fieldLabel = meta?.fieldLabelByName.get(fieldName) ?? fieldName;
       const interactions = fieldInteractionMap.get(key) ?? 0;
+      const previousInteractions = previousEventMaps.fieldInteractionMap.get(key) ?? 0;
+      const previousAbandons = previousEventMaps.abandonFieldMap.get(key) ?? 0;
       return {
         formId,
         formName: String(form?.name ?? "Formulário"),
@@ -610,9 +674,56 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
         abandons,
         interactions,
         abandonmentRate: interactions > 0 ? clampPercent((abandons / interactions) * 100) : clampPercent(abandons > 0 ? 100 : 0),
+        previousAbandons,
+        previousInteractions,
       };
     })
     .sort((a, b) => b.abandons - a.abandons || b.abandonmentRate - a.abandonmentRate)
+    .slice(0, 8);
+
+  const abandonmentTrends: MarketingAbandonmentTrendInsight[] = [
+    ...abandonmentByStep.map((item) => {
+      const previousRate = item.previousStepViews > 0 ? clampPercent((item.previousAbandons / item.previousStepViews) * 100) : clampPercent(item.previousAbandons > 0 ? 100 : 0);
+      const currentRate = item.stepViews > 0 ? clampPercent((item.abandons / item.stepViews) * 100) : clampPercent(item.abandons > 0 ? 100 : 0);
+      const delta = Math.round((currentRate - previousRate) * 10) / 10;
+      const severity: MarketingAbandonmentTrendInsight["severity"] =
+        currentRate >= 50 || delta >= 15 ? "critical" : delta >= 5 ? "warning" : "ok";
+      return {
+        kind: "step" as const,
+        formId: item.formId,
+        formName: item.formName,
+        title: item.stepTitle,
+        subtitle: "Etapa",
+        current: item.abandons,
+        previous: item.previousAbandons,
+        delta,
+        currentRate,
+        previousRate,
+        severity,
+      };
+    }),
+    ...abandonmentByField.map((item) => {
+      const previousRate = item.previousInteractions > 0 ? clampPercent((item.previousAbandons / item.previousInteractions) * 100) : clampPercent(item.previousAbandons > 0 ? 100 : 0);
+      const currentRate = item.interactions > 0 ? clampPercent((item.abandons / item.interactions) * 100) : clampPercent(item.abandons > 0 ? 100 : 0);
+      const delta = Math.round((currentRate - previousRate) * 10) / 10;
+      const severity: MarketingAbandonmentTrendInsight["severity"] =
+        currentRate >= 50 || delta >= 15 ? "critical" : delta >= 5 ? "warning" : "ok";
+      return {
+        kind: "field" as const,
+        formId: item.formId,
+        formName: item.formName,
+        title: item.fieldLabel,
+        subtitle: "Campo",
+        current: item.abandons,
+        previous: item.previousAbandons,
+        delta,
+        currentRate,
+        previousRate,
+        severity,
+      };
+    }),
+  ]
+    .sort((a, b) => b.currentRate - a.currentRate || b.delta - a.delta)
     .slice(0, 8);
 
   const recentSubmissions = leads
@@ -709,7 +820,8 @@ export async function fetchMarketingAnalytics(periodDays = 30): Promise<Marketin
       })),
     abandonmentByStep,
     abandonmentByField,
-    trackedSessions: trackedSessionSet.size,
+    abandonmentTrends,
+    trackedSessions: trackedSessionCount,
   };
 }
 

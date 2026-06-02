@@ -193,6 +193,7 @@ export function MarketingAnalytics({ onBack }: MarketingAnalyticsProps) {
     const recentUpdates = analytics.recentUpdates;
     const abandonmentByStep = analytics.abandonmentByStep.slice(0, 6);
     const abandonmentByField = analytics.abandonmentByField.slice(0, 6);
+    const abandonmentTrends = analytics.abandonmentTrends.slice(0, 6);
     const actionInsights = (() => {
       const items: Array<{
         title: string;
@@ -257,6 +258,7 @@ export function MarketingAnalytics({ onBack }: MarketingAnalyticsProps) {
       recentUpdates,
       abandonmentByStep,
       abandonmentByField,
+      abandonmentTrends,
       actionInsights,
     };
   }, [data]);
@@ -420,6 +422,56 @@ export function MarketingAnalytics({ onBack }: MarketingAnalyticsProps) {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <SectionTitle
+                title="Tendência do abandono"
+                description="Comparação com o período anterior para enxergar melhora ou piora."
+              />
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {dashboard.abandonmentTrends.length === 0 ? (
+                <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+                  Sem eventos suficientes para comparar tendência.
+                </div>
+              ) : (
+                dashboard.abandonmentTrends.map((item) => (
+                  <div key={`${item.kind}:${item.formId}:${item.title}`} className="rounded-xl border bg-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{item.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {item.formName} · {item.subtitle}
+                        </p>
+                      </div>
+                      <AttentionBadge level={item.severity} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                      <div>
+                        <p className="font-medium text-foreground">{formatNumber(item.current)}</p>
+                        <p>atual</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{formatNumber(item.previous)}</p>
+                        <p>anterior</p>
+                      </div>
+                      <div>
+                        <p className={cn("font-medium", item.delta >= 0 ? "text-red-600" : "text-emerald-600")}>
+                          {item.delta >= 0 ? "+" : ""}
+                          {formatPercent(Math.abs(item.delta))}
+                        </p>
+                        <p>variação</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
+                      Taxa atual {formatPercent(item.currentRate)} · período anterior {formatPercent(item.previousRate)}
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
