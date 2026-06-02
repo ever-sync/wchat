@@ -16,6 +16,39 @@ import { processPendingDispatches } from "../_shared/email.ts";
 
 type FormFieldLike = { name: string; type: string; required?: boolean; label?: string };
 
+type SubmitWebhookPayload = {
+  event: string;
+  occurred_at: string;
+  source: string;
+  form: {
+    id: string;
+    name: string;
+  };
+  lead: {
+    negotiation_id: string | null;
+    score: number;
+    is_duplicate: boolean;
+  };
+  data: Record<string, unknown>;
+  answers: Array<{
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+    value: unknown;
+  }>;
+  meta: Record<string, unknown>;
+  submission: {
+    score: number;
+    score_factors: unknown[];
+    time_to_complete_seconds: number;
+    fields_filled: number;
+    total_fields: number;
+  };
+};
+
+const WEBHOOK_TIMEOUT_MS = 5000;
+
 const rateBuckets = new Map<string, number[]>();
 const MAX_PER_MINUTE = 20;
 
@@ -60,6 +93,86 @@ function pickValue(data: Record<string, unknown>, keys: string[]): string {
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   return "";
+}
+
+function normalizeWebhookUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildSubmitWebhookPayload(input: {
+  formId: string;
+  formName: string;
+  negotiationId: string | null;
+  cleanData: Record<string, unknown>;
+  meta: Record<string, unknown>;
+  scoring: { score: number; factors: unknown[] };
+  isDuplicate: boolean;
+  fields: FormFieldLike[];
+  timeToCompleteSeconds: number;
+}): SubmitWebhookPayload {
+  return {
+    event: "form.submitted",
+    occurred_at: new Date().toISOString(),
+    source: "wchat",
+    form: {
+      id: input.formId,
+      name: input.formName,
+    },
+    lead: {
+      negotiation_id: input.negotiationId,
+      score: input.scoring.score,
+      is_duplicate: input.isDuplicate,
+    },
+    data: input.cleanData,
+    answers: input.fields.map((field) => ({
+      name: field.name,
+      label: field.label ?? field.name,
+      type: field.type,
+      required: Boolean(field.required),
+      value: input.cleanData[field.name] ?? null,
+    })),
+    meta: input.meta,
+    submission: {
+      score: input.scoring.score,
+      score_factors: input.scoring.factors,
+      time_to_complete_seconds: input.timeToCompleteSeconds,
+      fields_filled: Object.values(input.cleanData).filter(
+        (v) => v !== undefined && v !== null && String(v).trim() !== "",
+      ).length,
+      total_fields: input.fields.length,
+    },
+  };
+}
+
+async function postSubmitWebhook(url: string, payload: SubmitWebhookPayload): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-WChat-Event": payload.event,
+        "X-WChat-Form-Id": payload.form.id,
+        "X-WChat-Form-Name": payload.form.name,
+        "X-WChat-Source": payload.source,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 Deno.serve(async (request) => {
@@ -145,7 +258,9 @@ Deno.serve(async (request) => {
 
     const { data: form, error } = await admin
       .from("marketing_forms")
-      .select("id, tenant_id, name, is_active, allowed_domains, fields, email_template_id, submit_message, submit_redirect_url")
+      .select(
+        "id, tenant_id, name, is_active, allowed_domains, fields, email_template_id, submit_message, submit_webhook_url, submit_redirect_url",
+      )
       .eq("id", formId)
       .maybeSingle();
 
@@ -238,6 +353,29 @@ Deno.serve(async (request) => {
     const variantId = typeof rawMeta.variant_id === "string" ? rawMeta.variant_id : null;
     if (variantId) {
       admin.rpc("increment_marketing_variant_submissions", { p_variant_id: variantId }).then(() => {}, () => {});
+    }
+
+    if (form.submit_webhook_url) {
+      void (async () => {
+        try {
+          const webhookPayload = buildSubmitWebhookPayload({
+            formId,
+            formName: String(form.name ?? ""),
+            negotiationId: negotiationId ? String(negotiationId) : null,
+            cleanData,
+            meta,
+            scoring,
+            isDuplicate,
+            fields,
+            timeToCompleteSeconds: timeToComplete,
+          });
+          const webhookUrl = normalizeWebhookUrl(form.submit_webhook_url);
+          if (!webhookUrl) return;
+          await postSubmitWebhook(webhookUrl, webhookPayload);
+        } catch (e) {
+          console.error("[forms-public] submit webhook error:", e);
+        }
+      })();
     }
 
     // E-mail transacional (lead recebido) se o form tiver template e o lead tiver e-mail

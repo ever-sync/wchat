@@ -31,6 +31,7 @@ const SELECT = [
   "target_funnel_id",
   "target_stage_id",
   "email_template_id",
+  "submit_webhook_url",
   "submit_redirect_url",
   "submit_message",
   "total_views",
@@ -81,6 +82,7 @@ export function mapMarketingFormRow(row: Record<string, unknown>): MarketingForm
     targetFunnelId: row.target_funnel_id == null ? null : String(row.target_funnel_id),
     targetStageId: row.target_stage_id == null ? null : String(row.target_stage_id),
     emailTemplateId: row.email_template_id == null ? null : String(row.email_template_id),
+    submitWebhookUrl: row.submit_webhook_url == null ? null : String(row.submit_webhook_url),
     submitRedirectUrl: row.submit_redirect_url == null ? null : String(row.submit_redirect_url),
     submitMessage: String(row.submit_message ?? ""),
     totalViews: Number(row.total_views ?? 0),
@@ -101,6 +103,7 @@ export type MarketingFormCreateInput = {
   isActive?: boolean;
   targetFunnelId?: string | null;
   targetStageId?: string | null;
+  submitWebhookUrl?: string | null;
   submitRedirectUrl?: string | null;
   submitMessage?: string;
 };
@@ -117,6 +120,7 @@ export type MarketingFormPatch = Partial<{
   targetFunnelId: string | null;
   targetStageId: string | null;
   emailTemplateId: string | null;
+  submitWebhookUrl: string | null;
   submitRedirectUrl: string | null;
   submitMessage: string;
 }>;
@@ -134,6 +138,7 @@ function patchToRow(patch: MarketingFormPatch): Record<string, unknown> {
   if (patch.targetFunnelId !== undefined) row.target_funnel_id = patch.targetFunnelId;
   if (patch.targetStageId !== undefined) row.target_stage_id = patch.targetStageId;
   if (patch.emailTemplateId !== undefined) row.email_template_id = patch.emailTemplateId;
+  if (patch.submitWebhookUrl !== undefined) row.submit_webhook_url = patch.submitWebhookUrl;
   if (patch.submitRedirectUrl !== undefined) row.submit_redirect_url = patch.submitRedirectUrl;
   if (patch.submitMessage !== undefined) row.submit_message = patch.submitMessage;
   return row;
@@ -187,6 +192,7 @@ export async function createMarketingForm(input: MarketingFormCreateInput): Prom
       is_active: input.isActive ?? true,
       target_funnel_id: input.targetFunnelId ?? null,
       target_stage_id: input.targetStageId ?? null,
+      submit_webhook_url: input.submitWebhookUrl ?? null,
       submit_redirect_url: input.submitRedirectUrl ?? null,
       ...(input.submitMessage !== undefined ? { submit_message: input.submitMessage } : {}),
     })
@@ -239,6 +245,7 @@ export async function duplicateMarketingForm(id: string): Promise<MarketingFormR
     isActive: false,
     targetFunnelId: source.targetFunnelId,
     targetStageId: source.targetStageId,
+    submitWebhookUrl: source.submitWebhookUrl,
     submitRedirectUrl: source.submitRedirectUrl,
     submitMessage: source.submitMessage,
   });

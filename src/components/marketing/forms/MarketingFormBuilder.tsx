@@ -34,12 +34,18 @@ import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useUpdateMarketingForm } from "@/lib/api/marketing-forms";
 import { useMarketingEmailTemplates } from "@/lib/api/marketing-email-templates";
+import { useDistinctCustomerTags } from "@/lib/api/customers";
 import { validateBuilderFields } from "@/lib/marketing/form-validation";
 import {
   createDefaultField,
   DEFAULT_FORM_THEME,
+  formFieldGapToCss,
+  formFieldGapLabel,
+  groupFormFieldsIntoRows,
+  formFieldWidthToGridSpan,
   type FormField,
   type FormFieldType,
+  type FormFieldGap,
   type FormSettings,
   type FormTheme,
   type MarketingFormRecord,
@@ -52,6 +58,10 @@ import { ABTestPanel } from "./ABTestPanel";
 import { EmailTemplatesDialog } from "./EmailTemplatesDialog";
 
 const TENANT_DEFAULT = "__tenant_default__";
+
+function parseTagList(value: string): string[] {
+  return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
+}
 
 function PreviewField({ field }: { field: FormField }) {
   return (
@@ -104,18 +114,23 @@ function FormPreview({
   device,
   submitMessage,
   theme,
+  fieldGap,
   conversational,
 }: {
   fields: FormField[];
   device: "desktop" | "mobile";
   submitMessage: string;
   theme: FormTheme;
+  fieldGap: FormFieldGap;
   conversational: boolean;
 }) {
   const visibleFields = fields.filter((f) => f.type !== "hidden");
+  const rows = useMemo(() => groupFormFieldsIntoRows(visibleFields, device === "mobile"), [device, visibleFields]);
   const [step, setStep] = useState(0);
   const safeStep = Math.min(step, Math.max(0, visibleFields.length - 1));
   const btnStyle = { backgroundColor: theme.primaryColor, borderRadius: `${theme.borderRadius}px` };
+  const isCompact = device === "mobile";
+  const gap = formFieldGapToCss(fieldGap);
 
   return (
     <div className="h-full overflow-y-auto p-4">
@@ -169,10 +184,21 @@ function FormPreview({
             <p className="text-center text-xs opacity-60">{submitMessage || "Obrigado!"}</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {visibleFields.map((field) => (
-              <PreviewField key={field.id} field={field} />
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap }}>
+            <div style={{ display: "flex", flexDirection: "column", gap }}>
+              {rows.map((row, rowIndex) => (
+                <div key={rowIndex} className="grid grid-cols-12" style={{ gap }}>
+                  {row.map((field) => {
+                    const span = isCompact ? 12 : formFieldWidthToGridSpan(field.layoutWidth);
+                    return (
+                      <div key={field.id} className="min-w-0" style={{ gridColumn: `span ${span} / span ${span}` }}>
+                        <PreviewField field={field} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
             <button
               type="button"
               className="mt-2 w-full px-3 py-2 text-sm font-medium text-white"
@@ -198,6 +224,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const { toast } = useToast();
   const { data: funnels = DEFAULT_CRM_FUNNELS } = useEffectiveCrmFunnels();
   const { data: emailTemplates = [] } = useMarketingEmailTemplates();
+  const { data: customerTagSuggestions = [] } = useDistinctCustomerTags();
   const updateForm = useUpdateMarketingForm();
 
   const [name, setName] = useState(form.name);
@@ -205,6 +232,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const [theme, setTheme] = useState<FormTheme>({ ...DEFAULT_FORM_THEME, ...form.theme });
   const [settings, setSettings] = useState<FormSettings>(form.settings);
   const [submitMessage, setSubmitMessage] = useState(form.submitMessage || "Obrigado! Recebemos suas informações.");
+  const [submitWebhookUrl, setSubmitWebhookUrl] = useState(form.submitWebhookUrl ?? "");
   const [submitRedirectUrl, setSubmitRedirectUrl] = useState(form.submitRedirectUrl ?? "");
   const [targetFunnelId, setTargetFunnelId] = useState(form.targetFunnelId ?? TENANT_DEFAULT);
   const [targetStageId, setTargetStageId] = useState(form.targetStageId ?? "");
@@ -215,6 +243,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [view, setView] = useState<"canvas" | "preview">("canvas");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const fieldGap = settings.fieldGap ?? 3;
 
   const validation = useMemo(() => validateBuilderFields(fields), [fields]);
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
@@ -237,6 +266,27 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
     const field = createDefaultField(type);
     setFields((prev) => [...prev, field]);
     setSelectedId(field.id);
+    markDirty();
+  }
+
+  function duplicateField(id: string) {
+    setFields((prev) => {
+      const source = prev.find((field) => field.id === id);
+      if (!source) return prev;
+
+      const index = prev.findIndex((field) => field.id === id);
+      const clone: FormField = {
+        ...source,
+        id: `field_${Math.random().toString(36).slice(2, 8)}`,
+        name: `${source.name}_copia`,
+        label: `${source.label} (cópia)`,
+      };
+
+      const next = [...prev];
+      next.splice(index + 1, 0, clone);
+      setSelectedId(clone.id);
+      return next;
+    });
     markDirty();
   }
 
@@ -302,6 +352,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
           theme,
           settings,
           submitMessage: submitMessage.trim() || "Obrigado!",
+          submitWebhookUrl: submitWebhookUrl.trim() || null,
           submitRedirectUrl: submitRedirectUrl.trim() || null,
           targetFunnelId: usesDefault ? null : targetFunnelId,
           targetStageId: usesDefault ? null : targetStageId || null,
@@ -403,6 +454,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                               isSelected={selectedId === field.id}
                               errorCount={(validation.fieldErrors[field.id] ?? []).length}
                               onSelect={() => setSelectedId(field.id)}
+                              onDuplicate={() => duplicateField(field.id)}
                               onRemove={() => removeField(field.id)}
                             />
                           ))}
@@ -417,6 +469,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                   device={previewDevice}
                   submitMessage={submitMessage}
                   theme={theme}
+                  fieldGap={fieldGap}
                   conversational={!!settings.conversational}
                 />
               )}
@@ -444,7 +497,7 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
         {/* Settings */}
         <TabsContent value="settings" className="mt-3 min-h-0 flex-1 overflow-y-auto">
           <div className="grid max-w-3xl gap-5">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-xs">Título do formulário</Label>
                 <Input
@@ -465,17 +518,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                     markDirty();
                   }}
                   placeholder="Obrigado!"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Redirect após envio</Label>
-                <Input
-                  value={submitRedirectUrl}
-                  onChange={(e) => {
-                    setSubmitRedirectUrl(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="https://seusite.com/obrigado"
                 />
               </div>
             </div>
@@ -528,6 +570,198 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Integrações e destino */}
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Integrações e destino</p>
+                <p className="text-xs text-muted-foreground">
+                  Decide o que acontece com o lead logo após o envio.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs">Webhook de envio</Label>
+                  <Input
+                    value={submitWebhookUrl}
+                    onChange={(e) => {
+                      setSubmitWebhookUrl(e.target.value);
+                      markDirty();
+                    }}
+                    placeholder="https://seu-sistema.com/webhook/formulario"
+                  />
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    Envia um JSON estruturado com formulário, respostas, metadados e lead criado.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs">Redirect após envio</Label>
+                  <Input
+                    value={submitRedirectUrl}
+                    onChange={(e) => {
+                      setSubmitRedirectUrl(e.target.value);
+                      markDirty();
+                    }}
+                    placeholder="https://seusite.com/obrigado"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs">Tags automáticas do cliente</Label>
+                  <Input
+                    value={(settings.customerTags ?? []).join(", ")}
+                    onChange={(e) => {
+                      setSettings((prev) => ({ ...prev, customerTags: parseTagList(e.target.value) }));
+                      markDirty();
+                    }}
+                    placeholder="Formulário Facebook, Lead Quente, CRM"
+                  />
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    Essas tags entram no cadastro do cliente junto com a origem do formulário.
+                  </p>
+                  {customerTagSuggestions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {customerTagSuggestions.slice(0, 8).map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            const current = new Set(settings.customerTags ?? []);
+                            current.add(tag);
+                            setSettings((prev) => ({ ...prev, customerTags: [...current] }));
+                            markDirty();
+                          }}
+                          className="rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center justify-between sm:col-span-2">
+                  <div>
+                    <Label className="text-sm">Criar registro na timeline</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Adiciona um cartão de atividade no CRM quando o formulário for enviado.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!!settings.createActivityOnSubmit}
+                    onCheckedChange={(checked) => {
+                      setSettings((prev) => ({
+                        ...prev,
+                        createActivityOnSubmit: checked,
+                        activityTitle: checked ? prev.activityTitle ?? "Formulário enviado" : prev.activityTitle,
+                        activityBody: checked ? prev.activityBody ?? "" : prev.activityBody,
+                      }));
+                      markDirty();
+                    }}
+                  />
+                </div>
+
+                {settings.createActivityOnSubmit ? (
+                  <>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Título da atividade</Label>
+                      <Input
+                        value={settings.activityTitle ?? "Formulário enviado"}
+                        onChange={(e) => {
+                          setSettings((prev) => ({ ...prev, activityTitle: e.target.value }));
+                          markDirty();
+                        }}
+                        placeholder="Formulário enviado"
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Descrição da atividade</Label>
+                      <Input
+                        value={settings.activityBody ?? ""}
+                        onChange={(e) => {
+                          setSettings((prev) => ({ ...prev, activityBody: e.target.value }));
+                          markDirty();
+                        }}
+                        placeholder="Lead entrou pelo formulário X com score Y"
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="space-y-3 sm:col-span-2">
+                  <div>
+                    <p className="text-sm font-semibold">E-mail de confirmação</p>
+                    <p className="text-xs text-muted-foreground">
+                      Enviado automaticamente ao lead quando ele tem e-mail no formulário.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[220px] flex-1 space-y-1.5">
+                      <Label className="text-xs">Template</Label>
+                      <Select
+                        value={emailTemplateId || "__none__"}
+                        onValueChange={(v) => {
+                          setEmailTemplateId(v === "__none__" ? "" : v);
+                          markDirty();
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem e-mail" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sem e-mail</SelectItem>
+                          {emailTemplates.map((tpl) => (
+                            <SelectItem key={tpl.id} value={tpl.id}>
+                              {tpl.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button variant="outline" onClick={() => setEmailDialogOpen(true)}>
+                      Gerenciar templates
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Layout */}
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Layout</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Espaçamento entre campos</Label>
+                  <Select
+                    value={String(fieldGap)}
+                    onValueChange={(value) => {
+                      setSettings((prev) => ({ ...prev, fieldGap: Number(value) as FormFieldGap }));
+                      markDirty();
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Espaçamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4, 6].map((gapValue) => (
+                        <SelectItem key={gapValue} value={String(gapValue)}>
+                          {formFieldGapLabel(gapValue as FormFieldGap)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    Controla o espaço visual entre colunas e linhas do formulário.
+                  </p>
                 </div>
               </div>
             </div>
@@ -627,42 +861,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
 
             <Separator />
 
-            {/* E-mail de confirmação */}
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold">E-mail de confirmação</p>
-                <p className="text-xs text-muted-foreground">
-                  Enviado automaticamente ao lead quando ele tem e-mail no formulário.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[220px] flex-1 space-y-1.5">
-                  <Label className="text-xs">Template</Label>
-                  <Select
-                    value={emailTemplateId || "__none__"}
-                    onValueChange={(v) => {
-                      setEmailTemplateId(v === "__none__" ? "" : v);
-                      markDirty();
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sem e-mail" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sem e-mail</SelectItem>
-                      {emailTemplates.map((tpl) => (
-                        <SelectItem key={tpl.id} value={tpl.id}>
-                          {tpl.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button variant="outline" onClick={() => setEmailDialogOpen(true)}>
-                  Gerenciar templates
-                </Button>
-              </div>
-            </div>
           </div>
         </TabsContent>
 

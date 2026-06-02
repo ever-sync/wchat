@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertCircle, GripVertical, X } from "lucide-react";
+import { AlertCircle, Copy, GripVertical, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { FIELD_TYPE_LABELS, type FormField } from "@/lib/marketing/form-types";
@@ -10,10 +10,18 @@ interface SortableFieldItemProps {
   isSelected: boolean;
   errorCount?: number;
   onSelect: () => void;
+  onDuplicate: () => void;
   onRemove: () => void;
 }
 
-export function SortableFieldItem({ field, isSelected, errorCount = 0, onSelect, onRemove }: SortableFieldItemProps) {
+export function SortableFieldItem({
+  field,
+  isSelected,
+  errorCount = 0,
+  onSelect,
+  onDuplicate,
+  onRemove,
+}: SortableFieldItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
 
   const style = {
@@ -52,6 +60,14 @@ export function SortableFieldItem({ field, isSelected, errorCount = 0, onSelect,
           <Badge variant="secondary" className="h-4 px-1.5 py-0 text-[10px] font-normal">
             {FIELD_TYPE_LABELS[field.type] ?? field.type}
           </Badge>
+          <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
+            {field.layoutWidth ?? 100}%
+          </Badge>
+          {field.lineBreakBefore ? (
+            <Badge variant="secondary" className="h-4 px-1.5 py-0 text-[10px] font-normal">
+              nova linha
+            </Badge>
+          ) : null}
           <span className="truncate font-mono text-[11px] text-muted-foreground">{field.name}</span>
           {errorCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[11px] text-amber-600">
@@ -66,9 +82,22 @@ export function SortableFieldItem({ field, isSelected, errorCount = 0, onSelect,
         type="button"
         onClick={(e) => {
           e.stopPropagation();
+          onDuplicate();
+        }}
+        className="flex-shrink-0 rounded-md p-1 text-muted-foreground/50 transition-colors hover:bg-blue-50 hover:text-blue-600"
+        title="Duplicar campo"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
           onRemove();
         }}
         className="flex-shrink-0 rounded-md p-1 text-muted-foreground/50 transition-colors hover:bg-red-50 hover:text-red-500"
+        title="Remover campo"
       >
         <X className="h-3.5 w-3.5" />
       </button>

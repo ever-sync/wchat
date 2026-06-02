@@ -17,6 +17,80 @@ export interface FormFieldOption {
   value: string;
 }
 
+export type FormFieldWidth = 33 | 66 | 100;
+export type FormFieldGap = 2 | 3 | 4 | 6;
+
+export function formFieldWidthToGridSpan(width: FormFieldWidth | undefined): number {
+  switch (width) {
+    case 33:
+      return 4;
+    case 66:
+      return 8;
+    case 100:
+    default:
+      return 12;
+  }
+}
+
+const FORM_FIELD_GAP_CSS: Record<FormFieldGap, string> = {
+  2: "0.5rem",
+  3: "0.75rem",
+  4: "1rem",
+  6: "1.5rem",
+};
+
+export function formFieldGapToCss(gap: FormFieldGap | undefined): string {
+  return FORM_FIELD_GAP_CSS[gap ?? 3];
+}
+
+export function formFieldGapLabel(gap: FormFieldGap): string {
+  switch (gap) {
+    case 2:
+      return "Compacto — 8px";
+    case 4:
+      return "Amplo — 16px";
+    case 6:
+      return "Bem amplo — 24px";
+    case 3:
+    default:
+      return "Confortável — 12px";
+  }
+}
+
+export function groupFormFieldsIntoRows(fields: FormField[], compact = false): FormField[][] {
+  const rows: FormField[][] = [];
+  let current: FormField[] = [];
+  let remaining = 12;
+
+  for (const field of fields.filter((item) => item.type !== "hidden")) {
+    const span = compact ? 12 : formFieldWidthToGridSpan(field.layoutWidth);
+
+    if (field.lineBreakBefore && current.length > 0) {
+      rows.push(current);
+      current = [];
+      remaining = 12;
+    }
+
+    if (current.length > 0 && span > remaining) {
+      rows.push(current);
+      current = [];
+      remaining = 12;
+    }
+
+    current.push(field);
+    remaining -= span;
+
+    if (remaining <= 0) {
+      rows.push(current);
+      current = [];
+      remaining = 12;
+    }
+  }
+
+  if (current.length > 0) rows.push(current);
+  return rows;
+}
+
 /** Para onde o valor do campo vai no envio. */
 export type FormFieldMapping =
   | { kind: "default"; key: "nome" | "email" | "telefone" }
@@ -28,6 +102,8 @@ export interface FormField {
   type: FormFieldType;
   name: string;
   label: string;
+  layoutWidth?: FormFieldWidth;
+  lineBreakBefore?: boolean;
   placeholder?: string;
   required: boolean;
   options?: FormFieldOption[];
@@ -66,6 +142,11 @@ export interface FormSettings {
   requireEmailVerification: boolean;
   conversational?: boolean;
   progressiveProfiling?: boolean;
+  fieldGap?: FormFieldGap;
+  customerTags?: string[];
+  createActivityOnSubmit?: boolean;
+  activityTitle?: string;
+  activityBody?: string;
   abAutoWinner?: FormAutoWinnerConfig;
 }
 
@@ -94,6 +175,7 @@ export interface MarketingFormRecord {
   targetFunnelId: string | null;
   targetStageId: string | null;
   emailTemplateId: string | null;
+  submitWebhookUrl: string | null;
   submitRedirectUrl: string | null;
   submitMessage: string;
   totalViews: number;
@@ -121,6 +203,9 @@ export const DEFAULT_FORM_SETTINGS: FormSettings = {
   requireEmailVerification: false,
   conversational: false,
   progressiveProfiling: true,
+  fieldGap: 3,
+  customerTags: [],
+  createActivityOnSubmit: false,
 };
 
 export const DEFAULT_FORM_THEME: FormTheme = {
@@ -173,6 +258,8 @@ export function createDefaultField(type: FormFieldType): FormField {
     type,
     name: `${type}_${shortId()}`,
     label,
+    layoutWidth: 100,
+    lineBreakBefore: false,
     required: false,
   };
   field.mapping = { kind: "extra" };
@@ -209,6 +296,8 @@ export function buildDefaultContactField(key: DefaultContactKey): FormField {
     type: def.type,
     name: key,
     label: def.label,
+    layoutWidth: 100,
+    lineBreakBefore: false,
     placeholder: DEFAULT_CONTACT_PLACEHOLDERS[key],
     required: key !== "email" ? true : false,
     mapping: { kind: "default", key },

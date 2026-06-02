@@ -4,7 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { fieldNeedsOptions, type FormField } from "@/lib/marketing/form-types";
+import {
+  fieldNeedsOptions,
+  type FormField,
+  type FormFieldWidth,
+} from "@/lib/marketing/form-types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -26,6 +31,7 @@ export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) 
   const hasOptions = fieldNeedsOptions(field.type);
   const hasPlaceholder = !["hidden", "checkbox", "radio", "date"].includes(field.type);
   const hasValidation = ["text", "textarea", "email", "phone"].includes(field.type);
+  const width = (field.layoutWidth ?? 100) as FormFieldWidth;
 
   function addOption() {
     if (!field) return;
@@ -119,6 +125,38 @@ export function FieldEditor({ field, errors = [], onUpdate }: FieldEditorProps) 
         <Label className="cursor-pointer text-xs text-muted-foreground">Obrigatório</Label>
         <Switch checked={field.required} onCheckedChange={(checked) => onUpdate({ required: checked })} />
       </div>
+
+      {field.type !== "hidden" ? (
+        <div className="flex items-center justify-between py-0.5">
+          <div>
+            <Label className="cursor-pointer text-xs text-muted-foreground">Começar nova linha</Label>
+            <p className="text-[10px] text-muted-foreground">Este campo inicia um novo bloco visual.</p>
+          </div>
+          <Switch
+            checked={field.lineBreakBefore ?? false}
+            onCheckedChange={(checked) => onUpdate({ lineBreakBefore: checked })}
+          />
+        </div>
+      ) : null}
+
+      {field.type !== "hidden" ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Largura</Label>
+          <Select
+            value={String(width)}
+            onValueChange={(value) => onUpdate({ layoutWidth: Number(value) as FormFieldWidth })}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Largura do campo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="100">100% - linha inteira</SelectItem>
+              <SelectItem value="66">66% - 2/3 da linha</SelectItem>
+              <SelectItem value="33">33% - 1/3 da linha</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       {field.type === "hidden" && (
         <div className="space-y-1.5">

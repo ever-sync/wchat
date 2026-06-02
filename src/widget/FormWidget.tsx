@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_FORM_THEME,
+  formFieldGapToCss,
+  groupFormFieldsIntoRows,
+  formFieldWidthToGridSpan,
+  type FormSettings,
   type FormField,
   type FormTheme,
 } from "@/lib/marketing/form-types";
@@ -11,7 +15,7 @@ type PublicForm = {
   id: string;
   name: string;
   fields: FormField[];
-  settings: Record<string, unknown>;
+  settings: Partial<FormSettings>;
   theme: Partial<FormTheme>;
   submitMessage: string;
   submitRedirectUrl: string | null;
@@ -53,6 +57,7 @@ export function FormWidget() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [step, setStep] = useState(0);
+  const [isCompactViewport, setIsCompactViewport] = useState(() => window.innerWidth < 640);
   const startedAt = useRef<number>(Date.now());
 
   const theme = useMemo<FormTheme>(() => ({ ...DEFAULT_FORM_THEME, ...(form?.theme ?? {}) }), [form]);
@@ -80,8 +85,21 @@ export function FormWidget() {
     };
   }, [formId]);
 
+  useEffect(() => {
+    const updateViewport = () => setIsCompactViewport(window.innerWidth < 640);
+    updateViewport();
+    window.addEventListener("resize", updateViewport, { passive: true });
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
   const visibleFields = useMemo(() => (form?.fields ?? []).filter((f) => f.type !== "hidden"), [form]);
+  const groupedFields = useMemo(
+    () => groupFormFieldsIntoRows(visibleFields, isCompactViewport),
+    [visibleFields, isCompactViewport],
+  );
   const conversational = Boolean((form?.settings as Record<string, unknown> | undefined)?.conversational);
+  const fieldGap = form?.settings?.fieldGap ?? 3;
+  const gap = formFieldGapToCss(fieldGap);
 
   function setValue(name: string, value: unknown) {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -350,7 +368,7 @@ export function FormWidget() {
       />
 
       {conversational && visibleFields.length > 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap }}>
           <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
             Pergunta {Math.min(step + 1, visibleFields.length)} de {visibleFields.length}
           </p>
@@ -374,12 +392,25 @@ export function FormWidget() {
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {visibleFields.map((field) => renderField(field))}
-          {errors._form ? <p style={{ fontSize: 13, color: "#ef4444" }}>{errors._form}</p> : null}
-          <button type="submit" disabled={submitting} style={{ ...primaryBtnStyle, width: "100%" }}>
-            {submitting ? "Enviando…" : "Enviar"}
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", gap }}>
+          {groupedFields.map((row, index) => (
+            <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap }}>
+              {row.map((field) => {
+                const span = isCompactViewport ? 12 : formFieldWidthToGridSpan(field.layoutWidth);
+                return (
+                  <div key={field.id} style={{ gridColumn: `span ${span} / span ${span}`, minWidth: 0 }}>
+                    {renderField(field)}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div>
+            {errors._form ? <p style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{errors._form}</p> : null}
+            <button type="submit" disabled={submitting} style={{ ...primaryBtnStyle, width: "100%" }}>
+              {submitting ? "Enviando…" : "Enviar"}
+            </button>
+          </div>
         </div>
       )}
     </form>
