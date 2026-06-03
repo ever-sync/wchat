@@ -6,6 +6,10 @@
 [functions.uazapi-webhook]
 verify_jwt = false
 
+# Criacao de canal UAZAPI via app (JWT do tenant; requireTenantPermission valida).
+[functions.uazapi-instance-create]
+verify_jwt = false
+
 # n8n envia com HMAC ou N8N_SERVICE_KEY — sem JWT de usuario
 [functions.n8n-reply]
 verify_jwt = false
