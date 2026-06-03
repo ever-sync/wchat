@@ -246,6 +246,7 @@ export default function Inbox() {
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
   const activeChat = useMemo(() => {
     if (!activeChatId) {
@@ -391,9 +392,10 @@ export default function Inbox() {
     enabled: Boolean(activeChat?.id) && !mustAssumeChatToView,
     // Fallback curto: se o Realtime do self-host oscilar, a conversa ativa
     // ainda recebe mensagens em poucos segundos.
-    refetchInterval: activeChat && !mustAssumeChatToView ? 5_000 : false,
+    refetchInterval: activeChat && !mustAssumeChatToView ? 3_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
   const markChatAsRead = useMarkChatAsRead();
   const syncInbox = useSyncInbox({
