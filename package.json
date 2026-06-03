@@ -19,8 +19,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "db:push": "npx supabase db push --linked --yes",
-    "db:migration:list": "npx supabase migration list --linked",
+    "db:push": "npx supabase db push --db-url \"$SUPABASE_DB_URL\" --yes",
+    "db:migration:list": "npx supabase migration list --db-url \"$SUPABASE_DB_URL\"",
     "eval": "node evals/run.js"
   },
   "dependencies": {
