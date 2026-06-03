@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, QrCode, Settings2 } from "lucide-react";
+import { Loader2, QrCode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -42,18 +37,14 @@ export function UazapiChannelWizardDialog({
   const createChannel = useCreateWhatsappChannel();
   const [step, setStep] = useState<WizardStep>("details");
   const [channelName, setChannelName] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://api.uazapi.com");
   const [isDefault, setIsDefault] = useState(true);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [createdInstance, setCreatedInstance] = useState<WhatsappInstance | null>(null);
 
   useEffect(() => {
     if (!open) {
       setStep("details");
       setChannelName("");
-      setBaseUrl("https://api.uazapi.com");
       setIsDefault(true);
-      setAdvancedOpen(false);
       setCreatedInstance(null);
     }
   }, [open]);
@@ -95,42 +86,22 @@ export function UazapiChannelWizardDialog({
                 Este será o nome usado no painel da Uazapi e no WChat.
               </p>
             </div>
-
-            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground">
-                  <Settings2 className="mr-2 h-3.5 w-3.5" />
-                  Configurações avançadas
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="channel-base-url">Base URL da Uazapi</Label>
-                  <Input
-                    id="channel-base-url"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    disabled={!canEdit || createChannel.isPending}
-                  />
-                </div>
-                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-card/60 px-4 py-3">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="channel-default" className="text-sm font-medium">
-                      Definir como padrão
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Novos envios usam esse canal quando nenhum outro for escolhido.
-                    </p>
-                  </div>
-                  <Switch
-                    id="channel-default"
-                    checked={isDefault}
-                    onCheckedChange={setIsDefault}
-                    disabled={!canEdit || createChannel.isPending}
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <div className="flex items-center justify-between rounded-xl border border-border/60 bg-card/60 px-4 py-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="channel-default" className="text-sm font-medium">
+                  Definir como padrão
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Novos envios usam esse canal quando nenhum outro for escolhido.
+                </p>
+              </div>
+              <Switch
+                id="channel-default"
+                checked={isDefault}
+                onCheckedChange={setIsDefault}
+                disabled={!canEdit || createChannel.isPending}
+              />
+            </div>
 
             <div className="flex justify-end gap-2 border-t pt-4">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -151,7 +122,6 @@ export function UazapiChannelWizardDialog({
                   try {
                     const instance = await createChannel.mutateAsync({
                       displayName: channelName.trim(),
-                      uazapiBaseUrl: baseUrl.trim() || undefined,
                       isDefault,
                     });
                     setCreatedInstance(instance);

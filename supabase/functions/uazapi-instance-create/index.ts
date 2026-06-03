@@ -15,6 +15,8 @@ import {
   type UazapiInstanceConfig,
 } from "../_shared/uazapi.ts";
 
+const DEFAULT_UAZAPI_BASE_URL = "https://eversync2.uazapi.com";
+
 type CreateUazapiResponse = {
   token?: string | null;
   name?: string | null;
@@ -52,7 +54,7 @@ Deno.serve(async (request) => {
 
     const body = await request.json().catch(() => ({}));
     const displayName = String(body.displayName ?? "").trim();
-    const uazapiBaseUrl = String(body.uazapiBaseUrl ?? "https://api.uazapi.com").trim();
+    const uazapiBaseUrl = String(body.uazapiBaseUrl ?? DEFAULT_UAZAPI_BASE_URL).trim();
     const isDefault = Boolean(body.isDefault ?? true);
 
     if (!displayName) {
