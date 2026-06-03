@@ -1,5 +1,7 @@
 import { requireSupabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 
+let accessTokenInFlight: Promise<string> | null = null;
+
 function parseResponsePayload(rawText: string) {
   if (!rawText) {
     return null;
@@ -13,6 +15,11 @@ function parseResponsePayload(rawText: string) {
 }
 
 async function getValidAccessToken() {
+  if (accessTokenInFlight) {
+    return accessTokenInFlight;
+  }
+
+  accessTokenInFlight = (async () => {
   const supabase = requireSupabase();
   let {
     data: { session },
@@ -43,6 +50,11 @@ async function getValidAccessToken() {
   }
 
   return session.access_token;
+  })().finally(() => {
+    accessTokenInFlight = null;
+  });
+
+  return accessTokenInFlight;
 }
 
 export async function invokeAuthedFunction<TResponse>(
