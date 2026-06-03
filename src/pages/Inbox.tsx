@@ -221,6 +221,10 @@ export default function Inbox() {
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
   const canEditCrm = can("crm", "edit");
+  const defaultInstanceId = useMemo(
+    () => instances.find((instance) => instance.isDefault)?.id ?? instances[0]?.id ?? null,
+    [instances],
+  );
 
   const {
     search,
@@ -420,6 +424,44 @@ export default function Inbox() {
       });
     },
   });
+
+  const inboxSyncTargetInstanceId = useMemo(() => {
+    if (activeChat?.instanceId) {
+      return activeChat.instanceId;
+    }
+    if (instanceIds.length === 1) {
+      return instanceIds[0];
+    }
+    return defaultInstanceId;
+  }, [activeChat?.instanceId, defaultInstanceId, instanceIds]);
+
+  useEffect(() => {
+    if (!inboxSyncTargetInstanceId || !isSupabaseConfigured) {
+      return;
+    }
+
+    let cancelled = false;
+    const syncNow = () => {
+      if (cancelled || document.visibilityState !== "visible") {
+        return;
+      }
+      void syncInbox.mutateAsync({ instanceId: inboxSyncTargetInstanceId }).catch(() => undefined);
+    };
+
+    syncNow();
+    const interval = window.setInterval(syncNow, 30_000);
+    const onVisibilityChange = () => syncNow();
+    const onFocus = () => syncNow();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [inboxSyncTargetInstanceId, syncInbox]);
 
   useEffect(() => {
     if (chats.length === 0) {

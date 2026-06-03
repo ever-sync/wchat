@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -81,7 +82,6 @@ async function resolveValidSession(nextSession: Session | null) {
 
   const userResult = await supabase.auth.getUser(nextSession.access_token);
   if (userResult.error || !userResult.data.user) {
-    await supabase.auth.signOut().catch(() => undefined);
     return null;
   }
 
@@ -117,6 +117,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<AppUserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mfaPending, setMfaPending] = useState(false);
+  const authHydrationInFlightRef = useRef<Promise<void> | null>(null);
+  const pendingSessionRef = useRef<Session | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isE2eMockAuth) {
@@ -188,35 +197,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .subscribe();
       };
 
+      const hydrateAuthState = async (nextSession: Session | null) => {
+        pendingSessionRef.current = nextSession;
+        if (authHydrationInFlightRef.current) {
+          return authHydrationInFlightRef.current;
+        }
+
+        authHydrationInFlightRef.current = (async () => {
+          while (pendingSessionRef.current) {
+            const sessionToHydrate = pendingSessionRef.current;
+            pendingSessionRef.current = null;
+
+            const validSession = await resolveValidSession(sessionToHydrate);
+            if (!isMountedRef.current || !isMounted) {
+              break;
+            }
+
+            setSession(validSession);
+            await hydrateProfile(validSession?.user ?? null);
+            const pending = validSession ? await isMfaVerificationPending() : false;
+            if (isMountedRef.current && isMounted) setMfaPending(pending);
+          }
+
+          if (isMountedRef.current && isMounted) {
+            setIsLoading(false);
+          }
+        })().finally(() => {
+          authHydrationInFlightRef.current = null;
+        });
+
+        return authHydrationInFlightRef.current;
+      };
+
       void supabase.auth.getSession().then(async ({ data }) => {
         if (!isMounted) {
           return;
         }
-
-        const validSession = await resolveValidSession(data.session);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setSession(validSession);
-        await hydrateProfile(validSession?.user ?? null);
-        const pending = validSession ? await isMfaVerificationPending() : false;
-        if (isMounted) setMfaPending(pending);
-        setIsLoading(false);
+        await hydrateAuthState(data.session);
       });
 
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        void resolveValidSession(nextSession).then(async (validSession) => {
-          if (!isMounted) return;
-          setSession(validSession);
-          await hydrateProfile(validSession?.user ?? null);
-          const pending = validSession ? await isMfaVerificationPending() : false;
-          if (isMounted) setMfaPending(pending);
-          setIsLoading(false);
-        });
+        void hydrateAuthState(nextSession);
       });
 
       return () => {
