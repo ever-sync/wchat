@@ -685,6 +685,12 @@ export interface WhatsappInstanceConnectInput {
   isDefault?: boolean;
 }
 
+export interface WhatsappChannelCreateInput {
+  displayName: string;
+  uazapiBaseUrl?: string;
+  isDefault?: boolean;
+}
+
 /** Nota interna visível só para a equipe — nunca enviada ao cliente. */
 export interface ChatNote {
   readonly _noteKind: true; // discriminant para separar de WhatsappMessage no thread

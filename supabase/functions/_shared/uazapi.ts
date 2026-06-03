@@ -138,7 +138,7 @@ function inferOutgoingMediaType(input: UazapiSendInput) {
   return inferred ?? "document";
 }
 
-async function requestJson<T>(
+export async function requestJson<T>(
   config: UazapiInstanceConfig,
   path: string,
   method = "GET",
@@ -190,6 +190,72 @@ async function requestJson<T>(
   }
 
   return payload as T;
+}
+
+export async function requestAdminJson<T>(
+  baseUrl: string,
+  adminToken: string,
+  path: string,
+  method = "GET",
+  body?: unknown,
+) {
+  const response = await fetch(joinUrl(baseUrl, path), {
+    method,
+    headers: {
+      admintoken: adminToken,
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const rawText = await response.text();
+  let payload: unknown = null;
+
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = rawText;
+    }
+  }
+
+  if (!response.ok) {
+    const payloadMessage =
+      typeof payload === "object" && payload !== null
+        ? String(
+            (payload as { message?: unknown; error?: unknown }).message ??
+              (payload as { message?: unknown; error?: unknown }).error ??
+              "",
+          )
+        : null;
+
+    throw new UazapiHttpError(
+      payloadMessage || rawText || `UAZAPI request failed: ${response.status}`,
+      response.status,
+      payload,
+    );
+  }
+
+  return payload as T;
+}
+
+export async function createUazapiInstance(
+  baseUrl: string,
+  adminToken: string,
+  name: string,
+  extra?: { adminField01?: string; adminField02?: string },
+) {
+  return requestAdminJson<Record<string, unknown>>(
+    baseUrl,
+    adminToken,
+    "instance/create",
+    "POST",
+    {
+      name,
+      ...(extra?.adminField01 ? { adminField01: extra.adminField01 } : {}),
+      ...(extra?.adminField02 ? { adminField02: extra.adminField02 } : {}),
+    },
+  );
 }
 
 function isV2Connected(payload: Record<string, unknown>) {

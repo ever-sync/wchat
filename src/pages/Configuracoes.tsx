@@ -26,7 +26,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,9 +62,9 @@ import { WebhooksSettingsSection } from "@/components/settings/WebhooksSettingsS
 import { AdsSettings } from "@/components/settings/AdsSettings";
 import { TeamsSettingsSection } from "@/components/settings/TeamsSettingsSection";
 import { TwoFactorSettingsCard } from "@/components/settings/TwoFactorSettingsCard";
+import { UazapiChannelWizardDialog } from "@/components/settings/UazapiChannelWizardDialog";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import {
-  useConnectWhatsappInstance,
   useDeleteWhatsappInstance,
   useSyncWhatsappInstances,
   useWhatsappInstances,
@@ -168,11 +167,6 @@ export default function Configuracoes() {
     parseChatConfigSectionParam(searchParams.get("secao")),
   );
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [displayName, setDisplayName] = useState("");
-  const [instanceName, setInstanceName] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://api.uazapi.com");
-  const [isDefault, setIsDefault] = useState(true);
   const [profileName, setProfileName] = useState("");
   const [profileCompany, setProfileCompany] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
@@ -378,7 +372,6 @@ export default function Configuracoes() {
       setStaleNegotiationDays(tenantSettings.staleNegotiationDays);
     }
   }, [tenantSettings]);
-  const connectInstance = useConnectWhatsappInstance();
   const syncInstances = useSyncWhatsappInstances({
     onSuccess: (_data, variables) => {
       const descricao = variables?.instanceId
@@ -805,106 +798,27 @@ export default function Configuracoes() {
                 {syncInstances.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Sincronizar tudo
               </Button>
-              <Dialog
-                open={dialogOpen && canEditConfiguracoes}
-                onOpenChange={(open) => {
-                  if (!canEditConfiguracoes) {
-                    setDialogOpen(false);
-                    return;
-                  }
-                  setDialogOpen(open);
-                }}
+              <Button
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+                disabled={!canEditConfiguracoes}
+                onClick={() => setDialogOpen(true)}
               >
-                <DialogTrigger asChild>
-                  <Button
-                    className="bg-accent text-accent-foreground hover:bg-accent/90"
-                    disabled={!canEditConfiguracoes}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nova instancia
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Conectar instancia UAZAPI</DialogTitle>
-                    <DialogDescription>Informe uma instancia existente na sua conta.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-2">
-                    <div className="space-y-2"><Label>Nome exibido</Label><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Comercial SP" /></div>
-                    <div className="space-y-2">
-                      <Label>Nome tecnico da instancia</Label>
-                      <Input
-                        value={instanceName}
-                        onChange={(e) => setInstanceName(e.target.value)}
-                        placeholder="Opcional na UAZAPI v2, obrigatorio na v1"
-                      />
-                    </div>
-                    <div className="space-y-2"><Label>Token da instancia</Label><Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Token da instancia na UAZAPI" /></div>
-                    <div className="space-y-2"><Label>Base URL</Label><Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
-                    <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                      <div><p className="text-sm font-medium text-foreground">Definir como padrao</p><p className="text-xs text-muted-foreground">Novas campanhas usam essa instancia.</p></div>
-                      <Button variant={isDefault ? "default" : "outline"} size="sm" onClick={() => setIsDefault((v) => !v)}>{isDefault ? "Sim" : "Nao"}</Button>
-                    </div>
-                    <Button
-                      className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                      disabled={connectInstance.isPending || !displayName || !apiKey || !canUseAuthenticatedActions || !canEditConfiguracoes}
-                      onClick={async () => {
-                        if (!canEditConfiguracoes) {
-                          toast({
-                            title: "Ação indisponível",
-                            description: "Seu papel nao tem permissao para conectar uma instancia.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        if (!canUseAuthenticatedActions) {
-                          toast({
-                            title: "Sessao indisponivel",
-                            description: "Faca login novamente antes de conectar uma instancia.",
-                            variant: "destructive",
-                          });
-                          useAppStore.getState().addNotification({
-                            tipo: "erro",
-                            titulo: "Sessao indisponivel",
-                            descricao: "Faca login novamente antes de conectar uma instancia.",
-                          });
-                          return;
-                        }
-
-                        try {
-                          const instance = await connectInstance.mutateAsync({ displayName, uazapiInstanceName: instanceName, apiKey, uazapiBaseUrl: baseUrl, isDefault });
-                          const title = instance.lastError ? "Instancia vinculada com alerta" : "Instancia conectada";
-                          const desc = instance.lastError ?? "QR, webhook e status sincronizados.";
-                          toast({ title, description: desc });
-                          useAppStore.getState().addNotification({
-                            tipo: instance.lastError ? "aviso" : "sucesso",
-                            titulo: title,
-                            descricao: desc,
-                          });
-                          setDialogOpen(false);
-                          setDisplayName(""); setInstanceName(""); setApiKey(""); setBaseUrl("https://api.uazapi.com"); setIsDefault(true);
-                        } catch (e) {
-                          const message = e instanceof Error ? e.message : "Tente novamente.";
-                          const hint = message.includes("Sua sessao atual nao foi aceita")
-                            ? "Faca logout, entre novamente e tente mais uma vez."
-                            : message;
-                          toast({ title: "Falha ao conectar", description: hint, variant: "destructive" });
-                          useAppStore.getState().addNotification({
-                            tipo: "erro",
-                            titulo: "Falha ao conectar",
-                            descricao: hint,
-                          });
-                        }
-                      }}
-                    >
-                      {connectInstance.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Conectar
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                <Plus className="mr-2 h-4 w-4" />
+                Criar novo canal
+              </Button>
             </div>
           </div>
+
+          <UazapiChannelWizardDialog
+            open={dialogOpen && canEditConfiguracoes}
+            onOpenChange={(open) => {
+              if (!canEditConfiguracoes) {
+                return;
+              }
+              setDialogOpen(open);
+            }}
+            canEdit={canEditConfiguracoes}
+          />
 
           <div className="grid gap-4 md:grid-cols-2">
             {[{ label: "Instancias conectadas", value: metrics.activeInstances, icon: MessageSquare }, { label: "Instancias cadastradas", value: metrics.totalInstances, icon: ShieldCheck }].map((metric) => (

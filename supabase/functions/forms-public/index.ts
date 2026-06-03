@@ -14,7 +14,13 @@ import {
 } from "../_shared/marketing-forms.ts";
 import { processPendingDispatches } from "../_shared/email.ts";
 
-type FormFieldLike = { name: string; type: string; required?: boolean; label?: string };
+type FormFieldLike = {
+  name: string;
+  type: string;
+  required?: boolean;
+  label?: string;
+  mapping?: { kind?: string; key?: string; fieldId?: string } | null;
+};
 
 type SubmitWebhookPayload = {
   event: string;
@@ -37,6 +43,22 @@ type SubmitWebhookPayload = {
     required: boolean;
     value: unknown;
   }>;
+  structured: {
+    contact: {
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+    };
+    defaults: Record<string, unknown>;
+    custom_fields: Array<{
+      field_id: string;
+      name: string;
+      label: string;
+      kind: string;
+      value: unknown;
+    }>;
+    extra_fields: Record<string, unknown>;
+  };
   meta: Record<string, unknown>;
   submission: {
     score: number;
@@ -176,6 +198,31 @@ function buildSubmitWebhookPayload(input: {
   fields: FormFieldLike[];
   timeToCompleteSeconds: number;
 }): SubmitWebhookPayload {
+  const defaults: Record<string, unknown> = {};
+  const customFields: SubmitWebhookPayload["structured"]["custom_fields"] = [];
+  const extraFields: Record<string, unknown> = {};
+
+  for (const field of input.fields) {
+    const value = input.cleanData[field.name];
+    if (value === undefined || value === null || String(value).trim() === "") continue;
+    const mappingKind = field.mapping?.kind ?? "extra";
+    if (mappingKind === "default") {
+      defaults[field.mapping?.key ?? field.name] = value;
+      continue;
+    }
+    if (mappingKind === "custom") {
+      customFields.push({
+        field_id: field.mapping?.fieldId ?? "",
+        name: field.name,
+        label: field.label ?? field.name,
+        kind: field.type,
+        value,
+      });
+      continue;
+    }
+    extraFields[field.label ?? field.name] = value;
+  }
+
   return {
     event: "form.submitted",
     occurred_at: new Date().toISOString(),
@@ -197,6 +244,16 @@ function buildSubmitWebhookPayload(input: {
       required: Boolean(field.required),
       value: input.cleanData[field.name] ?? null,
     })),
+    structured: {
+      contact: {
+        name: typeof defaults.nome === "string" ? String(defaults.nome) : typeof defaults.name === "string" ? String(defaults.name) : null,
+        email: typeof defaults.email === "string" ? String(defaults.email) : null,
+        phone: typeof defaults.telefone === "string" ? String(defaults.telefone) : typeof defaults.phone === "string" ? String(defaults.phone) : null,
+      },
+      defaults,
+      custom_fields: customFields,
+      extra_fields: extraFields,
+    },
     meta: input.meta,
     submission: {
       score: input.scoring.score,

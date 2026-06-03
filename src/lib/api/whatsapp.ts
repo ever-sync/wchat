@@ -20,6 +20,7 @@ import type {
   InboxChatFilters,
   InboxListScope,
   SendWhatsappMessageInput,
+  WhatsappChannelCreateInput,
   WhatsappInstance,
   WhatsappInstanceConnectInput,
   WhatsappMessage,
@@ -254,6 +255,15 @@ export async function connectWhatsappInstance(input: WhatsappInstanceConnectInpu
   }
 
   const data = await invokeAuthedFunction<{ instance: InstanceRow }>("uazapi-instance-connect", input);
+  return mapInstance(data.instance as InstanceRow);
+}
+
+export async function createWhatsappChannel(input: WhatsappChannelCreateInput) {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure o Supabase antes de criar um canal.");
+  }
+
+  const data = await invokeAuthedFunction<{ instance: InstanceRow }>("uazapi-instance-create", input);
   return mapInstance(data.instance as InstanceRow);
 }
 
@@ -1136,6 +1146,21 @@ export function useConnectWhatsappInstance(
 
   return useMutation({
     mutationFn: connectWhatsappInstance,
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+export function useCreateWhatsappChannel(
+  options?: UseMutationOptions<WhatsappInstance, Error, WhatsappChannelCreateInput>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createWhatsappChannel,
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
