@@ -435,23 +435,47 @@ export default function Inbox() {
     return defaultInstanceId;
   }, [activeChat?.instanceId, defaultInstanceId, instanceIds]);
 
+  const syncInboxMutationRef = useRef(syncInbox.mutateAsync);
+  const inboxSyncInFlightRef = useRef(false);
+  const lastInboxSyncAtRef = useRef(0);
+
+  useEffect(() => {
+    syncInboxMutationRef.current = syncInbox.mutateAsync;
+  }, [syncInbox.mutateAsync]);
+
   useEffect(() => {
     if (!inboxSyncTargetInstanceId || !isSupabaseConfigured) {
       return;
     }
 
+    const MIN_SYNC_INTERVAL_MS = 60_000;
     let cancelled = false;
-    const syncNow = () => {
+    const syncNow = (force = false) => {
       if (cancelled || document.visibilityState !== "visible") {
         return;
       }
-      void syncInbox.mutateAsync({ instanceId: inboxSyncTargetInstanceId }).catch(() => undefined);
+      if (inboxSyncInFlightRef.current) {
+        return;
+      }
+      const now = Date.now();
+      const elapsed = now - lastInboxSyncAtRef.current;
+      if (!force && elapsed < MIN_SYNC_INTERVAL_MS) {
+        return;
+      }
+
+      inboxSyncInFlightRef.current = true;
+      lastInboxSyncAtRef.current = now;
+      void syncInboxMutationRef.current({ instanceId: inboxSyncTargetInstanceId })
+        .catch(() => undefined)
+        .finally(() => {
+          inboxSyncInFlightRef.current = false;
+        });
     };
 
-    syncNow();
-    const interval = window.setInterval(syncNow, 30_000);
-    const onVisibilityChange = () => syncNow();
-    const onFocus = () => syncNow();
+    syncNow(true);
+    const interval = window.setInterval(() => syncNow(false), MIN_SYNC_INTERVAL_MS);
+    const onVisibilityChange = () => syncNow(false);
+    const onFocus = () => syncNow(false);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onFocus);
 
@@ -461,7 +485,7 @@ export default function Inbox() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onFocus);
     };
-  }, [inboxSyncTargetInstanceId, syncInbox]);
+  }, [inboxSyncTargetInstanceId]);
 
   useEffect(() => {
     if (chats.length === 0) {
