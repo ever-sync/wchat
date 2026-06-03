@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import type { CrmRealtimePayload } from "@/hooks/useCrmRealtimeSync";
 import { useAuth } from "@/hooks/useAuth";
 import { getInboxNotificationsEnabled } from "@/hooks/useInboxInboundNotifications";
 import { listCrmNegotiations } from "@/lib/api/crm-negotiations";
 import { useTenantSettings } from "@/lib/api/integrations";
-import { getCurrentTenantId } from "@/lib/api/tenant";
 import {
   isNegotiationEnteredPool,
   poolNotificationCopy,
@@ -24,7 +24,7 @@ import { daysSinceLastTouch } from "@/lib/crm/negotiation-alerts";
 import { notifyCrmAlert } from "@/lib/crm/notify-crm-alert";
 import { mapCrmNegotiationDbRow } from "@/lib/crm/negotiation-model";
 import { normalizeStaleNegotiationDays } from "@/lib/crm/negotiation-alerts";
-import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 const STALE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -45,18 +45,24 @@ export function useCrmNegotiationNotifications(enabled: boolean = getInboxNotifi
   const staleThresholdDays = normalizeStaleNegotiationDays(tenantSettings?.staleNegotiationDays);
   const staleCheckRunningRef = useRef(false);
 
-  useEffect(() => {
-    if (!isSupabaseConfigured || !enabled || !profileId) return;
+  // Handler de "negócio voltou ao pool". Antes abria um canal Realtime próprio
+  // em crm_negotiations (subscription duplicada do useCrmRealtimeSync); agora é
+  // exposto para reusar a subscription daquele hook. No-op quando desabilitado.
+  const onNegotiationRealtimeEvent = useCallback(
+    (payload: CrmRealtimePayload) => {
+      if (!enabled || !profileId) return;
 
-    const supabase = requireSupabase();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let cancelled = false;
+      const prev = payload.old as CrmNegotiationDbRow | undefined;
+      const next = payload.new as CrmNegotiationDbRow | undefined;
+      if (!isNegotiationEnteredPool(prev, next) || !next?.id) return;
 
-    const emitPool = (row: CrmNegotiationDbRow) => {
-      const id = row.id;
-      if (!id || isCrmPoolNotificationSuppressed(id)) return;
+      const record = mapCrmNegotiationDbRow(next as Record<string, unknown>);
+      if (!shouldNotifyUserForNegotiation(record, profileId)) return;
 
-      const { titulo, descricao } = poolNotificationCopy(String(row.title ?? ""));
+      const id = next.id;
+      if (isCrmPoolNotificationSuppressed(id)) return;
+
+      const { titulo, descricao } = poolNotificationCopy(String(next.title ?? ""));
       notifyCrmAlert({
         kind: "pool",
         titulo,
@@ -64,44 +70,9 @@ export function useCrmNegotiationNotifications(enabled: boolean = getInboxNotifi
         negotiationId: id,
         onNavigate: () => navigateToNegotiation(navigate, id),
       });
-    };
-
-    void getCurrentTenantId()
-      .then((tenantId) => {
-        if (cancelled) return;
-
-        channel = supabase
-          .channel(`crm-negotiations-notify:${tenantId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "UPDATE",
-              schema: "public",
-              table: "crm_negotiations",
-              filter: `tenant_id=eq.${tenantId}`,
-            },
-            (payload) => {
-              const prev = payload.old as CrmNegotiationDbRow | undefined;
-              const next = payload.new as CrmNegotiationDbRow | undefined;
-              if (!isNegotiationEnteredPool(prev, next) || !next?.id) return;
-
-              const record = mapCrmNegotiationDbRow(next as Record<string, unknown>);
-              if (!shouldNotifyUserForNegotiation(record, profileId)) return;
-
-              emitPool(next);
-            },
-          )
-          .subscribe();
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-      if (channel) {
-        void supabase.removeChannel(channel);
-      }
-    };
-  }, [enabled, navigate, profileId]);
+    },
+    [enabled, navigate, profileId],
+  );
 
   useEffect(() => {
     if (!isSupabaseConfigured || !enabled || !profileId) return;
@@ -182,4 +153,6 @@ export function useCrmNegotiationNotifications(enabled: boolean = getInboxNotifi
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled, navigate, profileId, staleThresholdDays]);
+
+  return { onNegotiationRealtimeEvent };
 }

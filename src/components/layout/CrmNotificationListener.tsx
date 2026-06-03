@@ -6,8 +6,10 @@ import { useCrmRealtimeSync } from "@/hooks/useCrmRealtimeSync";
 /** Montado no layout autenticado; sem UI. */
 export function CrmNotificationListener() {
   const { enabled } = useInboxNotificationSettings();
-  useCrmNegotiationNotifications(enabled);
+  const { onNegotiationRealtimeEvent } = useCrmNegotiationNotifications(enabled);
   useCrmMentionNotifications(enabled);
-  useCrmRealtimeSync();
+  // Reusa a subscription de crm_negotiations do sync para as notificações de
+  // pool, em vez de abrir um segundo canal por sessão.
+  useCrmRealtimeSync({ onNegotiationEvent: onNegotiationRealtimeEvent });
   return null;
 }

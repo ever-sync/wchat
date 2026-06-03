@@ -1,7 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+
+export type CrmRealtimePayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
+
+type CrmRealtimeOptions = {
+  /**
+   * Chamado em cada mudança de `crm_negotiations`. Permite que features que
+   * antes abriam o próprio canal (ex.: notificações de pool) reusem esta
+   * subscription em vez de duplicá-la no servidor de Realtime.
+   */
+  onNegotiationEvent?: (payload: CrmRealtimePayload) => void;
+};
 
 type TableSpec = {
   table: string;
@@ -71,8 +83,12 @@ const TABLE_SPECS: TableSpec[] = [
  * Requer que cada tabela esteja na publication `supabase_realtime`. Tabelas
  * fora da publication simplesmente não recebem eventos (no-op).
  */
-export function useCrmRealtimeSync() {
+export function useCrmRealtimeSync(options?: CrmRealtimeOptions) {
   const queryClient = useQueryClient();
+  // Ref para o callback ficar fora das deps do effect (não re-subscreve a cada
+  // render quando o handler muda de identidade).
+  const onNegotiationEventRef = useRef(options?.onNegotiationEvent);
+  onNegotiationEventRef.current = options?.onNegotiationEvent;
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -90,7 +106,12 @@ export function useCrmRealtimeSync() {
           builder = builder.on(
             "postgres_changes",
             { event: "*", schema: "public", table: spec.table, filter },
-            () => spec.invalidate(queryClient),
+            (payload) => {
+              spec.invalidate(queryClient);
+              if (spec.table === "crm_negotiations") {
+                onNegotiationEventRef.current?.(payload as CrmRealtimePayload);
+              }
+            },
           );
         }
         channel = builder.subscribe();
