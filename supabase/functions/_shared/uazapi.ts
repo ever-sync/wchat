@@ -447,8 +447,6 @@ export async function setWebhook(config: UazapiInstanceConfig, url: string) {
       events: [
         "connection",
         "messages",
-        "messages_update",
-        "chats",
       ],
     });
   }
@@ -464,11 +462,11 @@ export async function setWebhook(config: UazapiInstanceConfig, url: string) {
       STATUS_INSTANCE: true,
       MESSAGES_UPSERT: true,
       SEND_MESSAGE: true,
-      MESSAGES_UPDATE: true,
+      MESSAGES_UPDATE: false,
       QRCODE_UPDATED: true,
-      CHATS_SET: true,
-      CHATS_UPSERT: true,
-      CHATS_UPDATE: true,
+      CHATS_SET: false,
+      CHATS_UPSERT: false,
+      CHATS_UPDATE: false,
       CONNECTION_UPDATE: true,
       groups_ignore: true,
     },

@@ -1121,14 +1121,6 @@ export async function sendWhatsappMessage(input: SendWhatsappMessageInput) {
   return mapMessage(data.message as MessageRow);
 }
 
-export async function syncInbox(chatId?: string, instanceId?: string) {
-  if (!isSupabaseConfigured) {
-    return { success: true };
-  }
-
-  return invokeAuthedFunction<{ success: boolean }>("uazapi-poll-sync", { chatId, instanceId });
-}
-
 export function useWhatsappInstances(
   options?: Omit<UseQueryOptions<WhatsappInstance[], Error>, "queryKey" | "queryFn">,
 ) {
@@ -2084,27 +2076,6 @@ export function useMarkChatAsRead(
     onSuccess: async (data, variables, context) => {
       // Reaplica o patch (no-op se ja estava zerado) e segue.
       patchInboxChatsMarkRead(queryClient, variables);
-      await options?.onSuccess?.(data, variables, context);
-    },
-  });
-}
-
-export function useSyncInbox(
-  options?: UseMutationOptions<{ success: boolean }, Error, { chatId?: string; instanceId?: string } | undefined>,
-) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (variables) => syncInbox(variables?.chatId, variables?.instanceId),
-    ...options,
-    onSuccess: async (data, variables, context) => {
-      await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
-      if (variables?.chatId) {
-        await queryClient.invalidateQueries({ queryKey: ["inbox-messages", variables.chatId] });
-        await queryClient.invalidateQueries({ queryKey: ["inbox-messages-all", variables.chatId] });
-      } else {
-        await queryClient.invalidateQueries({ queryKey: ["inbox-messages-all"] });
-      }
       await options?.onSuccess?.(data, variables, context);
     },
   });

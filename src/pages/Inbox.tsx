@@ -45,7 +45,6 @@ import {
   useInboxChatsRealtime,
   useInboxMessages,
   useMarkChatAsRead,
-  useSyncInbox,
   useWhatsappInstances,
 } from "@/lib/api/whatsapp";
 import {
@@ -221,11 +220,6 @@ export default function Inbox() {
   const profileId = profile?.id;
   const canEditInbox = can("inbox", "edit");
   const canEditCrm = can("crm", "edit");
-  const defaultInstanceId = useMemo(
-    () => instances.find((instance) => instance.isDefault)?.id ?? instances[0]?.id ?? null,
-    [instances],
-  );
-
   const {
     search,
     instanceIds,
@@ -402,90 +396,6 @@ export default function Inbox() {
     refetchOnReconnect: true,
   });
   const markChatAsRead = useMarkChatAsRead();
-  const syncInbox = useSyncInbox({
-    onSuccess: (_data, variables) => {
-      const descricao = variables?.chatId
-        ? "Esta conversa foi sincronizada com o WhatsApp."
-        : "Lista de conversas atualizada.";
-      toast({ title: "Inbox atualizado", description: descricao });
-      useAppStore.getState().addNotification({
-        tipo: "sucesso",
-        titulo: "Inbox atualizado",
-        descricao,
-      });
-    },
-    onError: (error) => {
-      const msg = error instanceof Error ? error.message : "Tente novamente.";
-      toast({ title: "Falha ao sincronizar inbox", description: msg, variant: "destructive" });
-      useAppStore.getState().addNotification({
-        tipo: "erro",
-        titulo: "Falha ao sincronizar inbox",
-        descricao: msg,
-      });
-    },
-  });
-
-  const inboxSyncTargetInstanceId = useMemo(() => {
-    if (activeChat?.instanceId) {
-      return activeChat.instanceId;
-    }
-    if (instanceIds.length === 1) {
-      return instanceIds[0];
-    }
-    return defaultInstanceId;
-  }, [activeChat?.instanceId, defaultInstanceId, instanceIds]);
-
-  const syncInboxMutationRef = useRef(syncInbox.mutateAsync);
-  const inboxSyncInFlightRef = useRef(false);
-  const lastInboxSyncAtRef = useRef(0);
-
-  useEffect(() => {
-    syncInboxMutationRef.current = syncInbox.mutateAsync;
-  }, [syncInbox.mutateAsync]);
-
-  useEffect(() => {
-    if (!inboxSyncTargetInstanceId || !isSupabaseConfigured) {
-      return;
-    }
-
-    const MIN_SYNC_INTERVAL_MS = 60_000;
-    let cancelled = false;
-    const syncNow = (force = false) => {
-      if (cancelled || document.visibilityState !== "visible") {
-        return;
-      }
-      if (inboxSyncInFlightRef.current) {
-        return;
-      }
-      const now = Date.now();
-      const elapsed = now - lastInboxSyncAtRef.current;
-      if (!force && elapsed < MIN_SYNC_INTERVAL_MS) {
-        return;
-      }
-
-      inboxSyncInFlightRef.current = true;
-      lastInboxSyncAtRef.current = now;
-      void syncInboxMutationRef.current({ instanceId: inboxSyncTargetInstanceId })
-        .catch(() => undefined)
-        .finally(() => {
-          inboxSyncInFlightRef.current = false;
-        });
-    };
-
-    syncNow(true);
-    const interval = window.setInterval(() => syncNow(false), MIN_SYNC_INTERVAL_MS);
-    const onVisibilityChange = () => syncNow(false);
-    const onFocus = () => syncNow(false);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [inboxSyncTargetInstanceId]);
 
   useEffect(() => {
     if (chats.length === 0) {
@@ -1252,14 +1162,6 @@ export default function Inbox() {
             onMessageTypeChange={composer.setMessageType}
             simulateTyping={composer.simulateTyping}
             onSimulateTypingChange={composer.setSimulateTyping}
-            onSync={() =>
-              syncInbox.mutate({
-                chatId: activeChat?.id,
-                instanceId: activeChat?.instanceId,
-              })
-            }
-            syncPending={syncInbox.isPending}
-            syncDisabled={syncInbox.isPending || !activeChat || !canEditInbox}
             mediaUrl={composer.mediaUrl}
             onMediaUrlChange={composer.setMediaUrl}
             payloadText={composer.payloadText}

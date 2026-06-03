@@ -1,7 +1,5 @@
 import {
-  ensureChat,
   getInstanceById,
-  isPersonalRemoteJid,
   normalizeWebhookEvent,
   persistWebhookEvent,
   normalizeUazapiMessageId,
@@ -9,7 +7,6 @@ import {
   refreshCampaignStats,
   tryClaimWebhookDelivery,
   unwrapIncomingWebhookMessageRecords,
-  unwrapRecords,
 } from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { logStructured } from "../_shared/log.ts";
@@ -22,35 +19,6 @@ function normalizeReceiptStatus(value: unknown) {
   if (normalized.includes("deliver")) return "delivered";
   if (normalized.includes("sent")) return "sent";
   return null;
-}
-
-function extractChatRemoteJid(chat: Record<string, unknown>) {
-  return String(
-    chat.wa_chatid ??
-      chat.chatid ??
-      chat.remoteJid ??
-      chat.id ??
-      "",
-  ).trim();
-}
-
-function extractChatDisplayName(chat: Record<string, unknown>) {
-  return String(
-    chat.wa_contactName ??
-      chat.name ??
-      chat.wa_name ??
-      chat.pushName ??
-      "Sem nome",
-  );
-}
-
-function extractChatPreview(chat: Record<string, unknown>) {
-  return String(
-    chat.wa_lastMessageTextVote ??
-      (chat.lastMessage as Record<string, unknown> | undefined)?.conversation ??
-      ((chat.lastMessage as Record<string, unknown> | undefined)?.extendedTextMessage as Record<string, unknown> | undefined)?.text ??
-      "",
-  );
 }
 
 const webhookRateBuckets = new Map<string, number[]>();
@@ -92,24 +60,6 @@ function mergeWebhookMessageEnvelope(
     ...rootChat,
     ...message,
   };
-}
-
-function extractChatTimestamp(chat: Record<string, unknown>) {
-  const rawTimestamp = chat.wa_lastMsgTimestamp ?? chat.updatedAt ?? null;
-  if (!rawTimestamp) {
-    return null;
-  }
-
-  if (typeof rawTimestamp === "number") {
-    return new Date(rawTimestamp > 1e12 ? rawTimestamp : rawTimestamp * 1000).toISOString();
-  }
-
-  const numericValue = Number(rawTimestamp);
-  if (Number.isFinite(numericValue)) {
-    return new Date(numericValue > 1e12 ? numericValue : numericValue * 1000).toISOString();
-  }
-
-  return new Date(String(rawTimestamp)).toISOString();
 }
 
 Deno.serve(async (request) => {
@@ -225,12 +175,6 @@ Deno.serve(async (request) => {
             await refreshCampaignStats(admin, cId).catch(() => {});
           }
         }
-      } else if (payload.message && !nextStatus) {
-        // Recibo (delivered/read) sem MessageIDs nao deve reinserir a mensagem no inbox.
-        const messages = unwrapIncomingWebhookMessageRecords(payload);
-        for (const message of messages) {
-          await processMessagePayload(admin, instance, mergeWebhookMessageEnvelope(payload, message));
-        }
       }
     }
 
@@ -268,31 +212,6 @@ Deno.serve(async (request) => {
           last_error: null,
         })
         .eq("id", instance.id);
-    }
-
-    if (eventName === "CHATS_UPDATE") {
-      const chats = unwrapRecords(
-        payload.chat ??
-        payload.data ??
-        payload.chats ??
-        payload.event ??
-        payload,
-      );
-      for (const chat of chats) {
-        const remoteJid = extractChatRemoteJid(chat);
-        if (!isPersonalRemoteJid(remoteJid)) {
-          continue;
-        }
-
-        await ensureChat(admin, instance, {
-          remoteJid,
-          displayName: extractChatDisplayName(chat),
-          avatarUrl: typeof chat.imagePreview === "string" ? chat.imagePreview : null,
-          lastMessagePreview: extractChatPreview(chat),
-          lastMessageAt: extractChatTimestamp(chat),
-          unreadCount: Number(chat.wa_unreadCount ?? 0),
-        });
-      }
     }
 
     return jsonResponse({ success: true });

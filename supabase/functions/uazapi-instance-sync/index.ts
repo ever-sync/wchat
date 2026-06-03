@@ -2,7 +2,9 @@ import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
 import {
   PermissionDeniedError,
+  createAdminClient,
   getFunctionsBaseUrl,
+  isInternalRequest,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
 import {
@@ -25,20 +27,25 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { admin, tenantId } = await requireTenantPermission(
-      request,
-      "configuracoes",
-      "edit",
-      "Seu papel nao tem permissao para sincronizar instancias.",
-    );
     const body = await request.json().catch(() => ({}));
     const instanceId = body.instanceId as string | undefined;
+    const internal = isInternalRequest(request);
+    const context = internal
+      ? { admin: createAdminClient(), tenantId: String(body.tenantId ?? "") || null }
+      : await requireTenantPermission(
+          request,
+          "configuracoes",
+          "edit",
+          "Seu papel nao tem permissao para sincronizar instancias.",
+        );
 
-    let query = admin
+    let query = context.admin
       .from("whatsapp_instances")
       .select("*")
-      .eq("tenant_id", tenantId)
       .is("archived_at", null);
+    if (context.tenantId) {
+      query = query.eq("tenant_id", context.tenantId);
+    }
     if (instanceId) {
       query = query.eq("id", instanceId);
     }
@@ -77,7 +84,7 @@ Deno.serve(async (request) => {
           webhookError = error instanceof Error ? error.message : "Nao foi possivel configurar o webhook.";
         }
 
-        await admin
+        await context.admin
           .from("whatsapp_instances")
           .update({
             uazapi_instance_name: resolvedInstanceName,
@@ -91,7 +98,7 @@ Deno.serve(async (request) => {
 
         synced.push(instance.id);
       } catch (instanceError) {
-        await admin
+        await context.admin
           .from("whatsapp_instances")
           .update({
             status: "error",

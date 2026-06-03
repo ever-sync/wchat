@@ -35,9 +35,6 @@ export type MessageInputProps = {
   onMessageTypeChange: (value: Exclude<MessageType, "system">) => void;
   simulateTyping: boolean;
   onSimulateTypingChange: (value: boolean) => void;
-  onSync: () => void;
-  syncPending: boolean;
-  syncDisabled: boolean;
   mediaUrl: string;
   onMediaUrlChange: (value: string) => void;
   payloadText: string;
@@ -101,9 +98,6 @@ export function MessageInput({
   onMessageTypeChange,
   simulateTyping,
   onSimulateTypingChange,
-  onSync,
-  syncPending,
-  syncDisabled,
   mediaUrl,
   onMediaUrlChange,
   payloadText,

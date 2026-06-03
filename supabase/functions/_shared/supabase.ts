@@ -92,7 +92,8 @@ export async function requireTenantContextOrInternal(request: Request) {
 }
 
 export function getFunctionsBaseUrl() {
-  return `${getRequiredEnv("SUPABASE_URL")}/functions/v1`;
+  const publicUrl = Deno.env.get("SUPABASE_PUBLIC_URL")?.trim();
+  return `${publicUrl || getRequiredEnv("SUPABASE_URL")}/functions/v1`;
 }
 
 export async function fetchTenantRolePermissions(
