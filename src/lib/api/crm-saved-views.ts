@@ -6,6 +6,7 @@ import {
   type UseMutationOptions,
 } from "@tanstack/react-query";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+import { getCurrentTenantId } from "@/lib/api/tenant";
 
 export type CrmSavedViewScope = "private" | "shared";
 
@@ -195,18 +196,39 @@ export function useCrmSavedViewsRealtime() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const supabase = requireSupabase();
-    const channel = supabase
-      .channel("crm-saved-views")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "crm_saved_views" },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ["crm-saved-views"] });
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    // Filtro por tenant no servidor: sem ele o Realtime avalia cada mudança de
+    // crm_saved_views de todos os tenants contra cada assinante (não escala).
+    void getCurrentTenantId()
+      .then((tenantId) => {
+        if (cancelled) return;
+        channel = supabase
+          .channel(`crm-saved-views:${tenantId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "crm_saved_views",
+              filter: `tenant_id=eq.${tenantId}`,
+            },
+            () => {
+              void queryClient.invalidateQueries({ queryKey: ["crm-saved-views"] });
+            },
+          )
+          .subscribe();
+      })
+      .catch(() => {
+        // Sem sessao/tenant: rota provavelmente protegida; ignorar.
+      });
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [queryClient]);
 }
