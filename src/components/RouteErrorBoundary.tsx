@@ -14,16 +14,26 @@ type Props = {
 
 type State = {
   error: Error | null;
+  showError: boolean;
 };
 
 export class RouteErrorBoundary extends Component<Props, State> {
+  private showErrorTimer: number | null = null;
+
   constructor(props: Props) {
     super(props);
-    this.state = { error: null };
+    this.state = { error: null, showError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, showError: false };
+  }
+
+  componentWillUnmount() {
+    if (this.showErrorTimer !== null) {
+      window.clearTimeout(this.showErrorTimer);
+      this.showErrorTimer = null;
+    }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -31,11 +41,20 @@ export class RouteErrorBoundary extends Component<Props, State> {
     // Tab antiga + deploy novo: tenta recarregar automaticamente (uma vez/sessão).
     if (isChunkLoadError(error)) {
       reloadForChunkError();
+      return;
     }
+
+    if (this.showErrorTimer !== null) {
+      window.clearTimeout(this.showErrorTimer);
+    }
+    this.showErrorTimer = window.setTimeout(() => {
+      this.setState({ showError: true });
+      this.showErrorTimer = null;
+    }, 250);
   }
 
   render() {
-    if (this.state.error) {
+    if (this.state.error && this.state.showError) {
       if (isChunkLoadError(this.state.error)) {
         return (
           <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 px-4 text-center">
@@ -75,6 +94,15 @@ export class RouteErrorBoundary extends Component<Props, State> {
           <Button type="button" variant="outline" onClick={() => this.setState({ error: null })}>
             Tentar novamente
           </Button>
+        </div>
+      );
+    }
+
+    if (this.state.error && !this.state.showError) {
+      return (
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-4 text-center">
+          <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
+          <p className="text-sm text-muted-foreground">Aguarde, estamos ajustando esta tela...</p>
         </div>
       );
     }
