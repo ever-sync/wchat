@@ -86,3 +86,31 @@ verify_jwt = false
 # Sugestão de próxima mensagem (CRM): JWT do tenant; gate crm/edit.
 [functions.crm-suggest-next-message]
 verify_jwt = false
+
+# Checkout Asaas: JWT do admin no app; requireTenantPermission valida.
+[functions.asaas-create-checkout]
+verify_jwt = false
+
+# Webhook Asaas: sem JWT; protegido por header asaas-access-token.
+[functions.asaas-webhook]
+verify_jwt = false
+
+# Alertas de limite de plano: chamado por cron (x-cron-secret).
+[functions.billing-usage-alerts]
+verify_jwt = false
+
+# Painel super-admin de billing: JWT validado + gate por platform_admins.
+[functions.billing-admin]
+verify_jwt = false
+
+# Cockpit super-admin de operacao: JWT validado + gate por platform_admins.
+[functions.operation-admin]
+verify_jwt = false
+
+# Heartbeat generico de workers: chamado apenas pelo cron externo com x-cron-secret.
+[functions.worker-heartbeat]
+verify_jwt = false
+
+# Alerta generico de workers: chamado apenas pelo cron externo com x-cron-secret.
+[functions.worker-alerts]
+verify_jwt = false

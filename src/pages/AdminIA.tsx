@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { type AiTenantRow, useAiTenants, useSetAiTenantSubscription } from "@/lib/api/ai-agent";
+import { Link } from "react-router-dom";
 
 function nf(n: number): string {
   return n.toLocaleString("pt-BR");
@@ -22,16 +23,21 @@ export default function AdminIA() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <ShieldCheck className="h-5 w-5" aria-hidden />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <ShieldCheck className="h-5 w-5" aria-hidden />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Provisionamento da IA</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ative o add-on de IA e defina a cota mensal de cada cliente. Só administradores da plataforma.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Provisionamento da IA</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ative o add-on de IA e defina a cota mensal de cada cliente. Só administradores da plataforma.
-          </p>
-        </div>
+        <Button variant="outline" asChild>
+          <Link to="/admin/billing">Abrir planos</Link>
+        </Button>
       </div>
 
       {isLoading ? (

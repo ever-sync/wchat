@@ -3,6 +3,7 @@
 // platform_admins (o JWT precisa ser de um admin da plataforma).
 
 import { handleCors, jsonResponse } from "../_shared/http.ts";
+import { recordPlatformAudit } from "../_shared/platform-audit.ts";
 import { createAdminClient, requireTenantContext } from "../_shared/supabase.ts";
 
 function monthStartIso(): string {
@@ -74,18 +75,43 @@ Deno.serve(async (request) => {
     const tenantId = String(body.tenant_id ?? "").trim();
     if (!tenantId) return jsonResponse({ error: "tenant_id obrigatório." }, 400);
 
+    const { data: before } = await admin
+      .from("tenant_ai_subscription")
+      .select("active, monthly_token_quota, overage_allowed, trial_ends_at")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    const next = {
+      active: Boolean(body.active),
+      monthly_token_quota: Math.max(0, Math.floor(Number(body.monthly_token_quota ?? 0))),
+      overage_allowed: Boolean(body.overage_allowed),
+      trial_ends_at: body.trial_ends_at ? new Date(String(body.trial_ends_at)).toISOString() : null,
+    };
+
     const { error } = await admin.from("tenant_ai_subscription").upsert(
       {
         tenant_id: tenantId,
-        active: Boolean(body.active),
-        monthly_token_quota: Math.max(0, Math.floor(Number(body.monthly_token_quota ?? 0))),
-        overage_allowed: Boolean(body.overage_allowed),
-        trial_ends_at: body.trial_ends_at ? new Date(String(body.trial_ends_at)).toISOString() : null,
+        ...next,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "tenant_id" },
     );
     if (error) return jsonResponse({ error: error.message }, 500);
+    await recordPlatformAudit(admin, {
+      tenantId,
+      actor: { userId: ctx.userId, role: ctx.role },
+      entityType: "tenant_ai_subscription",
+      entityId: tenantId,
+      summary: `Provisionamento de IA ${next.active ? "ativado" : "desativado"}`,
+      changes: {
+        active: { from: before?.active ?? null, to: next.active },
+        monthly_token_quota: { from: before?.monthly_token_quota ?? null, to: next.monthly_token_quota },
+        overage_allowed: { from: before?.overage_allowed ?? null, to: next.overage_allowed },
+        trial_ends_at: { from: before?.trial_ends_at ?? null, to: next.trial_ends_at },
+      },
+      metadata: { source: "ai-admin" },
+      request,
+    });
     return jsonResponse({ ok: true });
   }
 

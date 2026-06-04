@@ -1747,6 +1747,16 @@ async function mirrorIncomingMediaToStorage(
     return null;
   }
 
+  const { error: storageLimitError } = await admin.rpc("assert_tenant_plan_limit", {
+    p_tenant_id: instance.tenant_id,
+    p_metric: "storage_gb",
+    p_increment: 0,
+  });
+  if (storageLimitError) {
+    console.error("mirrorIncomingMediaToStorage: limite de storage atingido", storageLimitError);
+    return null;
+  }
+
   const mime = resolvedMime ?? "application/octet-stream";
   const ext = inferExtensionFromMime(mime);
   const safeName = (resolvedFileName ?? params.messageId)

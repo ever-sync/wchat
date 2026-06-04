@@ -130,3 +130,40 @@ export async function requireTenantPermission(
     permissions,
   };
 }
+
+const BLOCKED_BILLING_STATUSES = new Set(["past_due", "paused", "canceled", "incomplete"]);
+
+export async function assertTenantBillingActive(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string | null | undefined,
+  actionLabel = "executar esta acao",
+) {
+  if (!tenantId) {
+    throw new Error("Tenant nao informado.");
+  }
+
+  const { data, error } = await admin
+    .from("billing_subscriptions")
+    .select("status, plan_id")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Tenants legados sem assinatura continuam operando ate a migracao comercial.
+  if (!data?.status || !BLOCKED_BILLING_STATUSES.has(String(data.status))) {
+    return {
+      allowed: true,
+      status: data?.status ? String(data.status) : null,
+      planId: data?.plan_id ? String(data.plan_id) : null,
+    };
+  }
+
+  const err = new PermissionDeniedError(
+    `Sua assinatura esta ${data.status}. Regularize o plano para ${actionLabel}.`,
+  );
+  err.status = 402;
+  throw err;
+}

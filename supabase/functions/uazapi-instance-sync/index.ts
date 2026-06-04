@@ -2,6 +2,7 @@ import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
 import {
   PermissionDeniedError,
+  assertTenantBillingActive,
   createAdminClient,
   getFunctionsBaseUrl,
   isInternalRequest,
@@ -38,6 +39,9 @@ Deno.serve(async (request) => {
           "edit",
           "Seu papel nao tem permissao para sincronizar instancias.",
         );
+    if (!internal) {
+      await assertTenantBillingActive(context.admin, context.tenantId, "sincronizar canais");
+    }
 
     let query = context.admin
       .from("whatsapp_instances")

@@ -7,7 +7,7 @@ import {
 } from "../_shared/ai-tools.ts";
 import { ensureLeadFromChat } from "../_shared/domain.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
-import { createAdminClient } from "../_shared/supabase.ts";
+import { PermissionDeniedError, assertTenantBillingActive, createAdminClient } from "../_shared/supabase.ts";
 import { timingSafeEqual } from "../_shared/timing-safe-equal.ts";
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 300;
@@ -103,6 +103,8 @@ Deno.serve(async (request) => {
   }
 
   try {
+    await assertTenantBillingActive(admin, tenantId, "enviar respostas automaticas");
+
     const { data: chat, error: chatError } = await admin
       .from("whatsapp_chats")
       .select("*, customers(opt_out)")
@@ -183,6 +185,9 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, handoff });
   } catch (error) {
+    if (error instanceof PermissionDeniedError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Unexpected error." },
       400,

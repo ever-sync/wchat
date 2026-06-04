@@ -976,6 +976,15 @@ async function monthlyTokensUsed(admin: Admin, tenantId: string): Promise<number
  * - DENY-BY-DEFAULT: sem assinatura ativa do add-on, a IA NÃO roda (produto pago).
  */
 async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number | null): Promise<boolean> {
+  const { data: billing } = await admin
+    .from("billing_subscriptions")
+    .select("status")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (["past_due", "paused", "canceled", "incomplete"].includes(String(billing?.status ?? ""))) {
+    return false;
+  }
+
   const { data: sub } = await admin
     .from("tenant_ai_subscription")
     .select("active, monthly_token_quota, overage_allowed, trial_ends_at")
@@ -988,6 +997,16 @@ async function aiBudgetAllows(admin: Admin, tenantId: string, selfLimit: number 
 
   let hardLimit: number | null = null;
   if (!sub.overage_allowed && sub.monthly_token_quota > 0) hardLimit = sub.monthly_token_quota;
+
+  const { data: planLimit } = await admin.rpc("get_tenant_plan_limit", {
+    p_tenant_id: tenantId,
+    p_metric: "ai_monthly_tokens",
+  });
+  const planTokenLimit = Number(planLimit ?? 0);
+  if (planTokenLimit > 0) {
+    hardLimit = hardLimit == null ? planTokenLimit : Math.min(hardLimit, planTokenLimit);
+  }
+
   if (selfLimit && selfLimit > 0) {
     hardLimit = hardLimit == null ? selfLimit : Math.min(hardLimit, selfLimit);
   }

@@ -10,7 +10,7 @@
 // Cron sugerido: a cada 1 minuto.
 
 import { handleCors, jsonResponse } from "../_shared/http.ts";
-import { createAdminClient, isInternalRequest } from "../_shared/supabase.ts";
+import { PermissionDeniedError, assertTenantBillingActive, createAdminClient, isInternalRequest } from "../_shared/supabase.ts";
 import { ensureChat, insertOrDedupeOutboundMessage } from "../_shared/domain.ts";
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
@@ -174,6 +174,23 @@ async function processJob(admin: AdminClient, job: Job): Promise<JobOutcome> {
     return "permanent";
   }
   const participant = participantRow as Participant;
+
+  try {
+    await assertTenantBillingActive(admin, participant.tenant_id, "executar automacoes");
+  } catch (error) {
+    await markFailed(admin, job, error instanceof Error ? error.message : "assinatura bloqueada");
+    return error instanceof PermissionDeniedError ? "permanent" : "retry";
+  }
+
+  const { error: limitError } = await admin.rpc("assert_tenant_plan_limit", {
+    p_tenant_id: participant.tenant_id,
+    p_metric: "marketing_flow_runs_monthly",
+    p_increment: 1,
+  });
+  if (limitError) {
+    await markFailed(admin, job, limitError.message);
+    return "permanent";
+  }
 
   const { data: flowRow, error: fErr } = await admin
     .from("marketing_flows")

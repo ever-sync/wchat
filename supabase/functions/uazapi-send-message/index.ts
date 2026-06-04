@@ -8,6 +8,7 @@ import {
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import {
   PermissionDeniedError,
+  assertTenantBillingActive,
   createAdminClient,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
@@ -140,6 +141,7 @@ Deno.serve(async (request) => {
       "edit",
       "Seu papel nao tem permissao para enviar mensagens.",
     );
+    await assertTenantBillingActive(admin, tenantId, "enviar mensagens");
     const body = await request.json();
     const instance = await getInstanceById(admin, String(body.instanceId));
     if (instance.tenant_id !== tenantId) {

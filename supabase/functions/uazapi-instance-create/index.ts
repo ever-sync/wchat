@@ -2,6 +2,7 @@ import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { encryptSecret } from "../_shared/crypto.ts";
 import {
   PermissionDeniedError,
+  assertTenantBillingActive,
   getFunctionsBaseUrl,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
@@ -51,6 +52,7 @@ Deno.serve(async (request) => {
       "edit",
       "Seu papel nao tem permissao para criar canais.",
     );
+    await assertTenantBillingActive(admin, tenantId, "criar canais");
 
     const body = await request.json().catch(() => ({}));
     const displayName = String(body.displayName ?? "").trim();
@@ -59,6 +61,16 @@ Deno.serve(async (request) => {
 
     if (!displayName) {
       throw new Error("displayName e obrigatorio.");
+    }
+
+    const { error: limitError } = await admin.rpc("assert_tenant_plan_limit", {
+      p_tenant_id: tenantId,
+      p_metric: "whatsapp_instances",
+      p_increment: 1,
+    });
+
+    if (limitError) {
+      throw new Error(limitError.message);
     }
 
     const adminToken = readAdminToken();

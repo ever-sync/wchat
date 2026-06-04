@@ -2,6 +2,7 @@ import { handleCors, jsonResponse } from "../_shared/http.ts";
 import { encryptSecret } from "../_shared/crypto.ts";
 import {
   PermissionDeniedError,
+  assertTenantBillingActive,
   getFunctionsBaseUrl,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
@@ -31,6 +32,7 @@ Deno.serve(async (request) => {
       "edit",
       "Seu papel nao tem permissao para conectar uma instancia.",
     );
+    await assertTenantBillingActive(admin, tenantId, "conectar canais");
     const body = await request.json().catch(() => ({}));
     const displayName = String(body.displayName ?? "").trim();
     const providedInstanceName = String(body.uazapiInstanceName ?? "").trim();

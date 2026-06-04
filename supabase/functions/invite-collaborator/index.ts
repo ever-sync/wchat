@@ -2,6 +2,7 @@ import { escapeIlikeLiteralForPostgrest } from "../_shared/ilike-literal.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import {
   PermissionDeniedError,
+  assertTenantBillingActive,
   createAdminClient,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
@@ -176,6 +177,7 @@ Deno.serve(async (request) => {
       "edit",
       "Seu papel nao tem permissao para criar acessos de colaboradores.",
     );
+    await assertTenantBillingActive(admin, tenantId, "convidar usuarios");
     const body = await request.json().catch(() => ({}));
     const nome = String(body.nome ?? "").trim();
     const email = String(body.email ?? "").trim().toLowerCase();
@@ -219,6 +221,23 @@ Deno.serve(async (request) => {
 
     if (existingProfile?.tenant_id && existingProfile.tenant_id !== tenantId) {
       throw new Error("Esse email ja esta associado a outro tenant.");
+    }
+
+    const shouldConsumeSeat =
+      !resend &&
+      !existingInvite &&
+      (!existingProfile?.tenant_id || existingProfile.tenant_id !== tenantId);
+
+    if (shouldConsumeSeat) {
+      const { error: limitError } = await service.rpc("assert_tenant_plan_limit", {
+        p_tenant_id: tenantId,
+        p_metric: "users",
+        p_increment: 1,
+      });
+
+      if (limitError) {
+        throw new Error(limitError.message);
+      }
     }
 
     const { error: inviteUpsertError } = await service

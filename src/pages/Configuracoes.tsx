@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpen,
+  CreditCard,
   Loader2,
   Mail,
   MessageSquare,
@@ -63,6 +64,7 @@ import { AdsSettings } from "@/components/settings/AdsSettings";
 import { TeamsSettingsSection } from "@/components/settings/TeamsSettingsSection";
 import { TwoFactorSettingsCard } from "@/components/settings/TwoFactorSettingsCard";
 import { UazapiChannelWizardDialog } from "@/components/settings/UazapiChannelWizardDialog";
+import { BillingSettingsCard } from "@/components/settings/BillingSettingsCard";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import {
   useDeleteWhatsappInstance,
@@ -132,6 +134,7 @@ const statusStyles = {
 
 const SETTINGS_TAB_VALUES = [
   "perfil",
+  "plano",
   "integracoes",
   "colaboradores",
   "funis",
@@ -601,6 +604,7 @@ export default function Configuracoes() {
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="h-auto flex-wrap justify-start rounded-2xl border border-border/60 bg-card/80 p-1">
           <TabsTrigger value="perfil"><UserCog className="mr-2 h-4 w-4" />Perfil</TabsTrigger>
+          <TabsTrigger value="plano"><CreditCard className="mr-2 h-4 w-4" />Plano</TabsTrigger>
           <TabsTrigger value="integracoes"><MessageSquare className="mr-2 h-4 w-4" />Integracoes</TabsTrigger>
           {canViewCollaborators ? (
             <TabsTrigger value="colaboradores">
@@ -749,6 +753,10 @@ export default function Configuracoes() {
           <div className="xl:col-span-2">
             <TwoFactorSettingsCard />
           </div>
+        </TabsContent>
+
+        <TabsContent value="plano" className="space-y-6">
+          <BillingSettingsCard />
         </TabsContent>
 
         <TabsContent value="integracoes" className="space-y-6">

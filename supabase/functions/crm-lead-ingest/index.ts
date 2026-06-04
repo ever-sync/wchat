@@ -97,15 +97,12 @@ Deno.serve(async (request) => {
     .eq("tenant_id", tenantId)
     .maybeSingle();
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const authHeader = request.headers.get("authorization") ?? "";
   const signature = request.headers.get("x-signature");
   const timestampHeader = request.headers.get("x-timestamp");
 
-  const authorizedByKey = Boolean(serviceKey) && authHeader === `Bearer ${serviceKey}`;
-
   let authorizedByHmac = false;
-  if (!authorizedByKey && integration?.n8n_secret && signature && timestampHeader) {
+  if (integration?.n8n_secret && signature && timestampHeader) {
     const ts = parseTimestampSeconds(timestampHeader);
     if (ts !== null && Math.abs(Date.now() / 1000 - ts) <= MAX_TIMESTAMP_SKEW_SECONDS) {
       authorizedByHmac = await verifyHmac(
@@ -119,11 +116,11 @@ Deno.serve(async (request) => {
 
   // Bearer com o n8n_secret diretamente (modo simples para o HTTP node do n8n)
   let authorizedBySecret = false;
-  if (!authorizedByKey && !authorizedByHmac && integration?.n8n_secret) {
+  if (!authorizedByHmac && integration?.n8n_secret) {
     authorizedBySecret = authHeader === `Bearer ${integration.n8n_secret}`;
   }
 
-  if (!authorizedByKey && !authorizedByHmac && !authorizedBySecret) {
+  if (!authorizedByHmac && !authorizedBySecret) {
     return jsonResponse({ error: "Unauthorized." }, 401);
   }
 
