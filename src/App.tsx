@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { PermissionRoute, PlatformAdminRoute, ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
@@ -43,6 +43,16 @@ const PageFallback = () => (
   </div>
 );
 
+function RoutedErrorBoundary({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const boundaryKey = `${location.pathname}?${location.search}`;
+  return (
+    <RouteErrorBoundary key={boundaryKey}>
+      {children}
+    </RouteErrorBoundary>
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -75,7 +85,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={<PageFallback />}>
-              <RouteErrorBoundary>
+              <RoutedErrorBoundary>
                 <Routes>
                   {/* Public */}
                   <Route path="/" element={<RootRedirect />} />
@@ -231,7 +241,7 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-              </RouteErrorBoundary>
+              </RoutedErrorBoundary>
             </Suspense>
           </BrowserRouter>
         </TooltipProvider>
