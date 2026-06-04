@@ -85,6 +85,7 @@ export type OperationAdminSnapshot = {
   generated_at: string;
   summary: OperationSummary;
   workers: OperationWorker[];
+  workerRuns: OperationWorkerRun[];
   workerAlerts: OperationWorkerAlert[];
   tenants: OperationTenant[];
 };
@@ -152,6 +153,21 @@ export type OperationWorkerAlert = {
   consecutive_failures: number;
   summary: string;
   sent_at: string | null;
+  created_at: string;
+};
+
+export type OperationWorkerRun = {
+  id: string;
+  worker_key: string;
+  worker_label: string | null;
+  schedule: string | null;
+  started_at: string;
+  finished_at: string;
+  http_status: number | null;
+  ok: boolean;
+  duration_ms: number | null;
+  response_excerpt: string | null;
+  error_excerpt: string | null;
   created_at: string;
 };
 

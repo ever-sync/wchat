@@ -11,6 +11,7 @@ import {
   type OperationSeverity,
   type OperationTenant,
   type OperationWorkerAlert,
+  type OperationWorkerRun,
   type OperationWorker,
   useOperationAdminAction,
   useOperationAdminAuditLogs,
@@ -128,6 +129,7 @@ export default function AdminOperacao() {
           <SummaryGrid summary={data.summary} />
           <WorkersSection workers={data.workers ?? []} alerts={data.workerAlerts ?? []} />
           <WorkerAlertsSection alerts={data.workerAlerts ?? []} />
+          <WorkerRunsSection runs={data.workerRuns ?? []} />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
@@ -358,6 +360,67 @@ function WorkerAlertsSection({ alerts }: { alerts: OperationWorkerAlert[] }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function WorkerRunsSection({ runs }: { runs: OperationWorkerRun[] }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Historico recente</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ultimas execucoes registradas pelos workers com tempo, status e falhas.
+            </p>
+          </div>
+          <Badge variant="outline">{runs.length} execucoes</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {runs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhuma execucao registrada ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {runs.map((run) => (
+              <div key={run.id} className="rounded-md border bg-background p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium">{run.worker_label ?? run.worker_key}</p>
+                      <Badge variant={run.ok ? "secondary" : "destructive"}>{run.ok ? "ok" : "erro"}</Badge>
+                      <Badge variant="outline">{run.schedule ?? "sem agenda"}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Iniciou {new Date(run.started_at).toLocaleString("pt-BR")} · terminou{" "}
+                      {new Date(run.finished_at).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    HTTP {run.http_status ?? "n/a"} · {run.duration_ms ?? 0}ms
+                  </p>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <RunSnippet title="Resposta" value={run.response_excerpt} />
+                  <RunSnippet title="Erro" value={run.error_excerpt} error />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RunSnippet({ title, value, error = false }: { title: string; value: string | null; error?: boolean }) {
+  return (
+    <div className="rounded-md bg-muted/50 p-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">{title}</p>
+      <p className={error ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+        {value?.trim() ? value : "Sem detalhe"}
+      </p>
+    </div>
   );
 }
 

@@ -103,7 +103,7 @@ Deno.serve(async (request) => {
         admin
           .from("billing_subscriptions")
           .select("tenant_id, plan_id, status, billing_period, current_period_end, gateway_provider, gateway_status, gateway_subscription_id"),
-        admin.from("billing_plans").select("id, name, description, entitlements, features").eq("active", true).order("sort_order"),
+        admin.from("billing_plans").select("id, name, description, entitlements, features, status").eq("status", "active").order("sort_order"),
       ]);
 
     if (tenantsError) return jsonResponse({ error: tenantsError.message }, 500);
@@ -132,7 +132,16 @@ Deno.serve(async (request) => {
       }),
     );
 
-    return jsonResponse({ plans: plans ?? [], tenants: rows });
+    return jsonResponse({
+      plans: (plans ?? []).map((plan: Record<string, unknown>) => ({
+        id: String(plan.id),
+        name: String(plan.name ?? plan.id),
+        description: plan.description == null ? null : String(plan.description),
+        entitlements: plan.entitlements ?? {},
+        features: plan.features ?? [],
+      })),
+      tenants: rows,
+    });
   }
 
   if (request.method === "POST") {

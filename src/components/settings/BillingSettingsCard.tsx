@@ -1,18 +1,22 @@
-import { useState } from "react";
-import { AlertCircle, CheckCircle2, CreditCard, Infinity, Loader2, Sparkles, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Check, CheckCircle2, CreditCard, Infinity, Loader2, Sparkles, TrendingUp } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   createAsaasCheckout,
+  useBillingPlansCatalog,
   useTenantBillingSnapshot,
+  type BillingPlanCatalogItem,
   type BillingStatus,
   type BillingUsageCounter,
 } from "@/lib/api/billing";
 import { useToast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const STATUS_LABEL: Record<BillingStatus, string> = {
   trialing: "Teste",
@@ -45,6 +49,15 @@ const PLAN_UPGRADE_OPTIONS = [
   { id: "profissional", label: "Profissional" },
   { id: "enterprise", label: "Enterprise" },
 ] as const;
+
+const ENTITLEMENT_LABEL: Record<string, string> = {
+  users: "Usuarios",
+  whatsapp_instances: "Canais WhatsApp",
+  customers: "Clientes",
+  ai_monthly_tokens: "Tokens IA",
+  marketing_flow_runs_monthly: "Automacoes",
+  storage_gb: "Armazenamento",
+};
 
 function formatCurrency(amountCents: number, currency: string) {
   return new Intl.NumberFormat("pt-BR", {
@@ -87,13 +100,77 @@ function usageBadge(counter: BillingUsageCounter) {
 
 export function BillingSettingsCard() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const { data, isLoading, error } = useTenantBillingSnapshot();
+  const [compareOpen, setCompareOpen] = useState(false);
+  const { data, isLoading, error, refetch, isFetching } = useTenantBillingSnapshot();
+  const { data: plans = [] } = useBillingPlansCatalog();
   const subscription = data?.subscription ?? null;
   const usage = data?.usage ?? [];
   const price = subscription?.price;
   const blockedUsage = usage.filter((counter) => usageState(counter) === "blocked");
   const warningUsage = usage.filter((counter) => usageState(counter) === "warning");
+  const billingState = searchParams.get("billing");
+
+  useEffect(() => {
+    if (billingState === "success") {
+      void refetch();
+    }
+  }, [billingState, refetch]);
+
+  const billingNotice =
+    billingState === "success"
+      ? {
+          title: "Pagamento recebido",
+          description: "Atualizamos a leitura da assinatura com o status mais recente.",
+          tone: "success" as const,
+        }
+      : billingState === "cancel"
+        ? {
+            title: "Checkout cancelado",
+            description: "Nenhuma alteração foi aplicada. Voce pode tentar novamente quando quiser.",
+            tone: "warning" as const,
+          }
+        : billingState === "expired"
+          ? {
+              title: "Checkout expirado",
+              description: "O link do Asaas expirou. Gere um novo checkout para continuar.",
+              tone: "warning" as const,
+            }
+          : null;
+
+  function clearBillingState() {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("billing");
+      return next;
+    }, { replace: true });
+  }
+
+  const planComparison = useMemo(
+    () =>
+      [...plans]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((plan) => ({
+          ...plan,
+          price: plan.prices[subscription?.billing_period ?? "monthly"],
+        })),
+    [plans, subscription?.billing_period],
+  );
+
+  function formatEntitlement(value: unknown) {
+    if (value === null || value === undefined || value === "") return "Ilimitado";
+    if (typeof value === "boolean") return value ? "Sim" : "Nao";
+    if (typeof value === "number") return new Intl.NumberFormat("pt-BR").format(value);
+    return String(value);
+  }
+
+  function planFeatures(plan: BillingPlanCatalogItem) {
+    return Object.entries(plan.entitlements)
+      .filter(([key]) => ENTITLEMENT_LABEL[key])
+      .map(([key, value]) => `${ENTITLEMENT_LABEL[key]}: ${formatEntitlement(value)}`)
+      .slice(0, 4);
+  }
 
   async function openCheckout(planId: string, billingPeriod = subscription?.billing_period ?? "monthly") {
     setCheckoutLoading(planId);
@@ -154,7 +231,21 @@ export function BillingSettingsCard() {
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+    <div className="space-y-4">
+      {billingNotice ? (
+        <Alert className={billingNotice.tone === "success" ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning"}>
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>{billingNotice.title}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{billingNotice.description}</span>
+            <Button variant="outline" size="sm" onClick={clearBillingState} disabled={isFetching}>
+              {isFetching ? "Atualizando..." : "Fechar aviso"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
       <Card className="border-border/60 bg-card/80">
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -263,6 +354,9 @@ export function BillingSettingsCard() {
                   Ir para {plan.label}
                 </Button>
               ))}
+              <Button variant="outline" onClick={() => setCompareOpen(true)}>
+                Comparar planos
+              </Button>
             </div>
           </div>
 
@@ -354,6 +448,90 @@ export function BillingSettingsCard() {
           )}
         </CardContent>
       </Card>
+      </div>
+
+      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Comparar planos</DialogTitle>
+            <DialogDescription>
+              Compare os planos ativos lado a lado no periodo{" "}
+              {subscription.billing_period === "yearly" ? "anual" : "mensal"} antes de abrir o checkout.
+            </DialogDescription>
+          </DialogHeader>
+
+          {planComparison.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-muted/20 p-6 text-sm text-muted-foreground">
+              Nenhum plano ativo encontrado para comparar.
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-3">
+              {planComparison.map((plan) => {
+                const active = plan.id === subscription.plan_id;
+                const features = planFeatures(plan);
+                return (
+                  <div
+                    key={plan.id}
+                    className={[
+                      "rounded-2xl border p-4",
+                      active ? "border-accent bg-accent/5" : "border-border bg-background",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Plano</p>
+                        <h3 className="mt-1 text-xl font-semibold text-foreground">{plan.name}</h3>
+                      </div>
+                      {active ? <Badge className="bg-success/20 text-success">Atual</Badge> : null}
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
+                    <div className="mt-4 flex items-end justify-between gap-3 border-t pt-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          {subscription.billing_period === "yearly" ? "Anual" : "Mensal"}
+                        </p>
+                        <p className="mt-1 text-2xl font-semibold text-foreground">
+                          {plan.price ? formatCurrency(plan.price.amount_cents, plan.price.currency) : "Sob consulta"}
+                        </p>
+                      </div>
+                      {!active ? (
+                        <Button
+                          size="sm"
+                          variant={plan.id === "profissional" ? "default" : "outline"}
+                          className={plan.id === "profissional" ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}
+                          disabled={checkoutLoading !== null}
+                          onClick={() => void openCheckout(plan.id, subscription.billing_period)}
+                        >
+                          {checkoutLoading === plan.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Escolher
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {features.length > 0 ? (
+                        features.map((feature) => (
+                          <div key={feature} className="flex items-start gap-2 text-sm">
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                            <span className="text-muted-foreground">{feature}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Sem limites detalhados cadastrados.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompareOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

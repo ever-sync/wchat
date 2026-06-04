@@ -13,6 +13,11 @@ export type BillingPlan = {
   features: string[];
 };
 
+export type BillingPlanCatalogItem = BillingPlan & {
+  sort_order: number;
+  prices: Record<BillingPeriod, BillingPrice | null>;
+};
+
 export type BillingPrice = {
   billing_period: BillingPeriod;
   currency: string;
@@ -52,6 +57,8 @@ export type BillingSnapshot = {
   usage: BillingUsageCounter[];
 };
 
+export type BillingPlansCatalog = BillingPlanCatalogItem[];
+
 export type CreateAsaasCheckoutInput = {
   planId?: string;
   billingPeriod?: BillingPeriod;
@@ -71,6 +78,7 @@ const DEFAULT_SNAPSHOT: BillingSnapshot = {
 };
 
 export const billingSnapshotQueryKey = ["billing", "snapshot"] as const;
+export const billingPlansCatalogQueryKey = ["billing", "plans"] as const;
 
 function normalizeSnapshot(value: unknown): BillingSnapshot {
   if (!value || typeof value !== "object") return DEFAULT_SNAPSHOT;
@@ -93,6 +101,45 @@ export async function getTenantBillingSnapshot(): Promise<BillingSnapshot> {
   return normalizeSnapshot(data);
 }
 
+export async function getBillingPlansCatalog(): Promise<BillingPlansCatalog> {
+  if (!isSupabaseConfigured) return [];
+
+  const client = requireSupabase();
+
+  const [plansRes, pricesRes] = await Promise.all([
+    client.from("billing_plans").select("id, name, description, entitlements, features, sort_order, status").eq("status", "active").order("sort_order"),
+    client.from("billing_plan_prices").select("plan_id, billing_period, currency, amount_cents, active").eq("active", true),
+  ]);
+
+  if (plansRes.error) throw new Error(plansRes.error.message);
+  if (pricesRes.error) throw new Error(pricesRes.error.message);
+
+  const pricesByPlan = new Map<string, Partial<Record<BillingPeriod, BillingPrice>>>();
+  for (const price of pricesRes.data ?? []) {
+    const billingPeriod = price.billing_period as BillingPeriod;
+    const current = pricesByPlan.get(price.plan_id) ?? {};
+    current[billingPeriod] = {
+      billing_period: billingPeriod,
+      currency: String(price.currency ?? "BRL"),
+      amount_cents: Number(price.amount_cents ?? 0),
+    };
+    pricesByPlan.set(price.plan_id, current);
+  }
+
+  return (plansRes.data ?? []).map((plan) => ({
+    id: String(plan.id),
+    name: String(plan.name ?? plan.id),
+    description: plan.description == null ? null : String(plan.description),
+    entitlements: (plan.entitlements as Record<string, unknown>) ?? {},
+    features: Array.isArray(plan.features) ? (plan.features as string[]) : [],
+    sort_order: Number(plan.sort_order ?? 0),
+    prices: {
+      monthly: pricesByPlan.get(String(plan.id))?.monthly ?? null,
+      yearly: pricesByPlan.get(String(plan.id))?.yearly ?? null,
+    },
+  }));
+}
+
 export function useTenantBillingSnapshot(
   options?: Omit<UseQueryOptions<BillingSnapshot, Error>, "queryKey" | "queryFn">,
 ) {
@@ -101,6 +148,18 @@ export function useTenantBillingSnapshot(
     queryFn: getTenantBillingSnapshot,
     enabled: isSupabaseConfigured && (options?.enabled ?? true),
     staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useBillingPlansCatalog(
+  options?: Omit<UseQueryOptions<BillingPlansCatalog, Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery<BillingPlansCatalog, Error>({
+    queryKey: billingPlansCatalogQueryKey,
+    queryFn: getBillingPlansCatalog,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
     ...options,
   });
 }

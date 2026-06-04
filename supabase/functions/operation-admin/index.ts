@@ -92,6 +92,21 @@ type WorkerAlert = {
   created_at: string;
 };
 
+type WorkerRun = {
+  id: string;
+  worker_key: string;
+  worker_label: string | null;
+  schedule: string | null;
+  started_at: string;
+  finished_at: string;
+  http_status: number | null;
+  ok: boolean;
+  duration_ms: number | null;
+  response_excerpt: string | null;
+  error_excerpt: string | null;
+  created_at: string;
+};
+
 function inc(map: Map<string, number>, key: string, amount = 1) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
@@ -407,6 +422,7 @@ Deno.serve(async (request) => {
     webhookDeliveriesRes,
     flowHeartbeatRes,
     platformWorkerHeartbeatsRes,
+    platformWorkerRunsRes,
     workerAlertsRes,
     emailDispatchesRes,
     adDispatchesRes,
@@ -436,6 +452,11 @@ Deno.serve(async (request) => {
       .from("platform_worker_heartbeats")
       .select("worker_key, worker_label, schedule, last_started_at, last_finished_at, last_success_at, last_failure_at, last_http_status, last_ok, consecutive_failures, duration_ms, response_excerpt, error_excerpt, metadata"),
     admin
+      .from("platform_worker_runs")
+      .select("id, worker_key, worker_label, schedule, started_at, finished_at, http_status, ok, duration_ms, response_excerpt, error_excerpt, created_at")
+      .order("created_at", { ascending: false })
+      .limit(24),
+    admin
       .from("platform_worker_alerts")
       .select("id, worker_key, worker_label, alert_type, severity, period, last_http_status, consecutive_failures, summary, sent_at, created_at")
       .order("created_at", { ascending: false })
@@ -463,6 +484,7 @@ Deno.serve(async (request) => {
     webhookDeliveriesRes,
     flowHeartbeatRes,
     platformWorkerHeartbeatsRes,
+    platformWorkerRunsRes,
     workerAlertsRes,
     emailDispatchesRes,
     adDispatchesRes,
@@ -819,5 +841,20 @@ Deno.serve(async (request) => {
     created_at: String(row.created_at),
   })) as WorkerAlert[];
 
-  return jsonResponse({ generated_at: new Date().toISOString(), summary, workers, workerAlerts, tenants });
+  const workerRuns = (platformWorkerRunsRes.data ?? []).map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    worker_key: String(row.worker_key),
+    worker_label: row.worker_label == null ? null : String(row.worker_label),
+    schedule: row.schedule == null ? null : String(row.schedule),
+    started_at: String(row.started_at),
+    finished_at: String(row.finished_at),
+    http_status: row.http_status == null ? null : Number(row.http_status),
+    ok: Boolean(row.ok),
+    duration_ms: row.duration_ms == null ? null : Number(row.duration_ms),
+    response_excerpt: row.response_excerpt == null ? null : String(row.response_excerpt),
+    error_excerpt: row.error_excerpt == null ? null : String(row.error_excerpt),
+    created_at: String(row.created_at),
+  })) as WorkerRun[];
+
+  return jsonResponse({ generated_at: new Date().toISOString(), summary, workers, workerRuns, workerAlerts, tenants });
 });
