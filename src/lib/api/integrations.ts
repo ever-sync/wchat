@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { DEFAULT_STALE_NEGOTIATION_DAYS, normalizeStaleNegotiationDays } from "@/lib/crm/negotiation-alerts";
 import {
@@ -224,11 +224,14 @@ export function useTenantIntegrations() {
   });
 }
 
-export function useTenantSettings() {
+export function useTenantSettings(
+  options?: Omit<UseQueryOptions<TenantSettings | null, Error>, "queryKey" | "queryFn">,
+) {
   return useQuery({
     queryKey: ["tenant-settings"],
     queryFn: fetchTenantSettings,
-    enabled: isSupabaseConfigured,
+    enabled: (options?.enabled ?? true) && isSupabaseConfigured,
+    ...options,
   });
 }
 
