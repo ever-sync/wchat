@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import { getCurrentTenantId } from "@/lib/api/tenant";
 import { DEFAULT_STALE_NEGOTIATION_DAYS, normalizeStaleNegotiationDays } from "@/lib/crm/negotiation-alerts";
 import {
@@ -217,20 +218,24 @@ export async function upsertTenantSettings(
 }
 
 export function useTenantIntegrations() {
+  const { profile, isAuthenticated, isLoading: authLoading } = useAuth();
+  const userKey = profile?.id ?? "anonymous";
   return useQuery({
-    queryKey: ["tenant-integrations"],
+    queryKey: ["tenant-integrations", userKey],
     queryFn: fetchTenantIntegrations,
-    enabled: isSupabaseConfigured,
+    enabled: isSupabaseConfigured && isAuthenticated && !authLoading && Boolean(profile?.id),
   });
 }
 
 export function useTenantSettings(
   options?: Omit<UseQueryOptions<TenantSettings | null, Error>, "queryKey" | "queryFn">,
 ) {
+  const { profile, isAuthenticated, isLoading: authLoading } = useAuth();
+  const userKey = profile?.id ?? "anonymous";
   return useQuery({
-    queryKey: ["tenant-settings"],
+    queryKey: ["tenant-settings", userKey],
     queryFn: fetchTenantSettings,
-    enabled: (options?.enabled ?? true) && isSupabaseConfigured,
+    enabled: (options?.enabled ?? true) && isSupabaseConfigured && isAuthenticated && !authLoading && Boolean(profile?.id),
     ...options,
   });
 }

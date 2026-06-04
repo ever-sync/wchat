@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { PermissionRoute, ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
+import { PermissionRoute, PlatformAdminRoute, ProtectedRoute, PublicOnlyRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Cadastro from "./pages/Cadastro";
 import CadastroPlano from "./pages/CadastroPlano";
@@ -179,9 +179,30 @@ const App = () => (
                         </PermissionRoute>
                       }
                     />
-                    <Route path="/admin/ia" element={<AdminIA />} />
-                    <Route path="/admin/billing" element={<AdminBilling />} />
-                    <Route path="/admin/operacao" element={<AdminOperacao />} />
+                    <Route
+                      path="/admin/ia"
+                      element={
+                        <PlatformAdminRoute>
+                          <AdminIA />
+                        </PlatformAdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/billing"
+                      element={
+                        <PlatformAdminRoute>
+                          <AdminBilling />
+                        </PlatformAdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/operacao"
+                      element={
+                        <PlatformAdminRoute>
+                          <AdminOperacao />
+                        </PlatformAdminRoute>
+                      }
+                    />
                     <Route
                       path="/configuracoes"
                       element={

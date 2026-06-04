@@ -368,6 +368,10 @@ Deno.serve(async (request) => {
   }
 
   const url = new URL(request.url);
+  if (url.searchParams.get("view") === "access") {
+    return jsonResponse({ ok: true, isPlatformAdmin: true });
+  }
+
   if (url.searchParams.get("view") === "audit") {
     const tenantId = url.searchParams.get("tenant_id")?.trim() || null;
     const entityType = url.searchParams.get("entity_type")?.trim() || null;

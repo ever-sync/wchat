@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useTenantSettings } from "@/lib/api/integrations";
+import { usePlatformAdminAccess } from "@/lib/api/platform-admin";
 import type { PermissionAction, PermissionFunctionKey } from "@/lib/permissions/role-permissions";
 
 function FullScreenMessage({ children }: { children: ReactNode }) {
@@ -32,7 +33,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <FullScreenMessage>Carregando configuração do tenant...</FullScreenMessage>;
   }
 
+  const isAdminPath = location.pathname.startsWith("/admin");
+
   if (
+    !isAdminPath &&
     location.pathname !== "/onboarding" &&
     !tenantSettings?.onboardingState?.completedAt
   ) {
@@ -75,6 +79,35 @@ export function PermissionRoute({
 
   if (!can(permission, action)) {
     return <Navigate to={fallback} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+export function PlatformAdminRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const { data, isLoading: accessLoading, isError, error } = usePlatformAdminAccess({
+    enabled: isAuthenticated,
+  });
+
+  if (isLoading || accessLoading) {
+    return <FullScreenMessage>Validando acesso da plataforma...</FullScreenMessage>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (isError) {
+    return (
+      <FullScreenMessage>
+        {error instanceof Error ? error.message : "Nao foi possivel validar o acesso da plataforma."}
+      </FullScreenMessage>
+    );
+  }
+
+  if (!data?.isPlatformAdmin) {
+    return <Navigate to="/inbox" replace />;
   }
 
   return <>{children}</>;
