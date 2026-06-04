@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   CircleAlert,
   Clock,
+  CheckCircle2,
   Hourglass,
   Inbox,
   type LucideIcon,
@@ -23,7 +24,9 @@ import {
   useAttendanceDashboardRealtime,
   type AttendanceDashboardAttendant,
 } from "@/lib/api/attendance-dashboard";
+import { useTenantSettings } from "@/lib/api/integrations";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 
 type Accent = "primary" | "emerald" | "blue" | "violet" | "amber" | "rose";
 
@@ -95,6 +98,7 @@ export function PainelAoVivo() {
   useAttendanceDashboardRealtime();
   const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } =
     useAttendanceDashboard();
+  const { data: tenantSettings } = useTenantSettings();
 
   const attendants = useMemo(() => {
     const list = data?.attendants ?? [];
@@ -120,6 +124,8 @@ export function PainelAoVivo() {
         : { label: "Fora do expediente", className: "bg-zinc-500/15 text-muted-foreground" };
 
   const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+  const onboardingState = tenantSettings?.onboardingState ?? null;
+  const onboardingDone = Boolean(onboardingState?.completedAt);
 
   return (
     <div className="space-y-6">
@@ -222,6 +228,42 @@ export function PainelAoVivo() {
           </section>
 
           {/* Metas do mês */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CheckCircle2 className="h-4 w-4" />
+                Setup inicial
+              </CardTitle>
+              <CardDescription>Mostra se o tenant já concluiu o onboarding e qual foi o objetivo escolhido.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">
+                    {onboardingDone ? "Onboarding concluído" : "Onboarding pendente"}
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                      onboardingDone ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+                    )}
+                  >
+                    {onboardingDone ? "Pronto" : "A fazer"}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {onboardingDone
+                    ? `Objetivo: ${onboardingState?.objective ?? "atendimento"}${onboardingState?.completedAt ? ` · concluído em ${new Date(onboardingState.completedAt).toLocaleDateString("pt-BR")}` : ""}`
+                    : "WhatsApp, IA, equipe, CRM e automações ainda podem ser ajustados no onboarding."}
+                </p>
+              </div>
+
+              <Button asChild variant={onboardingDone ? "outline" : "default"} className={onboardingDone ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}>
+                <Link to="/onboarding">{onboardingDone ? "Revisar onboarding" : "Continuar onboarding"}</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
           <PainelGoalsCard />
 
           {/* Equipe */}

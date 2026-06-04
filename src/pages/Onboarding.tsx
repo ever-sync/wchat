@@ -24,7 +24,7 @@ import { useTenantAiConfig, useKnowledgeSources } from "@/lib/api/ai-agent";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
 import { useTenantCollaborators } from "@/lib/api/settings";
 import { useTenantBillingSnapshot } from "@/lib/api/billing";
-import { useTenantIntegrations, useTenantSettings } from "@/lib/api/integrations";
+import { useTenantIntegrations, useTenantSettings, useUpsertTenantSettings } from "@/lib/api/integrations";
 import { useWhatsappInstances } from "@/lib/api/whatsapp";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -102,6 +102,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [objective, setObjective] = useState<Objective>(readObjective());
+  const saveTenantSettingsMutation = useUpsertTenantSettings();
 
   const { data: instances = [], isLoading: instancesLoading } = useWhatsappInstances();
   const { data: aiConfig, isLoading: aiLoading } = useTenantAiConfig();
@@ -115,6 +116,13 @@ export default function Onboarding() {
   useEffect(() => {
     window.localStorage.setItem(OBJECTIVE_STORAGE_KEY, objective);
   }, [objective]);
+
+  useEffect(() => {
+    const persistedObjective = settings?.onboardingState?.objective;
+    if (persistedObjective && settings.onboardingState.completedAt) {
+      setObjective(persistedObjective);
+    }
+  }, [settings?.onboardingState?.completedAt, settings?.onboardingState?.objective]);
 
   const defaultInstance = useMemo(
     () => instances.find((instance) => instance.isDefault) ?? instances[0] ?? null,
@@ -241,7 +249,7 @@ export default function Onboarding() {
     settingsLoading ||
     billingLoading;
 
-  function finalize() {
+  async function finalize() {
     const descricao =
       objective === "vendas"
         ? "Seu onboarding ficou pronto para vender com CRM e funil."
@@ -257,6 +265,26 @@ export default function Onboarding() {
       titulo: "Onboarding concluido",
       descricao,
     });
+    if (completedSteps < onboardingSteps.length) {
+      navigate(destination.to);
+      return;
+    }
+    try {
+      await saveTenantSettingsMutation.mutateAsync({
+        onboardingState: {
+          objective,
+          completedAt: new Date().toISOString(),
+          completedStepKeys: onboardingSteps.filter((step) => step.done).map((step) => step.key),
+        },
+      });
+    } catch (error) {
+      toast({
+        title: "Nao foi possivel salvar o onboarding",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
     navigate(destination.to);
   }
 
@@ -297,6 +325,17 @@ export default function Onboarding() {
                   </div>
                 </div>
                 <Progress value={progress} className="mt-4 h-2" />
+                {settings?.onboardingState?.completedAt ? (
+                  <p className="mt-3 text-sm text-success">
+                    Concluído em{" "}
+                    {new Intl.DateTimeFormat("pt-BR", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(settings.onboardingState.completedAt))}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">Ainda em configuração.</p>
+                )}
                 <p className="mt-3 text-sm text-muted-foreground">
                   {completedSteps} de {onboardingSteps.length} etapas prontas.
                 </p>

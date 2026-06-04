@@ -34,6 +34,15 @@ export type TenantSettings = {
   slaFirstResponseMinutes: number;
   /** Horário de atendimento; quando ativo, pausa o SLA fora do expediente. */
   businessHours: BusinessHours;
+  onboardingState: TenantOnboardingState;
+};
+
+export type TenantOnboardingObjective = "atendimento" | "vendas" | "suporte" | "recuperacao";
+
+export type TenantOnboardingState = {
+  objective: TenantOnboardingObjective;
+  completedAt: string | null;
+  completedStepKeys: string[];
 };
 
 function mapIntegrations(row: Record<string, unknown>): TenantIntegrations {
@@ -57,6 +66,26 @@ function mapSettings(row: Record<string, unknown>): TenantSettings {
     staleNegotiationDays: normalizeStaleNegotiationDays(row.stale_negotiation_days),
     slaFirstResponseMinutes: normalizeSlaMinutes(row.sla_first_response_minutes),
     businessHours: normalizeBusinessHours(row.business_hours),
+    onboardingState: normalizeOnboardingState(row.onboarding_state),
+  };
+}
+
+function normalizeOnboardingState(value: unknown): TenantOnboardingState {
+  const raw = value as Partial<TenantOnboardingState> | null | undefined;
+  return {
+    objective:
+      raw?.objective === "vendas" ||
+      raw?.objective === "suporte" ||
+      raw?.objective === "recuperacao"
+        ? raw.objective
+        : "atendimento",
+    completedAt:
+      typeof raw?.completedAt === "string" && raw.completedAt.trim()
+        ? raw.completedAt
+        : null,
+    completedStepKeys: Array.isArray(raw?.completedStepKeys)
+      ? raw.completedStepKeys.map((step) => String(step)).filter(Boolean)
+      : [],
   };
 }
 
@@ -126,6 +155,11 @@ export async function fetchTenantSettings(): Promise<TenantSettings | null> {
       staleNegotiationDays: DEFAULT_STALE_NEGOTIATION_DAYS,
       slaFirstResponseMinutes: 15,
       businessHours: { ...DEFAULT_BUSINESS_HOURS, intervals: DEFAULT_BUSINESS_HOURS.intervals.map((i) => ({ ...i })) },
+      onboardingState: {
+        objective: "atendimento",
+        completedAt: null,
+        completedStepKeys: [],
+      },
     };
   }
   return mapSettings(data as Record<string, unknown>);
@@ -143,6 +177,7 @@ export async function upsertTenantSettings(
       | "staleNegotiationDays"
       | "slaFirstResponseMinutes"
       | "businessHours"
+      | "onboardingState"
     >
   >,
 ): Promise<TenantSettings> {
@@ -162,6 +197,13 @@ export async function upsertTenantSettings(
   }
   if (patch.businessHours !== undefined) {
     row.business_hours = normalizeBusinessHours(patch.businessHours);
+  }
+  if (patch.onboardingState !== undefined) {
+    row.onboarding_state = {
+      objective: patch.onboardingState.objective,
+      completedAt: patch.onboardingState.completedAt,
+      completedStepKeys: patch.onboardingState.completedStepKeys,
+    };
   }
 
   const { data, error } = await supabase
