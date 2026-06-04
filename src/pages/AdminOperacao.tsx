@@ -52,6 +52,7 @@ function nf(value: number): string {
 }
 
 export default function AdminOperacao() {
+  const { toast } = useToast();
   const [filter, setFilter] = useState<OperationSeverity | "all">("all");
   const [auditTenantId, setAuditTenantId] = useState("all");
   const [auditEntityType, setAuditEntityType] = useState("all");
@@ -496,6 +497,7 @@ const ACTION_LABEL: Record<OperationAdminAction, string> = {
   retry_webhooks: "Reabrir webhooks",
   unlock_ai_jobs: "Destravar IA",
   unlock_automation_jobs: "Destravar automacoes",
+  recheck_workers: "Rechecar workers",
 };
 
 function MetricBox({ icon: Icon, title, lines }: { icon: typeof Activity; title: string; lines: string[] }) {
