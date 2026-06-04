@@ -86,6 +86,42 @@ const AVAILABILITY_META: Record<
   offline: { label: "Offline", dot: "bg-zinc-400", rank: 2 },
 };
 
+const SETUP_STEP_META: Record<
+  string,
+  { label: string; description: string; to: string }
+> = {
+  whatsapp: {
+    label: "Conectar WhatsApp",
+    description: "Ligue um canal ativo para iniciar o atendimento.",
+    to: "/configuracoes?aba=integracoes&secao=whatsapp",
+  },
+  ai: {
+    label: "Configurar IA",
+    description: "Ative o agente e a base de conhecimento.",
+    to: "/agente-ia",
+  },
+  team: {
+    label: "Montar equipe",
+    description: "Convide colaboradores e distribua acessos.",
+    to: "/configuracoes?aba=colaboradores&secao=colaboradores",
+  },
+  crm: {
+    label: "Revisar CRM",
+    description: "Ajuste funis e campos para o fluxo comercial.",
+    to: "/configuracoes?aba=funis",
+  },
+  automation: {
+    label: "Ativar automação",
+    description: "Conecte integrações e fluxos automáticos.",
+    to: "/marketing?aba=automacoes",
+  },
+  test: {
+    label: "Fazer teste final",
+    description: "Valide o primeiro fluxo ponta a ponta.",
+    to: "/inbox",
+  },
+};
+
 function formatWait(minutes: number): string {
   if (minutes <= 0) return "—";
   if (minutes < 60) return `${minutes} min`;
@@ -126,6 +162,13 @@ export function PainelAoVivo() {
   const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
   const onboardingState = tenantSettings?.onboardingState ?? null;
   const onboardingDone = Boolean(onboardingState?.completedAt);
+  const setupMissing = useMemo(() => {
+    const done = new Set(onboardingState?.completedStepKeys ?? []);
+    return Object.entries(SETUP_STEP_META)
+      .filter(([key]) => !done.has(key))
+      .map(([key, value]) => ({ key, ...value }))
+      .slice(0, 4);
+  }, [onboardingState?.completedStepKeys]);
 
   return (
     <div className="space-y-6">
@@ -256,6 +299,26 @@ export function PainelAoVivo() {
                     ? `Objetivo: ${onboardingState?.objective ?? "atendimento"}${onboardingState?.completedAt ? ` · concluído em ${new Date(onboardingState.completedAt).toLocaleDateString("pt-BR")}` : ""}`
                     : "WhatsApp, IA, equipe, CRM e automações ainda podem ser ajustados no onboarding."}
                 </p>
+                {setupMissing.length > 0 ? (
+                  <div className="mt-3 space-y-2 rounded-2xl border border-border/70 bg-background/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Falta só isso
+                    </p>
+                    <div className="space-y-2">
+                      {setupMissing.map((item) => (
+                        <div key={item.key} className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">{item.label}</p>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                          </div>
+                          <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                            <Link to={item.to}>Abrir</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <Button asChild variant={onboardingDone ? "outline" : "default"} className={onboardingDone ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}>
