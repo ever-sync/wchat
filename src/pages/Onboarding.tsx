@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -103,6 +103,7 @@ export default function Onboarding() {
   const { toast } = useToast();
   const [objective, setObjective] = useState<Objective>(readObjective());
   const saveTenantSettingsMutation = useUpsertTenantSettings();
+  const lastSavedSignatureRef = useRef<string>("");
 
   const { data: instances = [], isLoading: instancesLoading } = useWhatsappInstances();
   const { data: aiConfig, isLoading: aiLoading } = useTenantAiConfig();
@@ -249,6 +250,29 @@ export default function Onboarding() {
     settingsLoading ||
     billingLoading;
 
+  useEffect(() => {
+    if (!settings || loading) return;
+
+    const currentStepKeys = onboardingSteps.filter((step) => step.done).map((step) => step.key);
+    const signature = `${objective}|${currentStepKeys.join(",")}`;
+    if (signature === lastSavedSignatureRef.current) return;
+
+    lastSavedSignatureRef.current = signature;
+    const timeout = window.setTimeout(() => {
+      void saveTenantSettingsMutation.mutateAsync({
+        onboardingState: {
+          objective,
+          completedAt: onboardingSteps.every((step) => step.done)
+            ? new Date().toISOString()
+            : null,
+          completedStepKeys: currentStepKeys,
+        },
+      });
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [loading, objective, onboardingSteps, saveTenantSettingsMutation, settings]);
+
   async function finalize() {
     const descricao =
       objective === "vendas"
@@ -265,10 +289,6 @@ export default function Onboarding() {
       titulo: "Onboarding concluido",
       descricao,
     });
-    if (completedSteps < onboardingSteps.length) {
-      navigate(destination.to);
-      return;
-    }
     try {
       await saveTenantSettingsMutation.mutateAsync({
         onboardingState: {
