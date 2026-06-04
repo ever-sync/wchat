@@ -240,6 +240,7 @@ export default function Onboarding() {
   const progress = Math.round((completedSteps / onboardingSteps.length) * 100);
   const nextStep = onboardingSteps.find((step) => !step.done) ?? onboardingSteps[onboardingSteps.length - 1];
   const destination = objectiveDestination(objective);
+  const pendingSteps = onboardingSteps.filter((step) => !step.done);
   const loading =
     instancesLoading ||
     aiLoading ||
@@ -306,6 +307,12 @@ export default function Onboarding() {
       return;
     }
     navigate(destination.to);
+  }
+
+  function scrollToStep(stepKey: string) {
+    if (typeof window === "undefined") return;
+    const element = document.getElementById(`onboarding-step-${stepKey}`);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
@@ -413,6 +420,7 @@ export default function Onboarding() {
                 return (
                   <div
                     key={step.key}
+                    id={`onboarding-step-${step.key}`}
                     className={[
                       "rounded-2xl border p-4",
                       step.done ? "border-success/30 bg-success/5" : "border-border bg-background",
@@ -458,7 +466,7 @@ export default function Onboarding() {
             </CardContent>
           </Card>
 
-          <div className="space-y-6">
+          <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <Card className="border-border/60 bg-card/90">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -502,6 +510,44 @@ export default function Onboarding() {
                     <p className="mt-2 text-sm font-semibold text-foreground">{crmFunnels ? "Customizado" : "Padrão"}</p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60 bg-card/90">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <CheckCircle2 className="h-5 w-5 text-accent" />
+                  Atalhos do checklist
+                </CardTitle>
+                <CardDescription>
+                  Pule direto para o que ainda falta. Faltam {pendingSteps.length} etapa{pendingSteps.length === 1 ? "" : "s"} para concluir.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {onboardingSteps.map((step) => (
+                  <button
+                    key={step.key}
+                    type="button"
+                    onClick={() => scrollToStep(step.key)}
+                    className={[
+                      "flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition",
+                      step.done ? "border-success/25 bg-success/5 hover:bg-success/10" : "border-border bg-background hover:bg-secondary/50",
+                    ].join(" ")}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{step.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{step.done ? "Pronto" : "Pendente"}</p>
+                    </div>
+                    <span
+                      className={[
+                        "rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                        step.done ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+                      ].join(" ")}
+                    >
+                      {step.done ? "OK" : "Falta"}
+                    </span>
+                  </button>
+                ))}
               </CardContent>
             </Card>
 
