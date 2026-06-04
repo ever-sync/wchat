@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
-import { useTenantSettings } from "@/lib/api/integrations";
 import { usePlatformAdminAccess } from "@/lib/api/platform-admin";
 import type { PermissionAction, PermissionFunctionKey } from "@/lib/permissions/role-permissions";
 
@@ -16,10 +15,6 @@ function FullScreenMessage({ children }: { children: ReactNode }) {
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
-  const { data: tenantSettings, isLoading: tenantSettingsLoading } = useTenantSettings({
-    enabled: isAuthenticated,
-  });
 
   if (isLoading) {
     return <FullScreenMessage>Carregando sessão...</FullScreenMessage>;
@@ -27,20 +22,6 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (tenantSettingsLoading) {
-    return <FullScreenMessage>Carregando configuração do tenant...</FullScreenMessage>;
-  }
-
-  const isAdminPath = location.pathname.startsWith("/admin");
-
-  if (
-    !isAdminPath &&
-    location.pathname !== "/onboarding" &&
-    !tenantSettings?.onboardingState?.completedAt
-  ) {
-    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;

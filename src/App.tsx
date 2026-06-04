@@ -17,7 +17,6 @@ import CadastroPagamento from "./pages/CadastroPagamento";
 import AtivarAcesso from "./pages/AtivarAcesso";
 import RecuperarSenha from "./pages/RecuperarSenha";
 import RedefinirSenha from "./pages/RedefinirSenha";
-import Onboarding from "./pages/Onboarding";
 import NotFound from "./pages/NotFound";
 import EmbedForm from "./pages/EmbedForm";
 
@@ -96,7 +95,6 @@ const App = () => (
                   <Route path="/recuperar-senha" element={<PublicOnlyRoute><RecuperarSenha /></PublicOnlyRoute>} />
                   <Route path="/ativar-acesso" element={<AtivarAcesso />} />
                   <Route path="/redefinir-senha" element={<RedefinirSenha />} />
-                  <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
 
                   {/* Formulário público embedável (sem auth) */}
                   <Route path="/embed" element={<EmbedForm />} />

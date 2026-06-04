@@ -98,14 +98,14 @@ export default function CadastroPagamento() {
       return;
     }
 
-    const onboardingDesc = "Complete o onboarding para configurar sua operacao.";
-    toast({ title: "Conta criada", description: onboardingDesc });
+    const successDesc = "Sua conta foi criada com sucesso.";
+    toast({ title: "Conta criada", description: successDesc });
     useAppStore.getState().addNotification({
       tipo: "sucesso",
       titulo: "Conta criada",
-      descricao: onboardingDesc,
+      descricao: successDesc,
     });
-    navigate("/onboarding");
+    navigate("/inbox");
   };
 
   const minutes = Math.floor(pixTimer / 60);
