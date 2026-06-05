@@ -1,31 +1,28 @@
-import Layout from "@/components/layout/Layout"
-import Banner from "@/components/sections/home2/Banner"
-import Service from "@/components/sections/home1/Service"
-import Chooseus from "@/components/sections/home2/Chooseus"
-import ServiceTabs from "@/components/sections/home3/Service"
-import Article from "@/components/sections/home3/Article"
-import Masterpiece from "@/components/sections/home1/Masterpiece"
-import Clients from "@/components/sections/home1/Clients"
-import Pricing from "@/components/sections/home1/Pricing"
-import Faq from "@/components/sections/home1/Faq"
-import Easier from "@/components/sections/home1/Easier"
+import React from 'react';
+import OctadeskHeader from '@/components/octadesk/OctadeskHeader';
+import HeroSection from '@/components/octadesk/HeroSection';
+import IntelligenceSection from '@/components/octadesk/IntelligenceSection';
+import SegmentSection from '@/components/octadesk/SegmentSection';
+import CasesSection from '@/components/octadesk/CasesSection';
+import IntegrationsSection from '@/components/octadesk/IntegrationsSection';
+import FaqSection from '@/components/octadesk/FaqSection';
+import PreFooterCta from '@/components/octadesk/PreFooterCta';
+import OctadeskFooter from '@/components/octadesk/OctadeskFooter';
 
 export default function Home() {
-
-    return (
-        <>
-            <Layout headerStyle={2} footerStyle={2}>
-                <Banner />
-                <Service />
-                <Chooseus />
-                <ServiceTabs />
-                <Article />
-                <Masterpiece />
-                <Clients />
-                <Pricing />
-                <Faq />
-                <Easier />
-            </Layout>
-        </>
-    )
+  return (
+    <div className="min-h-screen bg-white">
+      <OctadeskHeader />
+      <main>
+        <HeroSection />
+        <IntelligenceSection />
+        <SegmentSection />
+        <CasesSection />
+        <IntegrationsSection />
+        <FaqSection />
+        <PreFooterCta />
+      </main>
+      <OctadeskFooter />
+    </div>
+  );
 }

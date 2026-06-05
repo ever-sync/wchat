@@ -305,6 +305,7 @@ function renderWelcomeEmailHtml(input: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
   <body style="margin:0;padding:0;background:#f3f4f6;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Sua conta no WChat já está pronta. Abra a inbox, ajuste a IA e comece a operar.</div>
     <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
       <tr>
         <td align="center" style="padding:32px 12px;">
@@ -313,16 +314,16 @@ function renderWelcomeEmailHtml(input: {
               <td style="padding:32px 32px 20px;background:linear-gradient(135deg,#4f46e5,#6d28d9);color:#ffffff;">
                 <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">WChat</div>
                 <h1 style="margin:8px 0 0;font-size:30px;line-height:1.2;">Bem-vindo, ${greeting}!</h1>
-                <p style="margin:12px 0 0;font-size:16px;line-height:1.6;opacity:0.95;">Sua conta está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.</p>
+                <p style="margin:12px 0 0;font-size:16px;line-height:1.6;opacity:0.95;">Sua conta já está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.</p>
               </td>
             </tr>
             <tr>
               <td style="padding:28px 32px 12px;font-size:16px;line-height:1.7;">
-                <p style="margin:0 0 16px;">Aqui vai um caminho rápido para começar bem:</p>
+                <p style="margin:0 0 16px;">Para começar sem perder tempo, siga este caminho rápido:</p>
                 <ol style="margin:0 0 20px;padding-left:22px;">
-                  <li style="margin-bottom:10px;">Abra a caixa de entrada e veja as conversas chegando.</li>
-                  <li style="margin-bottom:10px;">Conecte seu WhatsApp e organize os canais.</li>
-                  <li style="margin-bottom:10px;">Ajuste a IA para responder no seu tom.</li>
+                  <li style="margin-bottom:10px;">Abra a inbox e acompanhe as conversas em tempo real.</li>
+                  <li style="margin-bottom:10px;">Revise seus canais e deixe o atendimento organizado.</li>
+                  <li style="margin-bottom:10px;">Ajuste a IA para responder com a sua cara.</li>
                 </ol>
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
                   <tr>
@@ -337,7 +338,7 @@ function renderWelcomeEmailHtml(input: {
                     </td>
                   </tr>
                 </table>
-                <p style="margin:0 0 10px;color:#374151;">Se precisar recuperar acesso depois, use a tela de login para pedir redefinição de senha.</p>
+                <p style="margin:0 0 10px;color:#374151;">Se quiser, o próximo passo mais valioso é configurar a IA e deixar o primeiro fluxo de atendimento redondo.</p>
               </td>
             </tr>
             <tr>
@@ -359,19 +360,296 @@ function renderWelcomeEmailText(input: { name: string; company: string | null; a
   return [
     `Bem-vindo, ${greeting}!`,
     "",
-    `Sua conta está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.`,
+    `Sua conta já está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.`,
     "",
-    "Primeiros passos:",
-    "1. Abra a caixa de entrada e veja as conversas chegando.",
-    "2. Conecte seu WhatsApp e organize os canais.",
-    "3. Ajuste a IA para responder no seu tom.",
+    "Comece por aqui:",
+    "1. Abra a inbox e acompanhe as conversas em tempo real.",
+    "2. Revise os canais e deixe o atendimento organizado.",
+    "3. Ajuste a IA para responder com a sua cara.",
     "",
     `Inbox: ${input.appUrl}/inbox`,
     `IA: ${input.appUrl}/agente-ia`,
     `Configurações: ${input.appUrl}/configuracoes`,
     "",
-    "Se precisar recuperar acesso depois, use a tela de login para pedir redefinição de senha.",
+    "Se quiser, o próximo passo mais valioso é configurar a IA e deixar o primeiro fluxo de atendimento redondo.",
   ].join("\n");
+}
+
+function renderRecoveryEmailHtml(input: {
+  name: string;
+  company: string | null;
+  appUrl: string;
+  actionLink: string;
+}): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua conta";
+  const appUrl = input.appUrl;
+  const link = input.actionLink;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body style="margin:0;padding:0;background:#f3f4f6;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Recebemos o pedido para redefinir sua senha no WChat. Se foi você, use o botão abaixo.</div>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td align="center" style="padding:32px 12px;">
+          <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;color:#111827;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <tr>
+              <td style="padding:32px 32px 20px;background:linear-gradient(135deg,#111827,#4f46e5);color:#ffffff;">
+                <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">WChat</div>
+                <h1 style="margin:8px 0 0;font-size:30px;line-height:1.2;">Redefina sua senha, ${greeting}</h1>
+                <p style="margin:12px 0 0;font-size:16px;line-height:1.6;opacity:0.95;">Recebemos um pedido para recuperar o acesso de ${company}.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 12px;font-size:16px;line-height:1.7;">
+                <p style="margin:0 0 16px;">Se foi você, toque no botão abaixo para criar uma nova senha com segurança.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                  <tr>
+                    <td>
+                      <a href="${link}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Redefinir senha</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px;color:#374151;">Se o botão não abrir, copie e cole este link no navegador:</p>
+                <p style="margin:0 0 16px;word-break:break-all;color:#4f46e5;">${link}</p>
+                <p style="margin:0 0 10px;color:#374151;">Depois de concluir, você volta direto para o painel e continua de onde parou.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 30px;font-size:13px;line-height:1.6;color:#6b7280;">
+                Se você não solicitou essa alteração, pode ignorar este e-mail. Sua senha atual continua valendo até alguém usar este link.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function renderRecoveryEmailText(input: {
+  name: string;
+  company: string | null;
+  appUrl: string;
+  actionLink: string;
+}): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua conta";
+  return [
+    `Redefina sua senha, ${greeting}`,
+    "",
+    `Recebemos um pedido para recuperar o acesso de ${company}.`,
+    "",
+    "Se foi você, use este link para criar uma nova senha:",
+    input.actionLink,
+    "",
+    `Se preferir, volte pelo painel: ${input.appUrl}/login`,
+    "",
+    "Se você não solicitou essa alteração, pode ignorar este e-mail.",
+  ].join("\n");
+}
+
+export async function sendPasswordRecoveryEmail(
+  admin: SupabaseClient,
+  input: {
+    tenantId: string;
+    recipientEmail: string;
+    recipientName?: string | null;
+    company?: string | null;
+    actionLink: string;
+  },
+): Promise<{ sent: boolean; skipped: boolean; messageId: string | null }> {
+  const fromCache = new Map<string, { name: string; email: string; replyTo: string | null } | null>();
+  const from = await resolveFrom(admin, input.tenantId, {}, fromCache);
+  if (!from) {
+    return { sent: false, skipped: true, messageId: null };
+  }
+
+  const appUrl = resolvePublicAppUrl();
+  const sent = await sendViaResend({
+    to: input.recipientEmail,
+    fromName: from.name,
+    fromEmail: from.email,
+    replyTo: from.replyTo,
+    subject: "Redefina sua senha no WChat",
+    html: renderRecoveryEmailHtml({
+      name: input.recipientName ?? "",
+      company: input.company ?? null,
+      appUrl,
+      actionLink: input.actionLink,
+    }),
+    text: renderRecoveryEmailText({
+      name: input.recipientName ?? "",
+      company: input.company ?? null,
+      appUrl,
+      actionLink: input.actionLink,
+    }),
+  });
+
+  return { sent: true, skipped: false, messageId: sent.messageId };
+}
+
+function renderCollaboratorInviteHtml(input: {
+  name: string;
+  company: string | null;
+  appUrl: string;
+  actionLink: string;
+  role: string;
+}): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua operação";
+  const roleLabel = input.role || "colaborador";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body style="margin:0;padding:0;background:#f3f4f6;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Você foi convidado para entrar no WChat e colaborar em ${company}. Abra o botão abaixo para ativar seu acesso.</div>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td align="center" style="padding:32px 12px;">
+          <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;color:#111827;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <tr>
+              <td style="padding:32px 32px 20px;background:linear-gradient(135deg,#4f46e5,#6d28d9);color:#ffffff;">
+                <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">WChat</div>
+                <h1 style="margin:8px 0 0;font-size:30px;line-height:1.2;">Você foi convidado, ${greeting}</h1>
+                <p style="margin:12px 0 0;font-size:16px;line-height:1.6;opacity:0.95;">${company} liberou um acesso de <strong>${roleLabel}</strong> para você entrar na plataforma.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 12px;font-size:16px;line-height:1.7;">
+                <p style="margin:0 0 16px;">Clique no botão abaixo para ativar seu acesso, definir sua senha e começar a usar o painel.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                  <tr>
+                    <td>
+                      <a href="${input.actionLink}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Ativar acesso</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px;color:#374151;">Se o botão não abrir, copie e cole este link no navegador:</p>
+                <p style="margin:0 0 16px;word-break:break-all;color:#4f46e5;">${input.actionLink}</p>
+                <p style="margin:0 0 10px;color:#374151;">Depois de concluir, você entra direto no WChat e já encontra a operação pronta para trabalhar.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 30px;font-size:13px;line-height:1.6;color:#6b7280;">
+                Se você não esperava este convite, pode ignorar este e-mail.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function renderCollaboratorInviteText(input: {
+  name: string;
+  company: string | null;
+  appUrl: string;
+  actionLink: string;
+  role: string;
+}): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua operação";
+  const roleLabel = input.role || "colaborador";
+  return [
+    `Você foi convidado, ${greeting}`,
+    "",
+    `${company} liberou um acesso de ${roleLabel} para você entrar na plataforma.`,
+    "",
+    "Clique no link abaixo para ativar seu acesso e definir sua senha:",
+    input.actionLink,
+    "",
+    `Depois de concluir, você entra direto no WChat: ${input.appUrl}`,
+    "",
+    "Se você não esperava este convite, pode ignorar este e-mail.",
+  ].join("\n");
+}
+
+export async function sendCollaboratorInviteEmail(
+  admin: SupabaseClient,
+  input: {
+    email: string;
+    nome: string;
+    empresa: string | null;
+    tenantId: string;
+    role: string;
+    appUrl: string;
+  },
+): Promise<{ sent: boolean; messageId: string | null }> {
+  const redirectTo = `${input.appUrl.replace(/\/+$/, "")}/ativar-acesso`;
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: input.email,
+    options: { redirectTo },
+    data: {
+      nome: input.nome,
+      empresa: input.empresa,
+      tenant_id: input.tenantId,
+      role: input.role,
+      plano: "colaborador",
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const actionLink = data?.properties?.action_link;
+  if (!actionLink) {
+    throw new Error("Nao foi possivel gerar o link do convite.");
+  }
+
+  const sent = await sendViaResend({
+    to: input.email,
+    fromName: await resolveInviteFromName(admin, input.tenantId),
+    fromEmail: await resolveInviteFromEmail(admin, input.tenantId),
+    replyTo: null,
+    subject: `Convite para entrar no WChat`,
+    html: renderCollaboratorInviteHtml({
+      name: input.nome,
+      company: input.empresa,
+      appUrl: input.appUrl,
+      actionLink,
+      role: input.role,
+    }),
+    text: renderCollaboratorInviteText({
+      name: input.nome,
+      company: input.empresa,
+      appUrl: input.appUrl,
+      actionLink,
+      role: input.role,
+    }),
+  });
+
+  return { sent: true, messageId: sent.messageId };
+}
+
+async function resolveInviteFromName(
+  admin: SupabaseClient,
+  tenantId: string,
+): Promise<string> {
+  const from = await resolveFrom(admin, tenantId, {}, new Map());
+  return from?.name ?? "WChat";
+}
+
+async function resolveInviteFromEmail(
+  admin: SupabaseClient,
+  tenantId: string,
+): Promise<string> {
+  const from = await resolveFrom(admin, tenantId, {}, new Map());
+  return from?.email ?? "no-reply@wchat.local";
 }
 
 export interface WelcomeDispatchResult {

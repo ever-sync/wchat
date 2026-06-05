@@ -387,9 +387,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     welcomeEmailForUserRef.current = profile.id;
     void invokeAuthedFunction<{ ok: boolean; sent: number; failed: number; skipped: number }>(
-      "welcome-email-dispatch",
+      "marketing-email-dispatch",
     ).catch((error) => {
-      console.warn("welcome-email-dispatch falhou:", error);
+      console.warn("marketing-email-dispatch (boas-vindas) falhou:", error);
       welcomeEmailForUserRef.current = null;
     });
   }, [isLoading, mfaPending, profile?.id, session?.access_token]);

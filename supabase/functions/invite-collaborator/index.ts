@@ -6,6 +6,7 @@ import {
   createAdminClient,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
+import { sendCollaboratorInviteEmail } from "../_shared/email.ts";
 
 const allowedRoles = new Set(["admin", "operacao", "financeiro", "atendimento"]);
 
@@ -111,53 +112,17 @@ async function sendInviteEmail(
   request: Request,
   payload: InviteEmailPayload,
 ): Promise<SendInviteEmailResult> {
-  const redirectTo = `${resolveAppUrl(request, payload.appUrl)}/ativar-acesso`;
-  const { error: inviteError } = await service.auth.admin.inviteUserByEmail(payload.email, {
-    redirectTo,
-    data: {
-      nome: payload.nome,
-      empresa: payload.empresa,
-      tenant_id: payload.tenantId,
-      role: payload.role,
-      plano: "colaborador",
-    },
+  const appUrl = resolveAppUrl(request, payload.appUrl);
+  const result = await sendCollaboratorInviteEmail(service, {
+    email: payload.email,
+    nome: payload.nome,
+    empresa: payload.empresa,
+    tenantId: payload.tenantId,
+    role: payload.role,
+    appUrl,
   });
 
-  if (!inviteError) {
-    return { emailSent: true, warning: null };
-  }
-
-  const message = inviteError.message.toLowerCase();
-  const isEmailLimit = message.includes("email rate limit exceeded") || message.includes("rate limit");
-
-  if (isEmailLimit) {
-    return {
-      emailSent: false,
-      warning:
-        "Limite de envio de e-mails do Supabase atingido. Aguarde alguns minutos e use Reenviar e-mail no convite pendente.",
-    };
-  }
-
-  const alreadyExists =
-    message.includes("already been registered") ||
-    message.includes("already registered") ||
-    message.includes("user already registered");
-
-  if (alreadyExists) {
-    return {
-      emailSent: false,
-      warning:
-        "Este e-mail ja possui conta. Peça para usar Recuperar senha na tela de login ou confira a caixa de spam do convite anterior.",
-    };
-  }
-
-  if (message.includes("database error saving new user")) {
-    throw new Error(
-      "Falha ao criar o usuario no banco (trigger de cadastro). Aplique a migration 20260517123000_fix_invite_user_creation_trigger.sql no Supabase e tente novamente.",
-    );
-  }
-
-  throw new Error(inviteError.message);
+  return { emailSent: result.sent, warning: null };
 }
 
 Deno.serve(async (request) => {
