@@ -43,6 +43,10 @@ verify_jwt = false
 [functions.marketing-email-dispatch]
 verify_jwt = false
 
+# Boas-vindas por e-mail: cron (x-cron-secret) processa todos; app (JWT) processa o próprio tenant.
+[functions.welcome-email-dispatch]
+verify_jwt = false
+
 # Worker dos fluxos de automação de marketing: chamado por cron (x-cron-secret).
 [functions.marketing-flow-worker]
 verify_jwt = false

@@ -429,6 +429,7 @@ Deno.serve(async (request) => {
     platformWorkerRunsRes,
     workerAlertsRes,
     emailDispatchesRes,
+    welcomeDispatchesRes,
     adDispatchesRes,
     aiAlertsRes,
   ] = await Promise.all([
@@ -470,6 +471,10 @@ Deno.serve(async (request) => {
       .select("tenant_id, status, next_attempt_at, updated_at, created_at")
       .or(`and(status.in.(queued,retrying),next_attempt_at.lte.${nowIso}),and(status.eq.failed,updated_at.gte.${since24h})`),
     admin
+      .from("welcome_email_dispatches")
+      .select("tenant_id, status, next_attempt_at, updated_at, created_at")
+      .or(`and(status.in.(queued,retrying),next_attempt_at.lte.${nowIso}),and(status.eq.failed,updated_at.gte.${since24h})`),
+    admin
       .from("marketing_ad_conversion_dispatches")
       .select("tenant_id, status, last_attempt_at, created_at")
       .or(`status.eq.pending,and(status.eq.failed,last_attempt_at.gte.${since24h})`),
@@ -491,6 +496,7 @@ Deno.serve(async (request) => {
     platformWorkerRunsRes,
     workerAlertsRes,
     emailDispatchesRes,
+    welcomeDispatchesRes,
     adDispatchesRes,
     aiAlertsRes,
   ]) {
@@ -567,6 +573,10 @@ Deno.serve(async (request) => {
   const emailPending = countRows(emailDispatchesRes.data, (row) => ["queued", "retrying"].includes(String(row.status ?? "")));
   const emailErrors = countRows(emailDispatchesRes.data, (row) => String(row.status ?? "") === "failed");
   const emailLastActivity = latestTimestamp(emailDispatchesRes.data, "updated_at") ?? latestTimestamp(emailDispatchesRes.data, "created_at");
+
+  const welcomePending = countRows(welcomeDispatchesRes.data, (row) => ["queued", "retrying"].includes(String(row.status ?? "")));
+  const welcomeErrors = countRows(welcomeDispatchesRes.data, (row) => String(row.status ?? "") === "failed");
+  const welcomeLastActivity = latestTimestamp(welcomeDispatchesRes.data, "updated_at") ?? latestTimestamp(welcomeDispatchesRes.data, "created_at");
 
   const adPending = countRows(adDispatchesRes.data, (row) => String(row.status ?? "") === "pending");
   const adErrors = countRows(adDispatchesRes.data, (row) => String(row.status ?? "") === "failed");
@@ -679,6 +689,18 @@ Deno.serve(async (request) => {
       running: 0,
       errors_24h: emailErrors + hbFailures("marketing-email-dispatch"),
       details: hbDetails("marketing-email-dispatch", ["Drena marketing_email_dispatches", `${emailErrors} falha(s) recentes`]),
+    },
+    {
+      id: "welcome-email-dispatch",
+      label: "Boas-vindas",
+      schedule: "1 min",
+      severity: workerSeverity({ pending: welcomePending, errors: welcomeErrors + hbFailures("welcome-email-dispatch"), heartbeatStale: hbStale("welcome-email-dispatch", 3) }),
+      status: workerStatus(workerSeverity({ pending: welcomePending, errors: welcomeErrors + hbFailures("welcome-email-dispatch"), heartbeatStale: hbStale("welcome-email-dispatch", 3) })),
+      last_seen: hbLast("welcome-email-dispatch", welcomeLastActivity),
+      pending: welcomePending,
+      running: 0,
+      errors_24h: welcomeErrors + hbFailures("welcome-email-dispatch"),
+      details: hbDetails("welcome-email-dispatch", ["Drena welcome_email_dispatches", `${welcomeErrors} falha(s) recentes`]),
     },
     {
       id: "marketing-ad-conversion-dispatch",

@@ -19,6 +19,7 @@ Workers monitorados:
 - `ai-orchestrator`
 - `webhook-dispatcher`
 - `marketing-email-dispatch`
+- `welcome-email-dispatch`
 - `marketing-ad-conversion-dispatch`
 - `uazapi-instance-sync`
 - `billing-usage-alerts`
@@ -92,6 +93,7 @@ Todos os workers agendados passaram a gravar heartbeat real:
 - `marketing-flow-worker`
 - `webhook-dispatcher`
 - `marketing-email-dispatch`
+- `welcome-email-dispatch`
 - `marketing-ad-conversion-dispatch`
 - `uazapi-instance-sync`
 - `billing-usage-alerts`

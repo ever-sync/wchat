@@ -264,3 +264,219 @@ export async function processPendingDispatches(
 
   return result;
 }
+
+function resolvePublicAppUrl(): string {
+  const candidates = [
+    Deno.env.get("APP_SITE_URL"),
+    Deno.env.get("PUBLIC_APP_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate?.trim()) continue;
+    try {
+      const parsed = new URL(candidate.trim());
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return parsed.origin.replace(/\/+$/, "");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return "http://localhost:8080";
+}
+
+function renderWelcomeEmailHtml(input: {
+  name: string;
+  company: string | null;
+  appUrl: string;
+}): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua operação";
+  const inboxUrl = `${input.appUrl}/inbox`;
+  const aiUrl = `${input.appUrl}/agente-ia`;
+  const configUrl = `${input.appUrl}/configuracoes`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body style="margin:0;padding:0;background:#f3f4f6;">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td align="center" style="padding:32px 12px;">
+          <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;color:#111827;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <tr>
+              <td style="padding:32px 32px 20px;background:linear-gradient(135deg,#4f46e5,#6d28d9);color:#ffffff;">
+                <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">WChat</div>
+                <h1 style="margin:8px 0 0;font-size:30px;line-height:1.2;">Bem-vindo, ${greeting}!</h1>
+                <p style="margin:12px 0 0;font-size:16px;line-height:1.6;opacity:0.95;">Sua conta está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 12px;font-size:16px;line-height:1.7;">
+                <p style="margin:0 0 16px;">Aqui vai um caminho rápido para começar bem:</p>
+                <ol style="margin:0 0 20px;padding-left:22px;">
+                  <li style="margin-bottom:10px;">Abra a caixa de entrada e veja as conversas chegando.</li>
+                  <li style="margin-bottom:10px;">Conecte seu WhatsApp e organize os canais.</li>
+                  <li style="margin-bottom:10px;">Ajuste a IA para responder no seu tom.</li>
+                </ol>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                  <tr>
+                    <td style="padding-right:12px;">
+                      <a href="${inboxUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Abrir inbox</a>
+                    </td>
+                    <td style="padding-right:12px;">
+                      <a href="${aiUrl}" style="display:inline-block;background:#ede9fe;color:#5b21b6;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Configurar IA</a>
+                    </td>
+                    <td>
+                      <a href="${configUrl}" style="display:inline-block;background:#f3f4f6;color:#111827;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:bold;">Acessar configurações</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 10px;color:#374151;">Se precisar recuperar acesso depois, use a tela de login para pedir redefinição de senha.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 30px;font-size:13px;line-height:1.6;color:#6b7280;">
+                Se este acesso não parece seu, entre em contato com a equipe da plataforma.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function renderWelcomeEmailText(input: { name: string; company: string | null; appUrl: string }): string {
+  const greeting = input.name || "Olá";
+  const company = input.company?.trim() ? input.company.trim() : "sua operação";
+  return [
+    `Bem-vindo, ${greeting}!`,
+    "",
+    `Sua conta está pronta para operar ${company} com WhatsApp, IA e CRM no mesmo lugar.`,
+    "",
+    "Primeiros passos:",
+    "1. Abra a caixa de entrada e veja as conversas chegando.",
+    "2. Conecte seu WhatsApp e organize os canais.",
+    "3. Ajuste a IA para responder no seu tom.",
+    "",
+    `Inbox: ${input.appUrl}/inbox`,
+    `IA: ${input.appUrl}/agente-ia`,
+    `Configurações: ${input.appUrl}/configuracoes`,
+    "",
+    "Se precisar recuperar acesso depois, use a tela de login para pedir redefinição de senha.",
+  ].join("\n");
+}
+
+export interface WelcomeDispatchResult {
+  processed: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+}
+
+export async function processWelcomeDispatches(
+  admin: SupabaseClient,
+  opts: { tenantId?: string | null; limit?: number } = {},
+): Promise<WelcomeDispatchResult> {
+  const limit = opts.limit ?? 50;
+  let query = admin
+    .from("welcome_email_dispatches")
+    .select("*")
+    .in("status", ["queued", "retrying"])
+    .lte("next_attempt_at", new Date().toISOString())
+    .order("next_attempt_at", { ascending: true })
+    .limit(limit);
+  if (opts.tenantId) query = query.eq("tenant_id", opts.tenantId);
+
+  const { data: rows, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const result: WelcomeDispatchResult = { processed: 0, sent: 0, failed: 0, skipped: 0 };
+  const fromCache = new Map<string, { name: string; email: string; replyTo: string | null } | null>();
+  const appUrl = resolvePublicAppUrl();
+
+  for (const row of rows ?? []) {
+    const d = row as Record<string, unknown>;
+    const id = String(d.id);
+    const tenantId = String(d.tenant_id);
+    const recipient = String(d.recipient_email);
+    result.processed++;
+
+    const attempts = Number(d.attempts ?? 0) + 1;
+    const maxAttempts = Number(d.max_attempts ?? 3);
+    const from = await resolveFrom(admin, tenantId, {}, fromCache);
+
+    if (!from) {
+      await admin
+        .from("welcome_email_dispatches")
+        .update({
+          status: "failed",
+          attempts,
+          last_attempt_at: new Date().toISOString(),
+          error: "Remetente não configurado (tenant_email_settings ou MARKETING_EMAIL_FROM)",
+        })
+        .eq("id", id);
+      result.failed++;
+      continue;
+    }
+
+    try {
+      const sent = await sendViaResend({
+        to: recipient,
+        fromName: from.name,
+        fromEmail: from.email,
+        replyTo: from.replyTo,
+        subject: "Bem-vindo ao WChat",
+        html: renderWelcomeEmailHtml({
+          name: String(d.recipient_name ?? ""),
+          company: (d.company == null ? null : String(d.company)) ?? null,
+          appUrl,
+        }),
+        text: renderWelcomeEmailText({
+          name: String(d.recipient_name ?? ""),
+          company: (d.company == null ? null : String(d.company)) ?? null,
+          appUrl,
+        }),
+      });
+
+      await admin
+        .from("welcome_email_dispatches")
+        .update({
+          status: "sent",
+          attempts,
+          last_attempt_at: new Date().toISOString(),
+          sent_at: new Date().toISOString(),
+          error: null,
+          provider_message_id: sent.messageId,
+          response: sent.raw,
+        })
+        .eq("id", id);
+      result.sent++;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Falha no envio";
+      const willRetry = attempts < maxAttempts;
+      await admin
+        .from("welcome_email_dispatches")
+        .update({
+          status: willRetry ? "retrying" : "failed",
+          attempts,
+          last_attempt_at: new Date().toISOString(),
+          next_attempt_at: willRetry
+            ? new Date(Date.now() + backoffMinutes(attempts) * 60_000).toISOString()
+            : new Date().toISOString(),
+          error: message,
+        })
+        .eq("id", id);
+      if (!willRetry) result.failed++;
+    }
+  }
+
+  return result;
+}

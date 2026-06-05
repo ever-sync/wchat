@@ -13,6 +13,7 @@ agendados via cron do Ubuntu na VPS.
 - `marketing-flow-worker`: a cada 1 minuto.
 - `webhook-dispatcher`: a cada 1 minuto.
 - `marketing-email-dispatch`: a cada 1 minuto.
+- `welcome-email-dispatch`: a cada 1 minuto.
 - `marketing-ad-conversion-dispatch`: a cada 5 minutos.
 - `uazapi-instance-sync`: a cada 5 minutos.
 - `billing-usage-alerts`: a cada 6 horas.
@@ -29,6 +30,7 @@ Arquivos de cron:
 /etc/cron.d/wchat-billing-usage-alerts
 /etc/cron.d/wchat-marketing-ad-conversion-dispatch
 /etc/cron.d/wchat-marketing-email-dispatch
+/etc/cron.d/wchat-welcome-email-dispatch
 /etc/cron.d/wchat-marketing-flow-worker
 /etc/cron.d/wchat-uazapi-instance-sync
 /etc/cron.d/wchat-webhook-dispatcher

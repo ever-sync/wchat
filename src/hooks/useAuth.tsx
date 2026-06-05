@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { E2E_MOCK_PROFILE_ID, getE2eMockRole, isE2eMockAuth } from "@/lib/e2e";
+import { invokeAuthedFunction } from "@/lib/api/functions";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { recordAuditEventSafe } from "@/lib/api/audit-logs";
 import { useAppStore } from "@/store/useAppStore";
@@ -119,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mfaPending, setMfaPending] = useState(false);
   const authHydrationInFlightRef = useRef<Promise<void> | null>(null);
   const pendingSessionRef = useRef<Session | null>(null);
+  const welcomeEmailForUserRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -141,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       setSession(null);
       setIsLoading(false);
+      welcomeEmailForUserRef.current = null;
       return undefined;
     }
 
@@ -367,10 +370,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setProfile(null);
         setMfaPending(false);
+        welcomeEmailForUserRef.current = null;
       },
     }),
     [isLoading, profile, session, mfaPending],
   );
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !session?.access_token || !profile?.id || isLoading || mfaPending) {
+      return;
+    }
+
+    if (welcomeEmailForUserRef.current === profile.id) {
+      return;
+    }
+
+    welcomeEmailForUserRef.current = profile.id;
+    void invokeAuthedFunction<{ ok: boolean; sent: number; failed: number; skipped: number }>(
+      "welcome-email-dispatch",
+    ).catch((error) => {
+      console.warn("welcome-email-dispatch falhou:", error);
+      welcomeEmailForUserRef.current = null;
+    });
+  }, [isLoading, mfaPending, profile?.id, session?.access_token]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
