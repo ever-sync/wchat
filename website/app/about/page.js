@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import VideoPopup from "@/components/elements/VideoPopup"
 import CounterUp from "@/components/elements/CounterUp"
 import { Autoplay, Navigation, Pagination } from "swiper/modules"
@@ -68,7 +68,7 @@ export default function about() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Conheça o wChat">
+            <WchatLayout breadcrumbTitle="Conheça o wChat">
                 {/* about-section */}
                 <section className="exploring-section about-page">
                     <div className="pattern-layer" style={{ backgroundImage: "url(assets/images/shape/shape-43.png)" }}></div>
@@ -517,7 +517,7 @@ export default function about() {
                 </section>
                 {/* team-section end */}
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

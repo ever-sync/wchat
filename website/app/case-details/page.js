@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import Pricing from "@/components/sections/home2/Pricing"
 import Tools from "@/components/sections/home3/Tools"
 import Link from "next/link"
@@ -67,7 +67,7 @@ export default function cases_details() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1}>
+            <WchatLayout>
 
                 {/* cases-details */}
                 <section className="case-details">
@@ -566,7 +566,7 @@ export default function cases_details() {
                 
                 <Tools />
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import Link from "next/link"
 
 
@@ -8,7 +8,7 @@ export default function cases_two() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1}>
+            <WchatLayout>
 
                 {/* service-style-two */}
                 <section className="service-style-two cases-page-two-section">
@@ -173,7 +173,7 @@ export default function cases_two() {
                 {/* masterpiece-style-two end */}
 
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

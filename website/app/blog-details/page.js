@@ -1,10 +1,10 @@
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import Link from "next/link"
 export default function blog_details() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Blog Details">
+            <WchatLayout breadcrumbTitle="Blog Details">
             <section className="sidebar-page-container blog-details">
                 <div className="auto-container">
                     <div className="row clearfix">
@@ -130,7 +130,7 @@ export default function blog_details() {
                                         <p>Your email address will not be published. Required fields are marked <span>*</span></p>
                                     </div>
                                     <div className="form-inner">
-                                        <form method="post" action="contact.html">
+                                        <form method="post" action="/contact">
                                             <div className="row clearfix">
                                                 <div className="col-lg-6 col-md-6 col-sm-12 single-column">
                                                     <div className="form-group">
@@ -306,7 +306,7 @@ export default function blog_details() {
                     </div>
                 </div>
             </section>
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

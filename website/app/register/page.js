@@ -1,66 +1,68 @@
-import Link from "next/link"
+import Link from "next/link";
+import WchatLayout from "@/components/wchat/WchatLayout";
 
 export default function register() {
-
-    return (
-        <>
-            <section className="user-form-section register-section centred">
-                <div className="pattern-layer" style={{ backgroundImage: "url(assets/images/shape/shape-6.jpg)" }}></div>
-                <div className="auto-container">
-                    <div className="sec-title light">
-                        <h6>[ Register ]</h6>
-                        <h2>Begin your journey with AI.zenius</h2>
-                        <p>Join 100.000s of Entrepreneurs, Freelancers, Marketers & ect...</p>
-                    </div>
-                    <div className="inner-box">
-                        <ul className="download-list clearfix">
-                            <li><Link href="/register"><img src="assets/images/icons/icon-59.png" alt=""/>Continue With Google</Link></li>
-                            <li><Link href="/register"><img src="assets/images/icons/icon-60.png" alt=""/>Continue With Apple</Link></li>
-                        </ul>
-                        <div className="other-text">
-                            <h6>or</h6>
-                        </div>
-                        <div className="form-inner">
-                            <div className="shape" style={{ backgroundImage: "url(assets/images/shape/shape-51.png)" }}></div>
-                            <form action="/register" method="post">
-                                <div className="form-group">
-                                    <div className="text-box">
-                                        <div className="icon"><img src="assets/images/icons/icon-57.png" alt=""/></div>
-                                        <h6>User Name</h6>
-                                    </div>
-                                    <input type="text" name="name" placeholder="Your Name" required=""/>
-                                </div>
-                                <div className="form-group">
-                                    <div className="text-box">
-                                        <div className="icon"><img src="assets/images/icons/icon-61.png" alt=""/></div>
-                                        <h6>Email</h6>
-                                    </div>
-                                    <input type="email" name="email" placeholder="Email Address" required=""/>
-                                </div>
-                                <div className="form-group">
-                                    <div className="text-box">
-                                        <div className="icon"><img src="assets/images/icons/icon-58.png" alt=""/></div>
-                                        <h6>Password</h6>
-                                    </div>
-                                    <input type="password" name="password" placeholder="xxxxxxxxxx" required=""/>
-                                </div>
-                                <div className="form-group option-box">
-                                    <div className="check-box">
-                                        <input className="check" type="checkbox" id="checkbox1"/>
-                                        <label for="checkbox1">I agree to the Terms of Service & Privacy Policy</label>
-                                    </div>
-                                </div>
-                                <div className="form-group message-btn">
-                                    <button type="submit" className="theme-btn btn-one">Register With AI.zenius</button>
-                                </div>
-                            </form>
-                        </div>
-                        <div className="lower-text">
-                            <h6>Already have an account? <Link href="/login">Login</Link></h6>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </>
-    )
+  return (
+    <WchatLayout breadcrumbTitle="Criar conta">
+      <section className="contact-sec space overflow-hidden">
+        <div className="container th-container4">
+          <div className="row justify-content-center">
+            <div className="col-lg-6 col-xl-5">
+              <div className="contact-form rounded-3 border border-[var(--th-border-color)] bg-white p-4 p-md-5 shadow-sm">
+                <h3 className="title mb-1">Comece seu teste grátis</h3>
+                <p className="mb-4 text-body">7 dias grátis. Sem cartão de crédito.</p>
+                <form action="/register" method="post">
+                  <div className="form-group mb-3">
+                    <label htmlFor="name" className="form-label">
+                      Nome completo
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      name="name"
+                      id="name"
+                      placeholder="Seu nome"
+                      required
+                    />
+                  </div>
+                  <div className="form-group mb-3">
+                    <label htmlFor="email" className="form-label">
+                      E-mail
+                    </label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      name="email"
+                      id="email"
+                      placeholder="seu@email.com"
+                      required
+                    />
+                  </div>
+                  <div className="form-group mb-4">
+                    <label htmlFor="password" className="form-label">
+                      Senha
+                    </label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      name="password"
+                      id="password"
+                      placeholder="Mínimo 8 caracteres"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="th-btn2 btn-gradient w-100">
+                    Criar conta grátis
+                  </button>
+                </form>
+                <p className="mt-4 mb-0 text-center text-body">
+                  Já tem conta? <Link href="/login">Entrar</Link>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </WchatLayout>
+  );
 }

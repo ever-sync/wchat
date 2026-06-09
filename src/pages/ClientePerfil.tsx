@@ -38,6 +38,7 @@ import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
+import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { CrmSaleItemsPreview } from "@/components/crm/CrmSaleItemsPreview";
 import { useCustomer, useUpdateCustomer } from "@/lib/api/customers";
 import {
@@ -309,6 +310,8 @@ export function ClientePerfilContent({
   const [taskDueLocal, setTaskDueLocal] = useState("");
   const [taskNotes, setTaskNotes] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
+  const [lostDialogBlockCustomer, setLostDialogBlockCustomer] = useState(false);
   const taskAssigneeDefaultSeededRef = useRef(false);
   const { data: cliente, isLoading, error } = useCustomer(id);
 
@@ -511,7 +514,7 @@ export function ClientePerfilContent({
       stage.isLostStage ||
       isLostDestinationStage(effectiveCrmFunnels, funnel.id, stage.id)
     ) {
-      void handleMarkLoss();
+      openMarkLossDialog(false);
       return;
     }
     if (isSaleDestinationStage(effectiveCrmFunnels, funnel.id, stage.id)) {
@@ -562,7 +565,7 @@ export function ClientePerfilContent({
     });
   };
 
-  const handleMarkLoss = async () => {
+  const openMarkLossDialog = (blockCustomer: boolean) => {
     if (clientePerfilCrmLocked) {
       toast({
         title: "Assuma o negócio",
@@ -578,33 +581,74 @@ export function ClientePerfilContent({
       });
       return;
     }
+    setLostDialogBlockCustomer(blockCustomer);
+    setLostDialogOpen(true);
+  };
+
+  const confirmMarkLoss = async (lostReason: string) => {
     const lostStageId = resolveConfiguredLostStageId(effectiveCrmFunnels, customerFunnelId);
-    const openNegotiations = customerNegotiations.filter((n) => n.status === "em_andamento");
-    for (const n of openNegotiations) {
-      await updateNegotiation.mutateAsync({
-        id: n.id,
-        patch: { status: "perdido", stageId: lostStageId, lostReason: "Marcado no perfil do cliente" },
+    const activeNegotiations = customerNegotiations.filter(
+      (n) => n.status === "em_andamento" || n.status === "pausado" || n.status === "nao_pausado",
+    );
+
+    try {
+      if (activeNegotiations.length === 0 && crmEnabled) {
+        const created = await createNegotiation.mutateAsync({
+          title: cliente.nome?.trim() || "Nova negociação",
+          funnelId: customerFunnelId,
+          stageId: lostStageId,
+          status: "perdido",
+          customerId: cliente.id,
+        });
+        await updateNegotiation.mutateAsync({
+          id: created.id,
+          patch: { lostReason },
+        });
+      } else {
+        for (const n of activeNegotiations) {
+          await updateNegotiation.mutateAsync({
+            id: n.id,
+            patch: { status: "perdido", stageId: lostStageId, lostReason },
+          });
+        }
+      }
+
+      const nextSource = {
+        ...(cliente.sourceColumns ?? {}),
+        [CRM_FUNNEL_ID_KEY]: customerFunnelId,
+        [CRM_PIPELINE_STAGE_KEY]: lostStageId,
+      };
+      const nextCustomerStatus = lostDialogBlockCustomer ? "bloqueado" : cliente.status;
+      await updateCustomer.mutateAsync({
+        id: cliente.id,
+        input: {
+          ...toCustomerInput(cliente, nextCustomerStatus),
+          sourceColumns: nextSource,
+        },
       });
+
+      if (lostDialogBlockCustomer) {
+        const descricao = `${cliente.nome} foi bloqueado.`;
+        useAppStore.getState().addNotification({
+          tipo: "aviso",
+          titulo: "Cliente bloqueado",
+          descricao,
+        });
+        toast({ title: "Bloqueado", description: descricao });
+      } else {
+        toast({
+          title: "Marcar perda",
+          description: "Negociação e funil do cliente atualizados.",
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "Não foi possível salvar",
+        description: e instanceof Error ? e.message : "Tente novamente.",
+        variant: "destructive",
+      });
+      throw e;
     }
-    const nextSource = {
-      ...(cliente.sourceColumns ?? {}),
-      [CRM_FUNNEL_ID_KEY]: customerFunnelId,
-      [CRM_PIPELINE_STAGE_KEY]: lostStageId,
-    };
-    await updateCustomer.mutateAsync({
-      id: cliente.id,
-      input: { ...toCustomerInput(cliente, "bloqueado"), sourceColumns: nextSource },
-    });
-    const descricao = `${cliente.nome} foi bloqueado.`;
-    toast({
-      title: "Marcar perda",
-      description: descricao,
-    });
-    useAppStore.getState().addNotification({
-      tipo: "aviso",
-      titulo: "Cliente bloqueado",
-      descricao,
-    });
   };
 
   return (
@@ -741,7 +785,7 @@ export function ClientePerfilContent({
               }
             : undefined
         }
-        onMarkLoss={canEditCrm ? () => void handleMarkLoss() : () => {
+        onMarkLoss={canEditCrm ? () => openMarkLossDialog(false) : () => {
           toast({
             title: "Ação indisponível",
             description: "Seu papel nao tem permissao para marcar perda.",
@@ -784,7 +828,7 @@ export function ClientePerfilContent({
           setDialogOpen(true);
         }}
         onOpenInbox={openCustomerInbox}
-        onBlock={canEditCustomer ? () => void handleMarkLoss() : () => {
+        onBlock={canEditCustomer ? () => openMarkLossDialog(true) : () => {
           toast({
             title: "Ação indisponível",
             description: "Seu papel nao tem permissao para bloquear este cliente.",
@@ -932,6 +976,16 @@ export function ClientePerfilContent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <MarkLostDialog
+        open={lostDialogOpen}
+        onOpenChange={setLostDialogOpen}
+        title={
+          lostDialogBlockCustomer ? "Bloquear cliente e marcar perda" : "Marcar como perdido"
+        }
+        pending={updateNegotiation.isPending || updateCustomer.isPending || createNegotiation.isPending}
+        onConfirm={confirmMarkLoss}
+      />
 
       <CustomerFormDialog
         open={dialogOpen}

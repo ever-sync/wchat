@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import { useState } from "react"
 
 
@@ -25,7 +25,7 @@ export default function faq() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Questions & Answers">
+            <WchatLayout breadcrumbTitle="Perguntas frequentes">
 
                 {/* faq-page-section */}
                 <section className="faq-page-section sec-pad">
@@ -136,7 +136,7 @@ export default function faq() {
                 {/* faq-page-section end */}
 
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

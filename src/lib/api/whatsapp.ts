@@ -2027,11 +2027,9 @@ export function useSendWhatsappMessage(
 
         return {
           ...old,
-          pages: upsertOutboundInboxMessagePages(old.pages, data),
+          pages: sanitizeInboxMessagePages(upsertOutboundInboxMessagePages(old.pages, data)),
         };
       });
-
-      void queryClient.invalidateQueries({ queryKey: ["inbox-messages-all", variables.chatId] });
 
       // Patch local da lista lateral em vez de invalidar `inbox-chats`. Evita um
       // GET com todos os filtros ativos (search, instancia, status, unreadOnly)

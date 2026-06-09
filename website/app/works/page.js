@@ -1,10 +1,10 @@
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 
 export default function works() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="How It’s Work">
+            <WchatLayout breadcrumbTitle="How It’s Work">
 
                 {/* working-style-two */}
                 <section className="working-style-two sec-pad">
@@ -88,7 +88,7 @@ export default function works() {
                 {/* working-style-two end */}
 
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

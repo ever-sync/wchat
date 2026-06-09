@@ -496,6 +496,17 @@ Deno.serve(async (request) => {
 
     if (rpcError) {
       console.error("[forms-public] submit error:", rpcError.message);
+      const limitMsg = rpcError.message?.includes("Limite do plano atingido para customers");
+      if (limitMsg) {
+        return jsonResponse(
+          {
+            error:
+              "Este formulário está temporariamente indisponível porque a conta atingiu o limite de clientes do plano. Entre em contato com o responsável pelo site.",
+            code: "plan_customer_limit",
+          },
+          503,
+        );
+      }
       return jsonResponse({ error: "Não foi possível enviar no momento. Tente novamente." }, 500);
     }
 

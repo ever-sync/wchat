@@ -11,6 +11,8 @@ import {
   MoreVertical,
   Users,
   Pencil,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -75,7 +77,8 @@ import {
 } from "@/lib/customer-custom-field-display";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CrmTask, Customer } from "@/types/domain";
+import { negotiationPauseToggleLabel } from "@/lib/crm/negotiation-status";
+import type { CrmNegotiationStatus, CrmTask, Customer } from "@/types/domain";
 
 /** Paleta wChat */
 const BRAND_ACCENT = "#5B2FD4";
@@ -657,6 +660,10 @@ export type ClienteRdPerfilViewProps = {
   onRefresh: () => void;
   onMarkLoss: () => void;
   onMarkWin: () => void;
+  /** Status da negociação persistida — habilita Pausar/Retomar na ficha CRM. */
+  negotiationStatus?: CrmNegotiationStatus;
+  onTogglePauseNegotiation?: () => void;
+  pauseTogglePending?: boolean;
   onEdit: () => void;
   onOpenInbox: () => void;
   onBlock: () => void;
@@ -731,6 +738,9 @@ export function ClienteRdPerfilView({
   onRefresh,
   onMarkLoss,
   onMarkWin,
+  negotiationStatus,
+  onTogglePauseNegotiation,
+  pauseTogglePending,
   onEdit,
   onOpenInbox,
   onBlock,
@@ -1079,6 +1089,31 @@ export function ClienteRdPerfilView({
               >
                 <Users className="mr-2 h-4 w-4" aria-hidden />
                 {releaseNegotiationPending ? "Devolvendo…" : "Devolver ao pool"}
+              </Button>
+            ) : null}
+            {negotiationPauseToggleLabel(negotiationStatus ?? "em_andamento") &&
+            onTogglePauseNegotiation ? (
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="crm-toggle-pause"
+                className="rounded-[10px] border-[var(--crm-border-2)] px-4 py-2.5 font-semibold shadow-none hover:bg-[var(--crm-surface)] disabled:opacity-50"
+                disabled={negotiationReadOnly || crmActionsDisabled || pauseTogglePending}
+                title={
+                  negotiationReadOnly
+                    ? "Assuma o negócio para pausar ou retomar"
+                    : crmActionsDisabled
+                      ? "Seu papel não tem permissão"
+                      : undefined
+                }
+                onClick={onTogglePauseNegotiation}
+              >
+                {negotiationStatus === "pausado" ? (
+                  <Play className="mr-2 h-4 w-4" aria-hidden />
+                ) : (
+                  <Pause className="mr-2 h-4 w-4" aria-hidden />
+                )}
+                {negotiationPauseToggleLabel(negotiationStatus ?? "em_andamento")}
               </Button>
             ) : null}
             <Button

@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import Faq from "@/components/sections/home1/Faq"
 import Contact from "@/components/sections/home2/Contact"
 import Link from "next/link"
@@ -26,7 +26,7 @@ export default function contact() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Fale com a gente">
+            <WchatLayout breadcrumbTitle="Fale com a gente">
             <section className="contact-info-section sec-pad">
                 <div className="auto-container">
                     <div className="sec-title centred">
@@ -68,7 +68,7 @@ export default function contact() {
             <Contact />
             <Faq />
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

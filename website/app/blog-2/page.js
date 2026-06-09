@@ -1,10 +1,10 @@
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import Link from "next/link"
 export default function blog_two() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Blog List View">
+            <WchatLayout breadcrumbTitle="Blog List View">
             <section className="sidebar-page-container">
                 <div className="auto-container">
                     <div className="row clearfix">
@@ -224,7 +224,7 @@ export default function blog_two() {
                     </div>
                 </div>
             </section>
-            </Layout>
+            </WchatLayout>
         </>
     )
 }

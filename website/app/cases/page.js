@@ -1,5 +1,5 @@
 'use client'
-import Layout from "@/components/layout/Layout"
+import WchatLayout from "@/components/wchat/WchatLayout"
 import { useState } from "react"
 import Link from "next/link"
 
@@ -26,7 +26,7 @@ export default function cases() {
 
     return (
         <>
-            <Layout headerStyle={1} footerStyle={1} breadcrumbTitle="Use Cases 01">
+            <WchatLayout breadcrumbTitle="Funcionalidades">
 
                 {/* cases-page-section */}
                 <section className="cases-page-section bg-color-1">
@@ -206,7 +206,7 @@ export default function cases() {
                 {/* faq-section end */}
 
 
-            </Layout>
+            </WchatLayout>
         </>
     )
 }
