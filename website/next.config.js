@@ -8,6 +8,13 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      { source: '/blog-2', destination: '/blog', permanent: true },
+      { source: '/cases-2', destination: '/cases', permanent: true },
+      { source: '/works', destination: '/about', permanent: true },
+    ];
+  },
 }
 
 module.exports = nextConfig

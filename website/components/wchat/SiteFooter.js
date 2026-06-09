@@ -93,6 +93,9 @@ export default function SiteFooter({ onePage = false }) {
                     <a href="/blog">Blog</a>
                   </li>
                   <li>
+                    <a href="/faq">Perguntas frequentes</a>
+                  </li>
+                  <li>
                     <a href="/contact">Seja parceiro</a>
                   </li>
                   <li>

@@ -56,11 +56,63 @@ body.wchat-theme .price-card.active {
 }
 
 body.wchat-theme .feature-area2 .box-icon img,
-body.wchat-theme .service-card .box-icon img {
+body.wchat-theme .service-card .box-icon img,
+body.wchat-theme .integration-icon img,
+body.wchat-theme .service-box .icon img,
+body.wchat-theme .box-quote img {
+  filter: brightness(0) saturate(100%) invert(18%) sepia(42%) saturate(1679%) hue-rotate(166deg)
+    brightness(95%) contrast(101%);
+}
+
+body.wchat-theme .slider-arrow img,
+body.wchat-theme .icon-btn .icon img {
   filter: brightness(0) saturate(100%) invert(18%) sepia(42%) saturate(1679%) hue-rotate(166deg)
     brightness(95%) contrast(101%);
 }
 
 body.wchat-theme .header-layout8:not(.header-absolute) + * {
   margin-top: 0;
+}
+
+/* Auth pages */
+body.wchat-theme .wchat-auth-card {
+  border: 1px solid var(--th-border-color);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 61, 91, 0.08);
+}
+
+body.wchat-theme .wchat-auth-subtitle {
+  color: var(--body-color);
+}
+
+body.wchat-theme .wchat-auth-footer {
+  margin-top: 1.5rem;
+  color: var(--body-color);
+}
+
+body.wchat-theme .wchat-auth-footer a {
+  color: var(--theme-color);
+  font-weight: 600;
+}
+
+body.wchat-theme .wchat-auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+body.wchat-theme .wchat-auth-row a {
+  color: var(--theme-color);
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+
+body.wchat-theme .wchat-auth-page .form-label {
+  font-weight: 500;
+  color: var(--title-color);
+  margin-bottom: 0.375rem;
 }

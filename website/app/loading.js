@@ -1,9 +1,5 @@
-import Preloader from '@/components/elements/Preloader'
+import SitePreloader from "@/components/wchat/SitePreloader";
 
-export default function loading() {
-    return (
-        <>
-            <Preloader />
-        </>
-    )
+export default function Loading() {
+  return <SitePreloader />;
 }

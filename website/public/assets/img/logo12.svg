@@ -15,15 +15,15 @@
 <feGaussianBlur stdDeviation="3" result="effect1_foregroundBlur_4906_7380"/>
 </filter>
 <linearGradient id="paint0_linear_4906_7380" x1="6.00001" y1="6" x2="58.7783" y2="32.5495" gradientUnits="userSpaceOnUse">
-<stop stop-color="#7B5DFF"/>
+<stop stop-color="#003D5B"/>
 <stop offset="1" stop-color="#B35DFF"/>
 </linearGradient>
 <linearGradient id="paint1_linear_4906_7380" x1="13.6035" y1="19.5547" x2="39.0874" y2="32.3743" gradientUnits="userSpaceOnUse">
-<stop stop-color="#7B5DFF"/>
+<stop stop-color="#003D5B"/>
 <stop offset="1" stop-color="#B35DFF"/>
 </linearGradient>
 <linearGradient id="paint2_linear_4906_7380" x1="36.8359" y1="15.1992" x2="43.5049" y2="18.554" gradientUnits="userSpaceOnUse">
-<stop stop-color="#7B5DFF"/>
+<stop stop-color="#003D5B"/>
 <stop offset="1" stop-color="#B35DFF"/>
 </linearGradient>
 </defs>

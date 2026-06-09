@@ -9,7 +9,7 @@ export default function SiteMobileMenu({ onePage = false }) {
         </button>
         <div className="mobile-logo">
           <a href="/">
-            <img src="assets/img/logo.svg" alt="wChat" />
+            <img src="assets/img/logo8.svg" alt="wChat" />
           </a>
         </div>
         <div className="th-mobile-menu">
