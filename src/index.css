@@ -4,22 +4,22 @@
 
 @layer base {
   :root {
-    /* wChat — paleta extraída da arte de marketing (img/image.png) */
-    --wchat-purple-900: 270 42% 18%;
-    --wchat-purple-800: 264 55% 28%;
-    --wchat-purple-700: 264 70% 35%;
-    --wchat-purple-600: 262 73% 40%;
-    --wchat-purple-500: 262 66% 51%;
-    --wchat-purple-400: 262 55% 62%;
-    --wchat-purple-200: 270 45% 90%;
-    --wchat-purple-100: 270 48% 96%;
-    --wchat-purple-50: 270 43% 98%;
-    --wchat-text: 252 7% 34%;
-    --wchat-text-muted: 252 6% 45%;
+    /* wChat — paleta CRM (navy + ciano claro, light mode) */
+    --wchat-brand-900: 200 100% 12%;
+    --wchat-brand-800: 200 100% 18%;
+    --wchat-brand-700: 196 95% 22%;
+    --wchat-brand-600: 200 100% 18%;
+    --wchat-brand-500: 189 70% 35%;
+    --wchat-brand-400: 187 55% 55%;
+    --wchat-brand-200: 187 56% 83%;
+    --wchat-brand-100: 187 50% 93%;
+    --wchat-brand-50: 200 14% 97%;
+    --wchat-text: 210 25% 23%;
+    --wchat-text-muted: 210 15% 42%;
     --wchat-white: 0 0% 100%;
 
     /* Semânticos (shadcn / Tailwind) */
-    --background: var(--wchat-purple-50);
+    --background: var(--wchat-brand-50);
     --foreground: var(--wchat-text);
 
     --card: var(--wchat-white);
@@ -28,102 +28,100 @@
     --popover: var(--wchat-white);
     --popover-foreground: var(--wchat-text);
 
-    --primary: var(--wchat-purple-600);
+    --primary: var(--wchat-brand-800);
     --primary-foreground: var(--wchat-white);
 
-    --secondary: var(--wchat-purple-100);
-    --secondary-foreground: var(--wchat-text);
+    --secondary: var(--wchat-brand-200);
+    --secondary-foreground: var(--wchat-brand-800);
 
-    --muted: var(--wchat-purple-100);
+    --muted: 210 20% 96%;
     --muted-foreground: var(--wchat-text-muted);
 
-    --accent: var(--wchat-purple-500);
-    --accent-foreground: var(--wchat-white);
+    --accent: var(--wchat-brand-200);
+    --accent-foreground: var(--wchat-brand-800);
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: var(--wchat-purple-600);
+    --success: 174 58% 38%;
     --success-foreground: var(--wchat-white);
 
-    --warning: var(--wchat-purple-700);
+    --warning: 38 92% 50%;
     --warning-foreground: var(--wchat-white);
 
-    --border: 270 28% 88%;
-    --input: 270 28% 88%;
-    --ring: var(--wchat-purple-600);
+    --border: 210 20% 89%;
+    --input: 210 20% 89%;
+    --ring: var(--wchat-brand-800);
 
     --radius: 0.625rem;
 
     --sidebar-background: var(--wchat-white);
     --sidebar-foreground: var(--wchat-text);
-    --sidebar-primary: var(--wchat-purple-600);
+    --sidebar-primary: var(--wchat-brand-800);
     --sidebar-primary-foreground: var(--wchat-white);
-    --sidebar-accent: var(--wchat-purple-100);
+    --sidebar-accent: var(--wchat-brand-100);
     --sidebar-accent-foreground: var(--wchat-text);
-    --sidebar-border: 270 28% 88%;
-    --sidebar-ring: var(--wchat-purple-600);
+    --sidebar-border: 210 20% 89%;
+    --sidebar-ring: var(--wchat-brand-800);
   }
 
   .dark {
-    /* Paleta wChat reinterpretada para fundo escuro. Mantém o roxo da marca.
-       --wchat-white continua branco (é usado como texto sobre cor, ex.
-       primary-foreground); as superfícies escuras vêm das vars semânticas. */
-    --wchat-purple-900: 270 35% 92%; /* texto forte / headings → claro */
-    --wchat-purple-800: 264 30% 82%;
-    --wchat-purple-700: 262 58% 54%; /* bg-wchat-700 segue roxo, visível no escuro */
-    --wchat-purple-600: 262 66% 60%;
-    --wchat-purple-500: 262 62% 62%;
-    --wchat-purple-400: 262 48% 56%;
-    --wchat-purple-200: 264 14% 24%; /* bg-wchat-200 = divisórias */
-    --wchat-purple-100: 264 17% 19%; /* bg-wchat-100 = hover/superfície sutil */
-    --wchat-purple-50: 264 20% 15%; /* bg-wchat-50 = superfície */
-    --wchat-text: 270 15% 90%;
-    --wchat-text-muted: 265 9% 62%;
+    /* wChat — paleta CRM navy/cyan (dark mode) */
+    --wchat-brand-900: 187 55% 88%;
+    --wchat-brand-800: 187 50% 72%;
+    --wchat-brand-700: 187 55% 58%;
+    --wchat-brand-600: 187 58% 50%;
+    --wchat-brand-500: 189 50% 42%;
+    --wchat-brand-400: 196 42% 34%;
+    --wchat-brand-200: 196 32% 22%;
+    --wchat-brand-100: 200 28% 17%;
+    --wchat-brand-50: 200 25% 13%;
+    --wchat-text: 200 15% 90%;
+    --wchat-text-muted: 200 10% 62%;
     --wchat-white: 0 0% 100%;
 
-    --background: 264 24% 9%;
+    --background: 200 28% 8%;
     --foreground: var(--wchat-text);
 
-    --card: 264 22% 13%;
+    --card: 200 26% 12%;
     --card-foreground: var(--wchat-text);
 
-    --popover: 264 22% 13%;
+    --popover: 200 26% 12%;
     --popover-foreground: var(--wchat-text);
 
-    --primary: 262 72% 64%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 187 58% 50%;
+    --primary-foreground: 200 28% 8%;
 
-    --secondary: 264 17% 19%;
-    --secondary-foreground: var(--wchat-text);
+    --secondary: 196 32% 20%;
+    --secondary-foreground: 187 50% 78%;
 
-    --muted: 264 16% 17%;
+    --muted: 200 24% 16%;
     --muted-foreground: var(--wchat-text-muted);
 
-    --accent: 262 60% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 196 32% 22%;
+    --accent-foreground: 187 50% 78%;
 
     --destructive: 0 72% 56%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 262 66% 60%;
+    --success: 174 50% 45%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 58%;
-    --warning-foreground: 264 24% 9%;
+    --warning-foreground: 200 28% 8%;
 
-    --border: 264 14% 22%;
-    --input: 264 14% 22%;
-    --ring: 262 72% 64%;
+    --border: 200 20% 22%;
+    --input: 200 20% 22%;
+    --ring: 187 58% 50%;
 
-    --sidebar-background: 264 24% 11%;
+    --sidebar-background: 200 26% 10%;
     --sidebar-foreground: var(--wchat-text);
-    --sidebar-primary: 262 72% 64%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 264 17% 19%;
+    --sidebar-primary: 187 58% 50%;
+    --sidebar-primary-foreground: 200 28% 8%;
+    --sidebar-accent: 196 32% 18%;
     --sidebar-accent-foreground: var(--wchat-text);
-    --sidebar-border: 264 14% 22%;
-    --sidebar-ring: 262 72% 64%;
+    --sidebar-border: 200 20% 22%;
+    --sidebar-ring: 187 58% 50%;
   }
 }
 
@@ -132,21 +130,21 @@
      JSX (não adaptavam ao tema). Aqui o valor CLARO é o hex original (claro fica
      idêntico) e o ESCURO é a contraparte para o dark mode. Uso: text-[var(--crm-ink)]. */
   :root {
-    --crm-brand: #4e1bb1;
-    --crm-brand-2: #5b2fd4;
-    --crm-brand-strong: #3c1494;
-    --crm-brand-tint: #f3ebfc;
-    --crm-brand-tint-hover: #e9d5ff;
-    --crm-brand-border: #c4b5fd;
+    --crm-brand: #003d5b;
+    --crm-brand-2: #0a6e7d;
+    --crm-brand-strong: #002a42;
+    --crm-brand-tint: #c5eef3;
+    --crm-brand-tint-hover: #b0e5ed;
+    --crm-brand-border: #9dd5df;
 
-    --crm-ink: #212529;
-    --crm-ink-2: #495057;
-    --crm-ink-3: #868e96;
+    --crm-ink: #1e2d3d;
+    --crm-ink-2: #4a5b6b;
+    --crm-ink-3: #7a8b9a;
 
-    --crm-surface: #f8f9fa;
-    --crm-surface-2: #e9ecef;
-    --crm-border: #dee2e6;
-    --crm-border-2: #ced4da;
+    --crm-surface: #f5f7f8;
+    --crm-surface-2: #ebeef1;
+    --crm-border: #dde4ea;
+    --crm-border-2: #cdd5de;
 
     --crm-danger: #c62828;
     --crm-danger-strong: #b71c1c;
@@ -164,45 +162,45 @@
     --crm-info-tint: #d8ecf7;
     --crm-info: #1565c0;
 
-    /* Inbox/chat — paleta verde-acinzentada (estilo WhatsApp claro). */
-    --inbox-ink: #334047;
-    --inbox-ink-2: #4f5c56;
-    --inbox-muted: #6f7b76;
-    --inbox-muted-2: #96a29c;
-    --inbox-border: #dce4d6;
-    --inbox-surface: #f9fcf8;
-    --inbox-surface-2: #f0f2f5;
-    --inbox-chat-bg: #f9f6fd;
-    --inbox-green: #1f5e3f;
-    --inbox-green-soft: #8bcf9f;
-    --inbox-green-tint: #eef8f0;
-    --inbox-green-bright: #bff06e;
+    /* Inbox/chat — paleta navy/cyan alinhada ao CRM (light). */
+    --inbox-ink: #1e2d3d;
+    --inbox-ink-2: #4a5b6b;
+    --inbox-muted: #7a8b9a;
+    --inbox-muted-2: #9aabb8;
+    --inbox-border: #dde4ea;
+    --inbox-surface: #f5f7f8;
+    --inbox-surface-2: #ebeef1;
+    --inbox-chat-bg: #eef2f5;
+    --inbox-green: #003d5b;
+    --inbox-green-soft: #5bbfd0;
+    --inbox-green-tint: #c5eef3;
+    --inbox-green-bright: #7dd8e8;
     --inbox-gold: #c9a020;
     --inbox-gold-ink: #574500;
     --inbox-gold-bg: #f5d96a;
     --inbox-orange: #e56b22;
     --inbox-orange-tint: #fff1e5;
     --inbox-orange-border: #ffd7a8;
-    --inbox-blue: #6eb3ff;
-    --inbox-blue-tint: #e8eef5;
+    --inbox-blue: #0a6e7d;
+    --inbox-blue-tint: #e0f5f8;
   }
 
   .dark {
-    --crm-brand: #a78bfa;
-    --crm-brand-2: #b49dfb;
-    --crm-brand-strong: #8b6df0;
-    --crm-brand-tint: #241b3a;
-    --crm-brand-tint-hover: #2f2548;
-    --crm-brand-border: #4b3e72;
+    --crm-brand: #5bbfd0;
+    --crm-brand-2: #7dd8e8;
+    --crm-brand-strong: #45a8b8;
+    --crm-brand-tint: #152a33;
+    --crm-brand-tint-hover: #1e3a48;
+    --crm-brand-border: #2a5566;
 
-    --crm-ink: #ececf2;
-    --crm-ink-2: #c3c3ce;
-    --crm-ink-3: #8a8a97;
+    --crm-ink: #e8eef2;
+    --crm-ink-2: #a8b8c4;
+    --crm-ink-3: #6b7d8a;
 
-    --crm-surface: #1e1e27;
-    --crm-surface-2: #292933;
-    --crm-border: #30303c;
-    --crm-border-2: #3a3a47;
+    --crm-surface: #0f171d;
+    --crm-surface-2: #162028;
+    --crm-border: #243340;
+    --crm-border-2: #2f4250;
 
     --crm-danger: #f1727a;
     --crm-danger-strong: #e15a60;
@@ -216,31 +214,31 @@
     --crm-amber-tint-hover: #423917;
     --crm-wa-green: #25d366;
     --crm-wa-teal: #2dc4ac;
-    --crm-success-tint: #18271b;
-    --crm-info-tint: #182934;
-    --crm-info: #6eb3ff;
+    --crm-success-tint: #152822;
+    --crm-info-tint: #152a38;
+    --crm-info: #6ecfe0;
 
-    /* Inbox/chat no escuro — paleta WhatsApp dark. */
-    --inbox-ink: #e9edef;
-    --inbox-ink-2: #c4ccc8;
-    --inbox-muted: #9aa6a1;
-    --inbox-muted-2: #7e8a85;
-    --inbox-border: #2a3942;
-    --inbox-surface: #202c33;
-    --inbox-surface-2: #2a3942;
-    --inbox-chat-bg: #0b141a;
-    --inbox-green: #4ad07f;
-    --inbox-green-soft: #2a7d52;
-    --inbox-green-tint: #14271b;
-    --inbox-green-bright: #aef06e;
+    /* Inbox/chat — paleta navy/cyan alinhada ao CRM (dark). */
+    --inbox-ink: #e8eef2;
+    --inbox-ink-2: #a8b8c4;
+    --inbox-muted: #6b7d8a;
+    --inbox-muted-2: #5a6d7a;
+    --inbox-border: #243340;
+    --inbox-surface: #162028;
+    --inbox-surface-2: #1e2a35;
+    --inbox-chat-bg: #0a1016;
+    --inbox-green: #5bbfd0;
+    --inbox-green-soft: #3a8a9a;
+    --inbox-green-tint: #152a33;
+    --inbox-green-bright: #7dd8e8;
     --inbox-gold: #e6c34d;
     --inbox-gold-ink: #3a2f0e; /* fundo do balão "Nota interna" — escuro nos dois modos */
     --inbox-gold-bg: #f5d96a; /* texto do corpo da nota — dourado claro nos dois modos */
     --inbox-orange: #ff8a4d;
     --inbox-orange-tint: #33241a;
     --inbox-orange-border: #55401f;
-    --inbox-blue: #6eb3ff;
-    --inbox-blue-tint: #1c2a38;
+    --inbox-blue: #6ecfe0;
+    --inbox-blue-tint: #152a38;
   }
 }
 
@@ -265,7 +263,7 @@
   h4,
   h5,
   h6 {
-    @apply text-[hsl(var(--wchat-purple-900))];
+    @apply text-[hsl(var(--wchat-brand-900))];
   }
 }
 

@@ -40,7 +40,11 @@ import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { CustomerFormDialog } from "@/components/customers/CustomerFormDialog";
 import { CrmSaleItemsPreview } from "@/components/crm/CrmSaleItemsPreview";
 import { useCustomer, useUpdateCustomer } from "@/lib/api/customers";
-import { useCrmNegotiationsForCustomer } from "@/lib/api/crm-negotiations";
+import {
+  useCreateCrmNegotiation,
+  useCrmNegotiationsForCustomer,
+  useUpdateCrmNegotiation,
+} from "@/lib/api/crm-negotiations";
 import {
   isClientePerfilCrmLocked,
   negotiationAssigneeBlockedMessage,
@@ -53,11 +57,15 @@ import {
   useUpdateCrmTask,
 } from "@/lib/api/crm-tasks";
 import {
-  buildPipelineLabels,
+  CRM_FUNNEL_ID_KEY,
   CRM_PIPELINE_STAGE_KEY,
-  getPipelineStateForCustomer,
-  pipelineStageKeyFromIndex,
+  resolveCustomerPipelineView,
 } from "@/lib/crm-pipeline";
+import { resolveConfiguredLostStageId } from "@/data/crm-funnels";
+import {
+  isLostDestinationStage,
+  isSaleDestinationStage,
+} from "@/lib/crm/sale-rules";
 import {
   useCustomerCredits,
   useCustomerCreditSummary,
@@ -398,6 +406,22 @@ export function ClientePerfilContent({
   const { data: creditSummary } = useCustomerCreditSummary(id, { enabled: crmEnabled });
 
   const updateCustomer = useUpdateCustomer();
+  const updateNegotiation = useUpdateCrmNegotiation();
+  const createNegotiation = useCreateCrmNegotiation();
+  const customerPipelineView = useMemo(() => {
+    if (!cliente) {
+      return null;
+    }
+    return resolveCustomerPipelineView(
+      cliente,
+      effectiveCrmFunnels,
+      customerNegotiations.map((n) => ({
+        funnelId: n.funnelId,
+        stageId: n.stageId,
+        status: n.status,
+      })),
+    );
+  }, [cliente, customerNegotiations, effectiveCrmFunnels]);
   const { data: chats = [] } = useInboxChats(
     { status: "all" },
     { enabled: Boolean(cliente) },
@@ -463,7 +487,11 @@ export function ClientePerfilContent({
     });
   }
 
-  const { activeIndex: pipelineActiveIndex, daysContact } = getPipelineStateForCustomer(cliente);
+  const pipelineActiveIndex = customerPipelineView?.pipelineActiveIndex ?? 0;
+  const daysContact = customerPipelineView?.daysContact ?? 0;
+  const pipelineStages = customerPipelineView?.pipelineStages;
+  const customerFunnelLabel = customerPipelineView?.funnelLabel;
+  const customerFunnelId = customerPipelineView?.funnelId ?? effectiveCrmFunnels[0]?.id ?? "comercial";
 
   const handlePipelineStageChange = async (stageIndex: number) => {
     if (clientePerfilCrmLocked) {
@@ -474,25 +502,63 @@ export function ClientePerfilContent({
       });
       return;
     }
-    const key = pipelineStageKeyFromIndex(stageIndex);
-    if (!key) {
+    const funnel = effectiveCrmFunnels.find((f) => f.id === customerFunnelId) ?? effectiveCrmFunnels[0];
+    const stage = funnel?.stages[stageIndex];
+    if (!stage || !funnel) {
       return;
     }
-    const nextSource = { ...(cliente.sourceColumns ?? {}), [CRM_PIPELINE_STAGE_KEY]: key };
+    if (
+      stage.isLostStage ||
+      isLostDestinationStage(effectiveCrmFunnels, funnel.id, stage.id)
+    ) {
+      void handleMarkLoss();
+      return;
+    }
+    if (isSaleDestinationStage(effectiveCrmFunnels, funnel.id, stage.id)) {
+      toast({
+        title: "Marcar venda",
+        description: "Registre a venda na aba CRM ou pelo Inbox.",
+      });
+      return;
+    }
+
+    const openNegotiations = customerNegotiations.filter((n) => n.status === "em_andamento");
+    if (openNegotiations.length === 0 && crmEnabled) {
+      await createNegotiation.mutateAsync({
+        title: cliente.nome?.trim() || "Nova negociação",
+        funnelId: funnel.id,
+        stageId: stage.id,
+        customerId: cliente.id,
+      });
+    } else {
+      for (const n of openNegotiations) {
+        if (n.funnelId !== funnel.id || n.stageId !== stage.id) {
+          await updateNegotiation.mutateAsync({
+            id: n.id,
+            patch: { funnelId: funnel.id, stageId: stage.id },
+          });
+        }
+      }
+    }
+
     let nextStatus = cliente.status;
-    if (stageIndex === 5) {
-      nextStatus = "bloqueado";
-    } else if (cliente.status === "bloqueado") {
+    if (cliente.status === "bloqueado") {
       nextStatus = "ativo";
     }
     await updateCustomer.mutateAsync({
       id: cliente.id,
-      input: { ...toCustomerInput(cliente, nextStatus), sourceColumns: nextSource },
+      input: {
+        ...toCustomerInput(cliente, nextStatus),
+        sourceColumns: {
+          ...(cliente.sourceColumns ?? {}),
+          [CRM_FUNNEL_ID_KEY]: funnel.id,
+          [CRM_PIPELINE_STAGE_KEY]: stage.id,
+        },
+      },
     });
-    const label = buildPipelineLabels(daysContact)[stageIndex]?.label ?? key;
     toast({
       title: "Funil atualizado",
-      description: `Etapa: ${label}`,
+      description: `Etapa: ${stage.title}`,
     });
   };
 
@@ -512,7 +578,19 @@ export function ClientePerfilContent({
       });
       return;
     }
-    const nextSource = { ...(cliente.sourceColumns ?? {}), [CRM_PIPELINE_STAGE_KEY]: "perdido" };
+    const lostStageId = resolveConfiguredLostStageId(effectiveCrmFunnels, customerFunnelId);
+    const openNegotiations = customerNegotiations.filter((n) => n.status === "em_andamento");
+    for (const n of openNegotiations) {
+      await updateNegotiation.mutateAsync({
+        id: n.id,
+        patch: { status: "perdido", stageId: lostStageId, lostReason: "Marcado no perfil do cliente" },
+      });
+    }
+    const nextSource = {
+      ...(cliente.sourceColumns ?? {}),
+      [CRM_FUNNEL_ID_KEY]: customerFunnelId,
+      [CRM_PIPELINE_STAGE_KEY]: lostStageId,
+    };
     await updateCustomer.mutateAsync({
       id: cliente.id,
       input: { ...toCustomerInput(cliente, "bloqueado"), sourceColumns: nextSource },
@@ -547,6 +625,8 @@ export function ClientePerfilContent({
         crmActionsDisabled={!canEditCrm}
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
+        pipelineStages={pipelineStages?.length ? pipelineStages : undefined}
+        funnelLabel={customerFunnelLabel}
         qualificationStars={qualificationFromPerfil(cliente.perfil)}
         onBack={onBack}
         onRefresh={() => {

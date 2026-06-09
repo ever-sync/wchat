@@ -13,7 +13,7 @@ export const CHAT_TAG_COLOR_PRESETS = [
   "#fbbf24",
   "#f97316",
   "#94a3b8",
-  "#4E1BB1",
+  "#003d5b",
 ] as const;
 
 export const DEFAULT_CHAT_TAG_COLOR = CHAT_TAG_COLOR_PRESETS[0];

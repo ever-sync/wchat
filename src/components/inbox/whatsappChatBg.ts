@@ -25,8 +25,8 @@ function buildChatBg(fill: string, stroke: string, strokeOpacity: number): strin
   );
 }
 
-/** Fundo do chat — tema claro (purple-white + doodle roxo). */
-export const WHATSAPP_CHAT_BG = buildChatBg("#F9F6FD", "#4E1BB1", 0.06);
+/** Fundo do chat — tema claro (cinza-azulado + doodle navy). */
+export const WHATSAPP_CHAT_BG = buildChatBg("#EEF2F5", "#003D5B", 0.05);
 
-/** Fundo do chat — tema escuro (estilo WhatsApp dark + doodle claro sutil). */
-export const WHATSAPP_CHAT_BG_DARK = buildChatBg("#0B141A", "#FFFFFF", 0.04);
+/** Fundo do chat — tema escuro (navy profundo + doodle ciano sutil). */
+export const WHATSAPP_CHAT_BG_DARK = buildChatBg("#0A1016", "#5BBFD0", 0.06);

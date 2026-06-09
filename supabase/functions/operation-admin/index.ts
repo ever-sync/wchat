@@ -577,6 +577,9 @@ Deno.serve(async (request) => {
   const welcomePending = countRows(welcomeDispatchesRes.data, (row) => ["queued", "retrying"].includes(String(row.status ?? "")));
   const welcomeErrors = countRows(welcomeDispatchesRes.data, (row) => String(row.status ?? "") === "failed");
   const welcomeLastActivity = latestTimestamp(welcomeDispatchesRes.data, "updated_at") ?? latestTimestamp(welcomeDispatchesRes.data, "created_at");
+  const emailCombinedPending = emailPending + welcomePending;
+  const emailCombinedErrors = emailErrors + welcomeErrors;
+  const emailCombinedLastActivity = [emailLastActivity, welcomeLastActivity].filter(Boolean).sort().slice(-1)[0] ?? null;
 
   const adPending = countRows(adDispatchesRes.data, (row) => String(row.status ?? "") === "pending");
   const adErrors = countRows(adDispatchesRes.data, (row) => String(row.status ?? "") === "failed");
@@ -682,25 +685,16 @@ Deno.serve(async (request) => {
       id: "marketing-email-dispatch",
       label: "E-mails",
       schedule: "1 min",
-      severity: workerSeverity({ pending: emailPending, errors: emailErrors + hbFailures("marketing-email-dispatch"), heartbeatStale: hbStale("marketing-email-dispatch", 3) }),
-      status: workerStatus(workerSeverity({ pending: emailPending, errors: emailErrors + hbFailures("marketing-email-dispatch"), heartbeatStale: hbStale("marketing-email-dispatch", 3) })),
-      last_seen: hbLast("marketing-email-dispatch", emailLastActivity),
-      pending: emailPending,
+      severity: workerSeverity({ pending: emailCombinedPending, errors: emailCombinedErrors + hbFailures("marketing-email-dispatch"), heartbeatStale: hbStale("marketing-email-dispatch", 3) }),
+      status: workerStatus(workerSeverity({ pending: emailCombinedPending, errors: emailCombinedErrors + hbFailures("marketing-email-dispatch"), heartbeatStale: hbStale("marketing-email-dispatch", 3) })),
+      last_seen: hbLast("marketing-email-dispatch", emailCombinedLastActivity),
+      pending: emailCombinedPending,
       running: 0,
-      errors_24h: emailErrors + hbFailures("marketing-email-dispatch"),
-      details: hbDetails("marketing-email-dispatch", ["Drena marketing_email_dispatches", `${emailErrors} falha(s) recentes`]),
-    },
-    {
-      id: "welcome-email-dispatch",
-      label: "Boas-vindas",
-      schedule: "1 min",
-      severity: workerSeverity({ pending: welcomePending, errors: welcomeErrors + hbFailures("welcome-email-dispatch"), heartbeatStale: hbStale("welcome-email-dispatch", 3) }),
-      status: workerStatus(workerSeverity({ pending: welcomePending, errors: welcomeErrors + hbFailures("welcome-email-dispatch"), heartbeatStale: hbStale("welcome-email-dispatch", 3) })),
-      last_seen: hbLast("welcome-email-dispatch", welcomeLastActivity),
-      pending: welcomePending,
-      running: 0,
-      errors_24h: welcomeErrors + hbFailures("welcome-email-dispatch"),
-      details: hbDetails("welcome-email-dispatch", ["Drena welcome_email_dispatches", `${welcomeErrors} falha(s) recentes`]),
+      errors_24h: emailCombinedErrors + hbFailures("marketing-email-dispatch"),
+      details: hbDetails("marketing-email-dispatch", [
+        "Drena marketing_email_dispatches + welcome_email_dispatches",
+        `${emailErrors} marketing(s) e ${welcomeErrors} boas-vindas em falha recente`,
+      ]),
     },
     {
       id: "marketing-ad-conversion-dispatch",

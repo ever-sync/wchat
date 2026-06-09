@@ -78,7 +78,7 @@ import {
 } from "@/lib/crm-pipeline";
 import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useInboxChats } from "@/lib/api/whatsapp";
-import { resolveConfiguredSaleStageId } from "@/data/crm-funnels";
+import { resolveConfiguredLostStageId, resolveConfiguredSaleStageId } from "@/data/crm-funnels";
 import {
   negotiationHasCompletedSale,
   saleAttendantBlockedMessage,
@@ -582,8 +582,18 @@ function CrmNegotiationDetailContent({
 
   const heroStageTitle = useMemo(() => {
     const stages = negotiationFunnel?.stages ?? [];
-    return stages.find((s) => s.id === negotiation.stageId)?.title ?? negotiation.stageId;
-  }, [negotiation.stageId, negotiationFunnel]);
+    const direct = stages.find((s) => s.id === negotiation.stageId)?.title;
+    if (direct) return direct;
+    if (negotiation.status === "perdido") {
+      const lost = stages.find((s) => s.isLostStage || s.id === "perdido");
+      if (lost) return lost.title;
+    }
+    if (negotiation.status === "vendido") {
+      const sale = stages.find((s) => s.isSaleStage || s.id === "venda");
+      if (sale) return sale.title;
+    }
+    return negotiation.stageId;
+  }, [negotiation.stageId, negotiation.status, negotiationFunnel]);
 
   const { data: tenantSettingsForHero } = useTenantSettings();
   const heroStaleDays = useMemo(
@@ -609,6 +619,7 @@ function CrmNegotiationDetailContent({
         daysContact={daysContact}
         pipelineActiveIndex={pipelineActiveIndex}
         pipelineStages={pipelineStages.length ? pipelineStages : undefined}
+        funnelLabel={negotiationFunnel?.listName}
         qualificationStars={qualificationStars}
         negotiationPanelSnapshot={
           taskIntegration && isPersistedCrmNegotiationId(negotiation.id)
@@ -1051,16 +1062,32 @@ function CrmNegotiationDetailContent({
             }
           }
 
+          if (isLostStage) {
+            if (negotiation.status === "perdido") {
+              setPipelineActiveIndex(idx);
+              return;
+            }
+            if (!isPersistedRow && !isE2eMockAuth) {
+              toast({
+                title: "Marcar perda",
+                description: "Vincule a um cliente na base para registrar a perda no CRM.",
+              });
+              return;
+            }
+            setLostDialogBlockCustomer(false);
+            setLostDialogOpen(true);
+            return;
+          }
+
           setPipelineActiveIndex(idx);
           const label = stage.title;
           if (isPersistedRow) {
             void (async () => {
               try {
                 const patch: CrmNegotiationPatch = { stageId: stage.id };
-                if (isLostStage) {
-                  patch.status = "perdido";
-                } else if (negotiation.status === "perdido") {
+                if (negotiation.status === "perdido") {
                   patch.status = "em_andamento";
+                  patch.lostReason = null;
                 }
 
                 // Tarefa pronta vinculada à etapa de destino (não duplica se já houver aberta do mesmo modelo).
@@ -1088,12 +1115,8 @@ function CrmNegotiationDetailContent({
 
                 await updateNegotiation.mutateAsync({ id: negotiation.id, patch });
                 if (linkedCustomer) {
-                  let nextStatus: CustomerStatus = linkedCustomer.status;
-                  if (isLostStage) {
-                    nextStatus = "bloqueado";
-                  } else if (linkedCustomer.status === "bloqueado") {
-                    nextStatus = "ativo";
-                  }
+                  const nextStatus: CustomerStatus =
+                    linkedCustomer.status === "bloqueado" ? "ativo" : linkedCustomer.status;
                   await syncLinkedCustomer(linkedCustomer, {
                     status: nextStatus,
                     stageKey: stage.id,
@@ -1471,17 +1494,24 @@ function CrmNegotiationDetailContent({
               toast({ title: "Marcar perda", description: "Negociação atualizada." });
               return;
             }
+            const lostStageId = resolveConfiguredLostStageId(
+              effectiveCrmFunnels,
+              negotiation.funnelId,
+            );
             await updateNegotiation.mutateAsync({
               id: negotiation.id,
-              patch: { status: "perdido", stageId: "perdido", lostReason },
+              patch: { status: "perdido", stageId: lostStageId, lostReason },
             });
-            setPipelineActiveIndex(5);
-            if (lostDialogBlockCustomer && linkedCustomer) {
+            const lostIdx = (negotiationFunnel?.stages ?? []).findIndex((s) => s.id === lostStageId);
+            setPipelineActiveIndex(lostIdx >= 0 ? lostIdx : 5);
+            if (linkedCustomer) {
               await syncLinkedCustomer(linkedCustomer, {
-                status: "bloqueado",
-                stageKey: "perdido",
+                ...(lostDialogBlockCustomer ? { status: "bloqueado" as const } : {}),
+                stageKey: lostStageId,
                 funnelId: negotiation.funnelId,
               });
+            }
+            if (lostDialogBlockCustomer && linkedCustomer) {
               useAppStore.getState().addNotification({
                 tipo: "aviso",
                 titulo: "Cliente bloqueado",
@@ -1489,7 +1519,12 @@ function CrmNegotiationDetailContent({
               });
               toast({ title: "Bloqueado", description: `${linkedCustomer.nome} foi bloqueado.` });
             } else {
-              toast({ title: "Marcar perda", description: "Negociação atualizada." });
+              toast({
+                title: "Marcar perda",
+                description: linkedCustomer
+                  ? "Negociação e funil do cliente atualizados."
+                  : "Negociação atualizada.",
+              });
             }
           } catch (e) {
             toast({

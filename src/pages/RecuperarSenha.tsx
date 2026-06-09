@@ -3,10 +3,9 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { invokePublicFunction } from "@/lib/api/functions";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store/useAppStore";
-import { getAppUrl } from "@/lib/app-url";
-import { requireSupabase } from "@/lib/supabase";
 
 export default function RecuperarSenha() {
   const { toast } = useToast();
@@ -18,13 +17,10 @@ export default function RecuperarSenha() {
     setLoading(true);
 
     try {
-      const supabase = requireSupabase();
-      const redirectTo = `${getAppUrl()}/redefinir-senha`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
-
-      if (error) {
-        throw error;
-      }
+      await invokePublicFunction<{ ok: boolean; sent?: boolean; skipped?: boolean }>(
+        "password-recovery-request",
+        { email: email.trim() },
+      );
 
       const okDesc = "Se o e-mail existir, enviamos um link para redefinir sua senha.";
       toast({ title: "Link enviado", description: okDesc });

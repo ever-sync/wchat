@@ -80,7 +80,7 @@ type ClientesPageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 const ui = {
   screen: "min-h-0 flex-1 space-y-4 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:pb-8",
   panel:
-    "overflow-hidden rounded-[10px] border border-border bg-card shadow-[0_1px_3px_hsl(var(--wchat-purple-600)/0.06)]",
+    "overflow-hidden rounded-[10px] border border-border bg-card shadow-[0_1px_3px_hsl(var(--wchat-brand-600)/0.06)]",
   btnSecondary:
     "h-9 gap-2 rounded-[10px] border-0 bg-wchat-100 px-4 font-semibold text-primary shadow-none hover:bg-wchat-200",
   btnPrimary:

@@ -419,7 +419,7 @@ export default function Produtos() {
     <div className={screen}>
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--wchat-purple-700))] text-primary-foreground shadow-[0_6px_16px_-8px_hsl(262_60%_40%/0.7)]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--wchat-brand-700))] text-primary-foreground shadow-[0_6px_16px_-8px_hsl(262_60%_40%/0.7)]">
             <Package className="h-5 w-5" aria-hidden />
           </div>
           <div className="space-y-0.5">

@@ -1041,7 +1041,7 @@ export function CustomerProfileSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[96vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,#fbfcf9_0%,#f4f7f5_100%)] p-0 sm:max-w-[760px] xl:max-w-[860px]"
+        className="w-[96vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,var(--inbox-surface)_0%,var(--inbox-surface-2)_100%)] p-0 sm:max-w-[760px] xl:max-w-[860px]"
       >
         <div className="flex min-h-full flex-col">
           <SheetHeader className="space-y-0 border-b border-[var(--inbox-border)] bg-card/60 px-5 pb-5 pt-5 backdrop-blur-sm">

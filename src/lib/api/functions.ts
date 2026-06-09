@@ -99,3 +99,36 @@ export async function invokeAuthedFunction<TResponse>(
 
   return payload as TResponse;
 }
+
+export async function invokePublicFunction<TResponse>(
+  functionName: string,
+  body?: unknown,
+  method: "GET" | "POST" = "POST",
+) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase nao configurado corretamente.");
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
+    body: method === "GET" || body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const rawText = await response.text();
+  const payload = parseResponsePayload(rawText);
+
+  if (!response.ok) {
+    const errorMessage =
+      typeof payload === "object" && payload
+        ? String(payload.error ?? payload.message ?? `HTTP ${response.status}`)
+        : rawText || `HTTP ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return payload as TResponse;
+}

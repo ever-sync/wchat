@@ -650,6 +650,8 @@ export type ClienteRdPerfilViewProps = {
   pipelineActiveIndex: number;
   /** Etapas reais do funil (ficha CRM); sem isso usa o funil legado fixo de 6 etapas. */
   pipelineStages?: Array<{ key: string; label: string }>;
+  /** Nome da lista/funil exibido ao lado da etapa (ex.: COMERCIAL). */
+  funnelLabel?: string;
   qualificationStars: number;
   onBack: () => void;
   onRefresh: () => void;
@@ -723,6 +725,7 @@ export function ClienteRdPerfilView({
   daysContact,
   pipelineActiveIndex,
   pipelineStages,
+  funnelLabel,
   qualificationStars,
   onBack,
   onRefresh,
@@ -781,6 +784,14 @@ export function ClienteRdPerfilView({
       }),
     [customFieldDefs, customFieldValueRows, cliente.sourceColumns],
   );
+
+  const activeStageLabel = useMemo(() => {
+    if (pipelineStages?.length) {
+      const idx = Math.min(Math.max(pipelineActiveIndex, 0), pipelineStages.length - 1);
+      return pipelineStages[idx]?.label ?? "—";
+    }
+    return buildPipelineLabels(daysContact)[pipelineActiveIndex]?.label ?? "—";
+  }, [pipelineActiveIndex, pipelineStages, daysContact]);
 
   const [promoVisible, setPromoVisible] = useState(true);
   const [negoPanelEditing, setNegoPanelEditing] = useState(false);
@@ -1033,12 +1044,16 @@ export function ClienteRdPerfilView({
                 </Button>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-md bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--crm-brand-2)]">
-                  NOVA
-                </span>
-                <span className="rounded-md bg-[var(--crm-surface)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--crm-ink-2)]">
-                  COMERCIAL
-                </span>
+                {activeStageLabel !== "—" ? (
+                  <span className="rounded-md bg-[var(--crm-brand-tint)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--crm-brand-2)]">
+                    {activeStageLabel}
+                  </span>
+                ) : null}
+                {funnelLabel ? (
+                  <span className="rounded-md bg-[var(--crm-surface)] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--crm-ink-2)]">
+                    {funnelLabel}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
