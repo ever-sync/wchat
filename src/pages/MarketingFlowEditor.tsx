@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -7,7 +7,9 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Redo2,
   Sparkles,
+  Undo2,
   UserPlus,
   X,
 } from "lucide-react";
@@ -885,6 +887,7 @@ export default function MarketingFlowEditor() {
   }>({ open: false, result: null });
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [focusStepId, setFocusStepId] = useState<string | null>(null);
+  const [canvasEpoch, setCanvasEpoch] = useState(0);
   const stepCounter = useRef(0);
   const stepIdPrefix = useId();
   const hydratedFor = useRef<string | null>(null);
@@ -900,13 +903,103 @@ export default function MarketingFlowEditor() {
     setPositions(parsePositionsFromDefinition(flow.definition));
     stepCounter.current = loaded.length;
     hydratedFor.current = flow.id;
+    pastRef.current = [];
+    futureRef.current = [];
   }, [flow]);
+
+  // --- Histórico (undo/redo) -------------------------------------------------
+  // Pilhas de snapshots {steps, edges, positions}. Cada mutacao empilha o estado
+  // ANTES da mudanca; undo/redo restauram e incrementam canvasEpoch pra o canvas
+  // (React Flow, estado interno semeado no mount) remontar com o grafo restaurado.
+  type FlowSnapshot = {
+    steps: FlowStep[];
+    edges: MarketingFlowEdge[];
+    positions: NodePositions;
+  };
+  const stepsRef = useRef<FlowStep[]>(steps);
+  const edgesRef = useRef<MarketingFlowEdge[]>(edges);
+  const positionsRef = useRef<NodePositions>(positions);
+  useEffect(() => {
+    stepsRef.current = steps;
+  }, [steps]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
+
+  const pastRef = useRef<FlowSnapshot[]>([]);
+  const futureRef = useRef<FlowSnapshot[]>([]);
+
+  const captureSnapshot = useCallback(
+    (): FlowSnapshot => ({
+      steps: stepsRef.current,
+      edges: edgesRef.current,
+      positions: positionsRef.current,
+    }),
+    [],
+  );
+
+  const pushHistory = useCallback(() => {
+    pastRef.current = [...pastRef.current.slice(-49), captureSnapshot()];
+    futureRef.current = [];
+  }, [captureSnapshot]);
+
+  const applySnapshot = useCallback((snap: FlowSnapshot) => {
+    setSteps(snap.steps);
+    setEdges(snap.edges);
+    setPositions(snap.positions);
+    setCanvasEpoch((e) => e + 1);
+  }, []);
+
+  const undo = useCallback(() => {
+    const prev = pastRef.current[pastRef.current.length - 1];
+    if (!prev) return;
+    pastRef.current = pastRef.current.slice(0, -1);
+    futureRef.current = [captureSnapshot(), ...futureRef.current.slice(0, 49)];
+    applySnapshot(prev);
+  }, [captureSnapshot, applySnapshot]);
+
+  const redo = useCallback(() => {
+    const next = futureRef.current[0];
+    if (!next) return;
+    futureRef.current = futureRef.current.slice(1);
+    pastRef.current = [...pastRef.current.slice(-49), captureSnapshot()];
+    applySnapshot(next);
+  }, [captureSnapshot, applySnapshot]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   // Solta uma acao no canvas na posicao do cursor (coords ja em flow-space).
   const handleDropOnCanvas = (
     payload: DragPayload,
     point: { x: number; y: number },
   ) => {
+    pushHistory();
     stepCounter.current += 1;
     const newStep: FlowStep = {
       id: `${stepIdPrefix}-${stepCounter.current}`,
@@ -926,11 +1019,13 @@ export default function MarketingFlowEditor() {
     edges: MarketingFlowEdge[];
     positions: NodePositions;
   }) => {
+    pushHistory();
     setEdges(next.edges);
     setPositions(next.positions);
   };
 
   const handleRemoveStep = (stepId: string) => {
+    pushHistory();
     setSteps((prev) => prev.filter((step) => step.id !== stepId));
     setEdges((prev) => prev.filter((e) => e.from !== stepId && e.to !== stepId));
     setPositions((prev) => {
@@ -942,10 +1037,25 @@ export default function MarketingFlowEditor() {
   };
 
   const handleUpdateStep = (stepId: string, patch: Partial<FlowStep>) => {
+    pushHistory();
     setSteps((prev) =>
       prev.map((step) => (step.id === stepId ? { ...step, ...patch } : step)),
     );
     setEditingStepId(null);
+  };
+
+  const handleDuplicateStep = (stepId: string) => {
+    const src = stepsRef.current.find((step) => step.id === stepId);
+    if (!src) return;
+    pushHistory();
+    stepCounter.current += 1;
+    const newId = `${stepIdPrefix}-${stepCounter.current}`;
+    const newStep: FlowStep = { ...src, id: newId };
+    setSteps((prev) => [...prev, newStep]);
+    setPositions((prev) => {
+      const base = prev[stepId] ?? { x: 0, y: 0 };
+      return { ...prev, [newId]: { x: base.x + 40, y: base.y + 40 } };
+    });
   };
 
   const editingStep = editingStepId
@@ -1059,6 +1169,16 @@ export default function MarketingFlowEditor() {
     return validateFlow(buildSnapshot(flow));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, steps, edges, positions]);
+
+  // Passos com erro de validacao: memoizado pra o canvas marcar os nos (anel/icone)
+  // sem recriar o Set a cada render.
+  const invalidStepIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const issue of validation?.errors ?? []) {
+      if (issue.stepId) set.add(issue.stepId);
+    }
+    return set;
+  }, [validation]);
 
   const doPublish = (result: ValidationResult) => {
     if (!flow) return;
@@ -1220,6 +1340,30 @@ export default function MarketingFlowEditor() {
           <Button
             type="button"
             variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={undo}
+            disabled={!flow}
+            aria-label="Desfazer (Ctrl+Z)"
+            title="Desfazer (Ctrl+Z)"
+          >
+            <Undo2 className="h-5 w-5" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={redo}
+            disabled={!flow}
+            aria-label="Refazer (Ctrl+Shift+Z)"
+            title="Refazer (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="h-5 w-5" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
             className="gap-2 text-primary hover:bg-primary/10"
             onClick={() => setManualEnrollOpen(true)}
             disabled={!flow}
@@ -1328,12 +1472,14 @@ export default function MarketingFlowEditor() {
             <MarketingFlowActionsPanel open={actionsOpen} onOpenChange={setActionsOpen} />
 
             <FlowCanvas
-              key={`${flow.id}:${steps.map((s) => s.id).join(",")}`}
+              key={`${flow.id}:${canvasEpoch}:${steps.map((s) => s.id).join(",")}`}
               steps={steps}
               edges={edges}
               positions={positions}
               onEditStep={setEditingStepId}
               onRemoveStep={handleRemoveStep}
+              onDuplicateStep={handleDuplicateStep}
+              invalidStepIds={invalidStepIds}
               onGraphChange={handleGraphChange}
               onDropAction={handleDropOnCanvas}
               focusStepId={focusStepId}

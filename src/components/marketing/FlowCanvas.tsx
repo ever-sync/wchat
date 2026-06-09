@@ -13,7 +13,7 @@
 // nunca chamar setState do pai durante o render do canvas. Remonta por fluxo
 // via key={flowId} no pai.
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -32,7 +32,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, Copy, X } from "lucide-react";
 import { ACTION_ICONS, DRAG_MIME, type DragPayload } from "@/components/marketing/flow-actions";
 import { isExecutableMarketingFlowAction, type MarketingFlowEdge } from "@/lib/marketing/flow-types";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,8 @@ type StepNodeData = {
   step: CanvasStep;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
+  onDuplicate?: (id: string) => void;
+  invalid?: boolean;
 };
 
 type RFNode = Node<StepNodeData, "step">;
@@ -91,7 +93,7 @@ function isBranching(actionId: string): boolean {
 // ---------------------------------------------------------------- No customizado
 
 function StepNode({ data, selected }: NodeProps<RFNode>) {
-  const { step, onEdit, onRemove } = data;
+  const { step, onEdit, onRemove, onDuplicate, invalid } = data;
   const Icon = ACTION_ICONS[step.iconKey];
   const noExecutor = !isExecutableMarketingFlowAction(step.actionId);
   const branching = isBranching(step.actionId);
@@ -101,7 +103,13 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
       onClick={() => onEdit(step.id)}
       className={cn(
         "group relative flex w-60 cursor-pointer items-start gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors",
-        selected ? "border-primary ring-2 ring-primary/30" : noExecutor ? "border-amber-500/60" : "border-border",
+        invalid
+          ? "border-destructive/70 ring-2 ring-destructive/30"
+          : selected
+            ? "border-primary ring-2 ring-primary/30"
+            : noExecutor
+              ? "border-amber-500/60"
+              : "border-border",
       )}
     >
       <Handle
@@ -109,17 +117,32 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
         position={Position.Left}
         className="!h-3 !w-3 !border-2 !border-primary !bg-background"
       />
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove(step.id);
-        }}
-        aria-label={`Remover ${step.label}`}
-        className="absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive group-hover:opacity-100"
-      >
-        <X className="h-3.5 w-3.5" aria-hidden />
-      </button>
+      <div className="absolute -right-2 -top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        {onDuplicate ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDuplicate(step.id);
+            }}
+            aria-label={`Duplicar ${step.label}`}
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-primary"
+          >
+            <Copy className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(step.id);
+          }}
+          aria-label={`Remover ${step.label}`}
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
       <span
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white",
@@ -133,7 +156,9 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
           {step.label}
-          {noExecutor ? (
+          {invalid ? (
+            <AlertTriangle className="h-3 w-3 shrink-0 text-destructive" aria-hidden />
+          ) : noExecutor ? (
             <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" aria-hidden />
           ) : null}
         </span>
@@ -233,6 +258,9 @@ type FlowCanvasProps = {
   positions: NodePositions;
   onEditStep: (id: string) => void;
   onRemoveStep: (id: string) => void;
+  onDuplicateStep?: (id: string) => void;
+  /** Ids de passos com erro de validacao: marcam o no com anel/icone. */
+  invalidStepIds?: Set<string>;
   /** Emite o grafo normalizado sempre que arestas/posicoes mudam. */
   onGraphChange: (next: { edges: MarketingFlowEdge[]; positions: NodePositions }) => void;
   /** Soltar acao do painel: cria no na posicao do drop. */
@@ -248,27 +276,44 @@ function toRFNodes(
   positions: NodePositions,
   onEdit: (id: string) => void,
   onRemove: (id: string) => void,
+  onDuplicate?: (id: string) => void,
+  invalidStepIds?: Set<string>,
 ): RFNode[] {
   return steps.map((step, i) => ({
     id: step.id,
     type: "step",
     position: positions[step.id] ?? { x: i * (NODE_W + GAP_X), y: 0 },
-    data: { step, onEdit, onRemove },
+    data: { step, onEdit, onRemove, onDuplicate, invalid: invalidStepIds?.has(step.id) ?? false },
   }));
 }
 
+/** Ramos sugeridos por tipo de acao, pra editar o rotulo da aresta sem digitar. */
+function branchSuggestions(actionId: string): string[] {
+  if (SPLIT_ACTIONS.has(actionId)) return ["sim", "não"];
+  if (WAIT_UNTIL_ACTIONS.has(actionId)) return ["condição atendida", "tempo esgotado"];
+  if (AB_TEST_ACTIONS.has(actionId)) return ["Variante A", "Variante B", "Variante C"];
+  if (AI_CLASSIFY_ACTIONS.has(actionId)) return ["Categoria 1", "Categoria 2", "Categoria 3"];
+  return [];
+}
+
+const BRANCH_EDGE_STYLE = { stroke: "hsl(var(--primary))", strokeWidth: 2 };
+
 function toRFEdges(edges: MarketingFlowEdge[]): Edge[] {
-  return edges.map((e, i) => ({
-    id: `e-${e.from}-${e.to}-${i}`,
-    source: e.from,
-    target: e.to,
-    label: e.branch,
-    type: "smoothstep",
-    animated: false,
-    labelStyle: { fontSize: 11, fontWeight: 600 },
-    labelBgPadding: [6, 2] as [number, number],
-    labelBgBorderRadius: 6,
-  }));
+  return edges.map((e, i) => {
+    const hasBranch = typeof e.branch === "string" && e.branch.trim().length > 0;
+    return {
+      id: `e-${e.from}-${e.to}-${i}`,
+      source: e.from,
+      target: e.to,
+      label: e.branch,
+      type: "smoothstep",
+      animated: false,
+      style: hasBranch ? BRANCH_EDGE_STYLE : undefined,
+      labelStyle: { fontSize: 11, fontWeight: 600 },
+      labelBgPadding: [6, 2] as [number, number],
+      labelBgBorderRadius: 6,
+    };
+  });
 }
 
 function rfEdgesToModel(edges: Edge[]): MarketingFlowEdge[] {
@@ -284,6 +329,8 @@ function FlowCanvasInner({
   positions,
   onEditStep,
   onRemoveStep,
+  onDuplicateStep,
+  invalidStepIds,
   onGraphChange,
   onDropAction,
   focusStepId,
@@ -291,6 +338,13 @@ function FlowCanvasInner({
 }: FlowCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, setCenter } = useReactFlow();
+  const [edgeEditor, setEdgeEditor] = useState<{
+    id: string;
+    value: string;
+    suggestions: string[];
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Posicoes iniciais: usa as salvas; deriva layout pros nos sem posicao.
   const initialPositions = useMemo(() => {
@@ -301,7 +355,7 @@ function FlowCanvasInner({
   }, []);
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<RFNode>(
-    toRFNodes(steps, initialPositions, onEditStep, onRemoveStep),
+    toRFNodes(steps, initialPositions, onEditStep, onRemoveStep, onDuplicateStep, invalidStepIds),
   );
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>(toRFEdges(edges));
 
@@ -329,6 +383,17 @@ function FlowCanvasInner({
     }
     onFocusHandled?.();
   }, [focusStepId, setCenter, setRfNodes, onFocusHandled]);
+
+  // Mantem o estado de erro (anel/icone) dos nos em sincronia com a validacao.
+  // invalidStepIds deve ser memoizado no pai pra este efeito nao rodar a cada render.
+  useEffect(() => {
+    setRfNodes((nodes) =>
+      nodes.map((n) => {
+        const invalid = invalidStepIds?.has(n.id) ?? false;
+        return n.data.invalid === invalid ? n : { ...n, data: { ...n.data, invalid } };
+      }),
+    );
+  }, [invalidStepIds, setRfNodes]);
 
   // Emite o grafo normalizado pro pai. Deferido (setTimeout 0) pra rodar fora da
   // fase de render — assim os refs ja refletem o commit e nunca chamamos
@@ -363,6 +428,7 @@ function FlowCanvasInner({
           ...connection,
           type: "smoothstep",
           label: branch,
+          style: branch ? BRANCH_EDGE_STYLE : undefined,
           labelStyle: { fontSize: 11, fontWeight: 600 },
           labelBgPadding: [6, 2] as [number, number],
           labelBgBorderRadius: 6,
@@ -375,17 +441,33 @@ function FlowCanvasInner({
     [steps, setRfEdges, scheduleEmit],
   );
 
-  // Editar rotulo do ramo: clique duplo na aresta.
-  const onEdgeDoubleClick = useCallback(
-    (_: React.MouseEvent, edge: Edge) => {
-      const current = typeof edge.label === "string" ? edge.label : "";
-      const next = window.prompt("Rótulo do ramo (vazio = saída padrão):", current);
-      if (next === null) return;
+  // Editar rotulo do ramo: clique na aresta abre um editor inline (sem window.prompt).
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      const sourceStep = steps.find((s) => s.id === edge.source);
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      setEdgeEditor({
+        id: edge.id,
+        value: typeof edge.label === "string" ? edge.label : "",
+        suggestions: sourceStep ? branchSuggestions(sourceStep.actionId) : [],
+        x: rect ? event.clientX - rect.left : event.clientX,
+        y: rect ? event.clientY - rect.top : event.clientY,
+      });
+    },
+    [steps],
+  );
+
+  const commitEdgeLabel = useCallback(
+    (id: string, label: string) => {
+      const trimmed = label.trim();
       const updated = edgesRef.current.map((e) =>
-        e.id === edge.id ? { ...e, label: next.trim() || undefined } : e,
+        e.id === id
+          ? { ...e, label: trimmed || undefined, style: trimmed ? BRANCH_EDGE_STYLE : undefined }
+          : e,
       );
       setRfEdges(updated);
       scheduleEmit(updated);
+      setEdgeEditor(null);
     },
     [setRfEdges, scheduleEmit],
   );
@@ -426,7 +508,8 @@ function FlowCanvasInner({
         onNodeDragStop={() => scheduleEmit()}
         onNodesDelete={() => scheduleEmit()}
         onEdgesDelete={() => scheduleEmit()}
-        onEdgeDoubleClick={onEdgeDoubleClick}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={() => setEdgeEditor(null)}
         onDrop={handleDrop}
         onDragOver={(e) => {
           e.preventDefault();
@@ -455,6 +538,62 @@ function FlowCanvasInner({
       >
         Auto-organizar
       </button>
+
+      {edgeEditor ? (
+        <div
+          className="absolute z-20 flex w-56 flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(edgeEditor.x, (wrapperRef.current?.clientWidth ?? 400) - 232)),
+            top: Math.max(8, edgeEditor.y),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-xs font-semibold text-foreground">Rótulo do ramo</p>
+          <input
+            autoFocus
+            value={edgeEditor.value}
+            onChange={(e) =>
+              setEdgeEditor((ed) => (ed ? { ...ed, value: e.target.value } : ed))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdgeLabel(edgeEditor.id, edgeEditor.value);
+              else if (e.key === "Escape") setEdgeEditor(null);
+            }}
+            placeholder="Ex.: sim / não"
+            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          />
+          {edgeEditor.suggestions.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {edgeEditor.suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => commitEdgeLabel(edgeEditor.id, s)}
+                  className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => commitEdgeLabel(edgeEditor.id, "")}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Saída padrão
+            </button>
+            <button
+              type="button"
+              onClick={() => commitEdgeLabel(edgeEditor.id, edgeEditor.value)}
+              className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
