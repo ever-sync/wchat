@@ -1087,6 +1087,7 @@ function CrmNegotiationDetailContent({
                 const patch: CrmNegotiationPatch = { stageId: stage.id };
                 if (negotiation.status === "perdido") {
                   patch.status = "em_andamento";
+                  patch.lostReason = null;
                 }
 
                 // Tarefa pronta vinculada à etapa de destino (não duplica se já houver aberta do mesmo modelo).

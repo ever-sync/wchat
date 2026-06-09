@@ -1565,12 +1565,12 @@ export default function Crm() {
       const ids = Array.from(bulkSelected);
       setBulkBusy(true);
       const effectiveFunnelId = patch.funnelId ?? funnelId;
-      const shouldSyncCustomerPipeline = Boolean(patch.stageId || patch.funnelId);
+      const shouldSyncCustomer = Boolean(patch.stageId || patch.funnelId || patch.status);
       // Roda em paralelo + invalida uma vez no fim (mais barato que `mutateAsync` por linha).
       const results = await Promise.allSettled(
         ids.map(async (id) => {
           await updateCrmNegotiationDirect(id, patch);
-          if (!shouldSyncCustomerPipeline) return;
+          if (!shouldSyncCustomer) return;
           const row = dbRecords.find((r) => r.id === id);
           const card = sourceNegotiations.find((n) => n.id === id);
           const cid =
@@ -1581,21 +1581,29 @@ export default function Crm() {
           const customer = customers.find((c) => c.id === cid);
           if (!customer) return;
           const stageId = patch.stageId ?? row?.stageId ?? card?.stageId;
-          if (!stageId) return;
-          await updateCustomerDirect(cid, {
-            ...toCustomerUpsertInput(customer),
-            sourceColumns: {
+          const negFunnelId = row?.funnelId ?? card?.funnelId ?? effectiveFunnelId;
+          const customerInput = toCustomerUpsertInput(customer);
+          if (stageId || patch.funnelId) {
+            customerInput.sourceColumns = {
               ...customer.sourceColumns,
-              [CRM_PIPELINE_STAGE_KEY]: stageId,
-              [CRM_FUNNEL_ID_KEY]: row?.funnelId ?? card?.funnelId ?? effectiveFunnelId,
-            },
-          });
+              ...(stageId ? { [CRM_PIPELINE_STAGE_KEY]: stageId } : {}),
+              [CRM_FUNNEL_ID_KEY]: negFunnelId,
+            };
+          }
+          if (patch.status === "pausado") {
+            customerInput.status = "inativo";
+          } else if (patch.status === "em_andamento" || patch.status === "nao_pausado") {
+            if (customer.status === "inativo") {
+              customerInput.status = "ativo";
+            }
+          }
+          await updateCustomerDirect(cid, customerInput);
         }),
       );
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const failed = ids.length - ok;
       await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-      if (shouldSyncCustomerPipeline) {
+      if (shouldSyncCustomer) {
         await queryClient.invalidateQueries({ queryKey: ["customers"] });
       }
       setBulkBusy(false);
@@ -1804,9 +1812,19 @@ export default function Crm() {
               void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
             }
           }
+          const dbRowForDrag = dbRecords.find((r) => r.id === negId);
+          const negStatus = dbRowForDrag?.status ?? card.status;
+          const dragPatch: CrmNegotiationPatch = { stageId: stageDropId, funnelId };
+          if (
+            negStatus === "perdido" &&
+            !isLostDestinationStage(funnels, funnelId, stageDropId)
+          ) {
+            dragPatch.status = "em_andamento";
+            dragPatch.lostReason = null;
+          }
           await updateCrmNegotiation.mutateAsync({
             id: negId,
-            patch: { stageId: stageDropId, funnelId },
+            patch: dragPatch,
           });
         }
         if (cid) {
