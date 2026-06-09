@@ -25,7 +25,7 @@ import type {
   WhatsappInstanceConnectInput,
   WhatsappMessage,
 } from "@/types/domain";
-import { getCurrentTenantId } from "@/lib/api/tenant";
+import { getCurrentTenantId, getCurrentUserId } from "@/lib/api/tenant";
 import { sanitizeCustomerSearchForPostgrestOrIlike } from "@/lib/customer-search-sanitize";
 
 const CHAT_RESOLUTION_VALUES = new Set<ChatResolution>([
@@ -187,30 +187,32 @@ function mapInstance(row: InstanceRow): WhatsappInstance {
   };
 }
 
+/** Pins por usuário — falha silenciosa se a migration ainda não foi aplicada. */
 async function fetchPinnedChatIdsForCurrentUser(
   supabase: ReturnType<typeof requireSupabase>,
   tenantId: string,
+  profileId?: string | null,
 ): Promise<Set<string>> {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError) {
-    throw new Error(authError.message);
-  }
-  const profileId = authData.user?.id?.trim();
-  if (!profileId) {
+  const uid = profileId?.trim();
+  if (!uid) {
     return new Set();
   }
 
-  const { data, error } = await supabase
-    .from("whatsapp_chat_pins")
-    .select("chat_id")
-    .eq("tenant_id", tenantId)
-    .eq("profile_id", profileId);
+  try {
+    const { data, error } = await supabase
+      .from("whatsapp_chat_pins")
+      .select("chat_id")
+      .eq("tenant_id", tenantId)
+      .eq("profile_id", uid);
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      return new Set();
+    }
+
+    return new Set((data ?? []).map((row) => String(row.chat_id)));
+  } catch {
+    return new Set();
   }
-
-  return new Set((data ?? []).map((row) => String(row.chat_id)));
 }
 
 function mapChat(row: ChatRow, pinnedChatIds?: Set<string>): InboxChat {
@@ -469,8 +471,11 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     return [] as InboxChat[];
   }
 
-  const tenantId = await getCurrentTenantId();
   const supabase = requireSupabase();
+  const [tenantId, profileId] = await Promise.all([
+    getCurrentTenantId(),
+    getCurrentUserId().catch(() => null),
+  ]);
   let query = supabase
     .from("whatsapp_chats")
     .select(INBOX_CHAT_SELECT)
@@ -545,14 +550,13 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     }
   }
 
-  const [{ data, error }, pinnedChatIds] = await Promise.all([
-    query,
-    fetchPinnedChatIdsForCurrentUser(supabase, tenantId),
-  ]);
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
+
+  const pinnedChatIds = await fetchPinnedChatIdsForCurrentUser(supabase, tenantId, profileId);
 
   let rows = (data ?? []) as unknown as ChatRow[];
 
@@ -1272,17 +1276,17 @@ export async function fetchInboxChatById(chatId: string): Promise<InboxChat | nu
     return null;
   }
 
-  const tenantId = await getCurrentTenantId();
   const supabase = requireSupabase();
-  const [{ data, error }, pinnedChatIds] = await Promise.all([
-    supabase
-      .from("whatsapp_chats")
-      .select(INBOX_CHAT_SELECT)
-      .eq("tenant_id", tenantId)
-      .eq("id", id)
-      .maybeSingle(),
-    fetchPinnedChatIdsForCurrentUser(supabase, tenantId),
+  const [tenantId, profileId] = await Promise.all([
+    getCurrentTenantId(),
+    getCurrentUserId().catch(() => null),
   ]);
+  const { data, error } = await supabase
+    .from("whatsapp_chats")
+    .select(INBOX_CHAT_SELECT)
+    .eq("tenant_id", tenantId)
+    .eq("id", id)
+    .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
@@ -1297,6 +1301,7 @@ export async function fetchInboxChatById(chatId: string): Promise<InboxChat | nu
     return null;
   }
 
+  const pinnedChatIds = await fetchPinnedChatIdsForCurrentUser(supabase, tenantId, profileId);
   return mapChat(row, pinnedChatIds);
 }
 

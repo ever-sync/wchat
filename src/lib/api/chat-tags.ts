@@ -422,7 +422,11 @@ async function setPinChat(chatId: string, isPinned: boolean): Promise<void> {
       { onConflict: "profile_id,chat_id" },
     );
     if (error) {
-      throw new Error(error.message);
+      throw new Error(
+        error.message.includes("whatsapp_chat_pins")
+          ? "Fixar conversa indisponível: aplique a migration whatsapp_chat_pins no Supabase."
+          : error.message,
+      );
     }
     return;
   }
@@ -434,7 +438,11 @@ async function setPinChat(chatId: string, isPinned: boolean): Promise<void> {
     .eq("profile_id", profileId)
     .eq("chat_id", chatId);
   if (error) {
-    throw new Error(error.message);
+    throw new Error(
+      error.message.includes("whatsapp_chat_pins")
+        ? "Desafixar conversa indisponível: aplique a migration whatsapp_chat_pins no Supabase."
+        : error.message,
+    );
   }
 }
 
