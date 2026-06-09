@@ -120,6 +120,7 @@ import {
   updateCrmNegotiation as updateCrmNegotiationDirect,
   useAutoAssignPoolNegotiations,
   useClaimCrmNegotiation,
+  useCreateCrmNegotiation,
   useCrmNegotiationFunnelRefs,
   useCrmNegotiations,
   useDeleteCrmNegotiation,
@@ -150,8 +151,11 @@ import {
 import { useCrmNegotiationStageOverrides, useUpsertCrmNegotiationStageOverride } from "@/lib/api/crm-kanban";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import {
+  buildSyntheticCustomerNegotiationCards,
   crmNegotiationRecordToCard,
   isPersistedCrmNegotiationId,
+  isSyntheticCustomerCardId,
+  parseSyntheticCustomerCardId,
   resolveKanbanStageId,
 } from "@/lib/crm/negotiation-model";
 import {
@@ -398,6 +402,10 @@ function negotiationNextTaskDueMeta(iso: string | undefined): { label: string; o
 }
 
 function resolveCustomerIdForNegotiation(card: CrmNegotiation, _customers: Customer[]): string | null {
+  const syntheticId = parseSyntheticCustomerCardId(card.id);
+  if (syntheticId) {
+    return syntheticId;
+  }
   return card.customerId?.trim() || null;
 }
 
@@ -514,6 +522,7 @@ export default function Crm() {
   const upsertStageOverride = useUpsertCrmNegotiationStageOverride();
   const updateCustomer = useUpdateCustomer();
   const updateCrmNegotiation = useUpdateCrmNegotiation();
+  const createCrmNegotiation = useCreateCrmNegotiation();
   const { data: taskTemplates = [] } = useCrmTaskTemplates();
   const claimCrmNegotiation = useClaimCrmNegotiation();
   const releaseCrmNegotiation = useReleaseCrmNegotiationToPool();
@@ -775,7 +784,7 @@ export default function Crm() {
       return mergeMock();
     }
 
-    return dbRecords.map((row) => {
+    const persistedCards = dbRecords.map((row) => {
       const base = crmNegotiationRecordToCard(row);
       const funnelDef = funnels.find((f) => f.id === base.funnelId);
       const validStageIds = new Set((funnelDef?.stages ?? []).map((s) => s.id));
@@ -799,7 +808,20 @@ export default function Crm() {
         customerId: row.customerId ?? base.customerId,
       };
     });
-  }, [customers, dbRecords, e2eAssigneeOverrides, funnels, profileId, stageOverrides]);
+
+    const linkedCustomerIds = new Set(
+      dbRecords
+        .map((row) => row.customerId?.trim())
+        .filter((id): id is string => Boolean(id)),
+    );
+    const syntheticCards = buildSyntheticCustomerNegotiationCards({
+      customers,
+      funnelId,
+      funnels,
+      linkedCustomerIds,
+    });
+    return [...persistedCards, ...syntheticCards];
+  }, [customers, dbRecords, e2eAssigneeOverrides, funnelId, funnels, profileId, stageOverrides]);
 
   const attendants = useMemo(() => {
     if (isSupabaseConfigured) {
@@ -1135,6 +1157,17 @@ export default function Crm() {
 
     if (isSupabaseConfigured) {
       list = sourceNegotiations;
+      if (statusFilter !== "all") {
+        list = list.filter((n) => n.status === statusFilter);
+      }
+      list = list.filter((n) => matchesOwner(n, appliedOwner, profileId));
+      const range = creationDateFilter ? parseDateRangeIso(creationDateFilter) : null;
+      if (range) {
+        list = list.filter((n) => {
+          const d = new Date(n.createdAt);
+          return d >= range.from && d <= range.to;
+        });
+      }
     } else {
       const range = creationDateFilter ? parseDateRangeIso(creationDateFilter) : null;
       list = sourceNegotiations.filter((n) => n.funnelId === funnelId);
@@ -1702,13 +1735,38 @@ export default function Crm() {
 
   const negotiationsWithAlertsCount = alertCountsInView.any;
 
+  const materializeSyntheticNegotiation = useCallback(
+    async (card: CrmNegotiation, stageId: string): Promise<string | null> => {
+      const customerId = parseSyntheticCustomerCardId(card.id);
+      if (!customerId) {
+        return card.id;
+      }
+      const customer = customers.find((c) => c.id === customerId);
+      if (!customer) {
+        return null;
+      }
+      const created = await createCrmNegotiation.mutateAsync({
+        title: customer.nome?.trim() || "Nova negociação",
+        funnelId,
+        stageId,
+        customerId,
+        status: card.status,
+        assigneeId:
+          profile?.role === "atendimento" && profileId ? profileId : undefined,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      return created.id;
+    },
+    [createCrmNegotiation, customers, funnelId, profile?.role, profileId, queryClient],
+  );
+
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over) {
         return;
       }
-      const negId = String(active.id).startsWith("neg-") ? String(active.id).slice(4) : null;
+      let negId = String(active.id).startsWith("neg-") ? String(active.id).slice(4) : null;
       let stageDropId = String(over.id).startsWith("stage-") ? String(over.id).slice(6) : null;
       if (!stageDropId && String(over.id).startsWith("neg-")) {
         const overNegId = String(over.id).slice(4);
@@ -1718,17 +1776,48 @@ export default function Crm() {
         return;
       }
 
-      const card = sourceNegotiations.find((n) => n.id === negId);
+      let card = sourceNegotiations.find((n) => n.id === negId);
       if (!card || card.funnelId !== funnelId) {
         return;
       }
 
-      const funnelDef = funnels.find((f) => f.id === funnelId);
-      if (!funnelDef?.stages.some((s) => s.id === stageDropId)) {
+      if (card.stageId === stageDropId) {
         return;
       }
 
-      if (card.stageId === stageDropId) {
+      if (parseSyntheticCustomerCardId(negId)) {
+        if (!canEditCrm) {
+          toast({
+            title: "Ação indisponível",
+            description: "Seu papel não tem permissão para mover leads do cadastro.",
+            variant: "destructive",
+          });
+          return;
+        }
+        try {
+          const materializedId = await materializeSyntheticNegotiation(card, card.stageId);
+          if (!materializedId) {
+            return;
+          }
+          negId = materializedId;
+          card = {
+            ...card,
+            id: materializedId,
+            assigneeId:
+              profile?.role === "atendimento" && profileId ? profileId : card.assigneeId,
+          };
+        } catch (e) {
+          toast({
+            title: "Não foi possível criar a negociação",
+            description: e instanceof Error ? e.message : "Tente novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const funnelDef = funnels.find((f) => f.id === funnelId);
+      if (!funnelDef?.stages.some((s) => s.id === stageDropId)) {
         return;
       }
 
@@ -1745,7 +1834,7 @@ export default function Crm() {
       const cid = resolveCustomerIdForNegotiation(card, customers);
       const destinationStage = funnelDef.stages.find((s) => s.id === stageDropId);
       const stageTitle = destinationStage?.title ?? stageDropId;
-      const persistedRow = isPersistedCrmNegotiationId(negId);
+      let persistedRow = isPersistedCrmNegotiationId(negId);
       const destTemplateId = destinationStage?.taskTemplateId;
       const destTemplate = destTemplateId ? taskTemplates.find((t) => t.id === destTemplateId) : undefined;
 
@@ -1888,10 +1977,13 @@ export default function Crm() {
       }
     },
     [
+      canEditCrm,
       customers,
+      createCrmNegotiation,
       dbRecords,
       funnelId,
       funnels,
+      materializeSyntheticNegotiation,
       profile?.role,
       profileId,
       queryClient,
@@ -4004,7 +4096,9 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
 }) {
   const { profile } = useAuth();
   const profileId = profile?.id;
-  const canDrag = canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
+  const canDrag =
+    isSyntheticCustomerCardId(card.id) ||
+    canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
   const densityMode: CardDensity = density ?? "cozy";
   const isCompact = densityMode === "compact";
   const isExpanded = densityMode === "expanded";
@@ -4071,6 +4165,14 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--crm-ink-2)]">
         <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--crm-brand-2)]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
+        {isSyntheticCustomerCardId(card.id) ? (
+          <span
+            className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+            title="Lead só no cadastro — arraste para criar a negociação no CRM"
+          >
+            Cadastro
+          </span>
+        ) : null}
         {isInPool ? (
           canReassignChip ? (
             <Popover open={reassignOpen} onOpenChange={setReassignOpen}>

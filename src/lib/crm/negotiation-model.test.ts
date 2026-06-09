@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
+import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import type { CrmNegotiation, Customer } from "@/types/domain";
 import {
+  buildSyntheticCustomerNegotiationCards,
   customerMatchesCrmFunnel,
+  customerStatusToSyntheticNegotiationStatus,
   customerStageForFunnel,
+  isSyntheticCustomerCardId,
   parseSyntheticCustomerCardId,
   resolveKanbanStageId,
   syntheticCustomerCardId,
@@ -224,5 +229,87 @@ describe("synthetic customer card id", () => {
     const id = syntheticCustomerCardId("abc");
     expect(id).toBe("customer:abc");
     expect(parseSyntheticCustomerCardId(id)).toBe("abc");
+    expect(isSyntheticCustomerCardId(id)).toBe(true);
+    expect(isSyntheticCustomerCardId("uuid-real")).toBe(false);
+  });
+});
+
+describe("buildSyntheticCustomerNegotiationCards", () => {
+  const funnels = DEFAULT_CRM_FUNNELS;
+
+  function makeCustomer(overrides: Partial<Customer> & Pick<Customer, "id" | "nome">): Customer {
+    return {
+      telefone: "11999999999",
+      perfil: "A",
+      rota: "R1",
+      ultimoPedido: "",
+      status: "ativo",
+      email: "",
+      cnpj: "",
+      endereco: "",
+      vendedor: "",
+      ticketMedio: 0,
+      frequenciaCompra: "",
+      totalGasto: 0,
+      cadastradoEm: "2026-03-01T12:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("inclui cliente com etapa no cadastro sem negociação vinculada", () => {
+    const customer = makeCustomer({
+      id: "cust-1",
+      nome: "Maria",
+      sourceColumns: {
+        [CRM_FUNNEL_ID_KEY]: "comercial",
+        [CRM_PIPELINE_STAGE_KEY]: "contato",
+      },
+    });
+    const cards = buildSyntheticCustomerNegotiationCards({
+      customers: [customer],
+      funnelId: "comercial",
+      funnels,
+      linkedCustomerIds: new Set(),
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0].id).toBe("customer:cust-1");
+    expect(cards[0].stageId).toBe("contato");
+    expect(cards[0].customerId).toBe("cust-1");
+    expect(cards[0].title).toBe("Maria");
+  });
+
+  it("omite cliente que já tem negociação no funil", () => {
+    const customer = makeCustomer({
+      id: "cust-2",
+      nome: "João",
+      sourceColumns: {
+        [CRM_PIPELINE_STAGE_KEY]: "lead",
+      },
+    });
+    const cards = buildSyntheticCustomerNegotiationCards({
+      customers: [customer],
+      funnelId: "comercial",
+      funnels,
+      linkedCustomerIds: new Set(["cust-2"]),
+    });
+    expect(cards).toHaveLength(0);
+  });
+
+  it("mapeia inativo para pausado e bloqueado para perdido", () => {
+    expect(customerStatusToSyntheticNegotiationStatus("inativo")).toBe("pausado");
+    expect(customerStatusToSyntheticNegotiationStatus("bloqueado")).toBe("perdido");
+    const paused = makeCustomer({
+      id: "cust-3",
+      nome: "Ana",
+      status: "inativo",
+      sourceColumns: { [CRM_PIPELINE_STAGE_KEY]: "andamento" },
+    });
+    const cards = buildSyntheticCustomerNegotiationCards({
+      customers: [paused],
+      funnelId: "comercial",
+      funnels,
+      linkedCustomerIds: new Set(),
+    });
+    expect(cards[0]?.status).toBe("pausado");
   });
 });
