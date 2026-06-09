@@ -9,7 +9,7 @@ import {
 describe("negotiation-status", () => {
   it("permite pausar apenas negócios ativos", () => {
     expect(negotiationCanPause("em_andamento")).toBe(true);
-    expect(negotiationCanPause("nao_pausado")).toBe(true);
+    expect(negotiationCanPause("nao_pausado")).toBe(false);
     expect(negotiationCanPause("pausado")).toBe(false);
     expect(negotiationCanPause("vendido")).toBe(false);
     expect(negotiationCanPause("perdido")).toBe(false);

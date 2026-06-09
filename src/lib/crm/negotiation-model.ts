@@ -22,6 +22,10 @@ const CRM_NEGOTIATION_STATUSES = [
 
 export function parseCrmNegotiationStatus(raw: unknown): CrmNegotiationStatus {
   if (typeof raw === "string" && (CRM_NEGOTIATION_STATUSES as readonly string[]).includes(raw)) {
+    // Legado: tratado como em_andamento na UX (migration 20260629150000).
+    if (raw === "nao_pausado") {
+      return "em_andamento";
+    }
     return raw as CrmNegotiationStatus;
   }
   return "em_andamento";

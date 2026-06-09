@@ -8,6 +8,7 @@ import {
   customerStatusToSyntheticNegotiationStatus,
   customerStageForFunnel,
   isSyntheticCustomerCardId,
+  parseCrmNegotiationStatus,
   parseSyntheticCustomerCardId,
   resolveKanbanStageId,
   syntheticCustomerCardId,
@@ -221,6 +222,13 @@ describe("customerMatchesCrmFunnel", () => {
       totalGasto: 0,
     };
     expect(customerMatchesCrmFunnel(customer, "comercial")).toBe(true);
+  });
+});
+
+describe("parseCrmNegotiationStatus", () => {
+  it("normaliza nao_pausado legado para em_andamento", () => {
+    expect(parseCrmNegotiationStatus("nao_pausado")).toBe("em_andamento");
+    expect(parseCrmNegotiationStatus("pausado")).toBe("pausado");
   });
 });
 

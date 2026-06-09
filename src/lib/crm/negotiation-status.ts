@@ -1,6 +1,6 @@
 import type { CrmNegotiationStatus, CustomerStatus } from "@/types/domain";
 
-const PAUSABLE: CrmNegotiationStatus[] = ["em_andamento", "nao_pausado"];
+const PAUSABLE: CrmNegotiationStatus[] = ["em_andamento"];
 
 /** Negociação ativa pode ser pausada (não aplica a vendido/perdido). */
 export function negotiationCanPause(status: CrmNegotiationStatus): boolean {
@@ -29,7 +29,7 @@ export function customerStatusForNegotiationPause(
   if (negotiationStatus === "pausado") {
     return "inativo";
   }
-  if (negotiationStatus === "em_andamento" || negotiationStatus === "nao_pausado") {
+  if (negotiationStatus === "em_andamento") {
     if (currentCustomerStatus === "inativo") {
       return "ativo";
     }

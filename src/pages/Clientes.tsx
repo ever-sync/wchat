@@ -289,6 +289,7 @@ export default function Clientes() {
       const negotiations = await listCrmNegotiationsByCustomerId(customer.id);
       const target = negotiations.find((n) => isPersistedCrmNegotiationId(n.id));
       if (!target) {
+        navigate(`/clientes/${encodeURIComponent(customer.id)}`);
         return;
       }
       navigate(`/crm/negociacao/${encodeURIComponent(target.id)}`);
