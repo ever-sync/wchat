@@ -458,7 +458,7 @@ export function CrmCreateNegotiationDialog({
             >
               <label
                 htmlFor="crm-neg-existing"
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#dee2e6] px-3 py-2.5 text-sm has-[:checked]:border-[#4E1BB1] has-[:checked]:bg-[#F9F6FD]"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--crm-border)] px-3 py-2.5 text-sm has-[:checked]:border-[var(--crm-brand)] has-[:checked]:bg-[var(--crm-brand-tint)]"
               >
                 <RadioGroupItem value="existing" id="crm-neg-existing" />
                 <Users className="h-4 w-4 text-[#6f7b76]" />
@@ -466,7 +466,7 @@ export function CrmCreateNegotiationDialog({
               </label>
               <label
                 htmlFor="crm-neg-new"
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#dee2e6] px-3 py-2.5 text-sm has-[:checked]:border-[#4E1BB1] has-[:checked]:bg-[#F9F6FD]"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--crm-border)] px-3 py-2.5 text-sm has-[:checked]:border-[var(--crm-brand)] has-[:checked]:bg-[var(--crm-brand-tint)]"
               >
                 <RadioGroupItem value="new" id="crm-neg-new" />
                 <UserPlus className="h-4 w-4 text-[#6f7b76]" />
@@ -710,7 +710,7 @@ export function CrmCreateNegotiationDialog({
           </Button>
           <Button
             type="button"
-            className="bg-[#4E1BB1] hover:bg-[#3C1494]"
+            className="bg-[var(--crm-brand)] text-white hover:bg-[var(--crm-brand-strong)]"
             disabled={busy}
             onClick={() => void handleSubmit()}
           >

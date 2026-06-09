@@ -397,15 +397,8 @@ function negotiationNextTaskDueMeta(iso: string | undefined): { label: string; o
   };
 }
 
-function resolveCustomerIdForNegotiation(card: CrmNegotiation, customers: Customer[]): string | null {
-  if (card.customerId) {
-    const byId = customers.find((c) => c.id === card.customerId);
-    if (byId) return byId.id;
-  }
-  const t = card.title.trim().toLowerCase();
-  const exact = customers.find((c) => c.nome.trim().toLowerCase() === t);
-  if (exact) return exact.id;
-  return null;
+function resolveCustomerIdForNegotiation(card: CrmNegotiation, _customers: Customer[]): string | null {
+  return card.customerId?.trim() || null;
 }
 
 function appliedToOwnerDraft(applied: AppliedOwner): OwnerDraft {
@@ -1550,10 +1543,11 @@ export default function Crm() {
         });
         return;
       }
+      const bulkFunnelId = patch.funnelId ?? funnelId;
       if (
         patch.stageId &&
-        (isLostDestinationStage(funnels, funnelId, patch.stageId) ||
-          isSaleDestinationStage(funnels, funnelId, patch.stageId))
+        (isLostDestinationStage(funnels, bulkFunnelId, patch.stageId) ||
+          isSaleDestinationStage(funnels, bulkFunnelId, patch.stageId))
       ) {
         toast({
           title: "Etapa não permitida em lote",
@@ -1563,6 +1557,37 @@ export default function Crm() {
         return;
       }
       const ids = Array.from(bulkSelected);
+      if (patch.stageId) {
+        const required = stageRequiredFields(funnels, bulkFunnelId, patch.stageId);
+        if (required.length > 0) {
+          const blocked = ids.filter((negId) => {
+            const row = dbRecords.find((r) => r.id === negId);
+            const card = sourceNegotiations.find((n) => n.id === negId);
+            return Boolean(
+              validateNegotiationForStage(
+                {
+                  totalValue: row?.totalValue ?? card?.totalValue,
+                  qualification: row?.qualification ?? card?.qualification,
+                  closingForecast: row?.closingForecast ?? card?.closingForecast ?? null,
+                  nextTaskAt: row?.nextTaskAt ?? card?.nextTaskAt ?? null,
+                },
+                required,
+              ),
+            );
+          });
+          if (blocked.length > 0) {
+            toast({
+              title: "Campos obrigatórios",
+              description:
+                blocked.length === 1
+                  ? "1 negócio selecionado não atende aos requisitos da etapa."
+                  : `${blocked.length} negócios selecionados não atendem aos requisitos da etapa.`,
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+      }
       setBulkBusy(true);
       const effectiveFunnelId = patch.funnelId ?? funnelId;
       const shouldSyncCustomer = Boolean(patch.stageId || patch.funnelId || patch.status);
