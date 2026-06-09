@@ -432,7 +432,6 @@ export const STATUS_VALUES: { id: CrmNegotiationStatus; label: string }[] = [
   { id: "vendido", label: "Vendido" },
   { id: "perdido", label: "Perdido" },
   { id: "pausado", label: "Pausado" },
-  { id: "nao_pausado", label: "Não pausado" },
 ];
 
 export function makeRuleId(): string {

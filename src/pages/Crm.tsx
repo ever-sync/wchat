@@ -261,7 +261,6 @@ const STATUS_OPTIONS: {
   { id: "vendido", label: "Vendido", icon: ThumbsUp },
   { id: "perdido", label: "Perdido", icon: ThumbsDown },
   { id: "pausado", label: "Pausado", icon: Pause },
-  { id: "nao_pausado", label: "Não pausado", icon: Play },
 ];
 
 const SORT_OPTIONS: { id: SortId; label: string }[] = [

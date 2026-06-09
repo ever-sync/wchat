@@ -60,7 +60,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { buildPipelineLabels } from "@/lib/crm-pipeline";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
@@ -149,10 +148,13 @@ function PipelineChevrons({
   activeIndex: number;
   daysContact: number;
   onStageSelect?: (stageIndex: number) => void;
-  /** Etapas reais do funil da negociação; sem isso usa o funil legado fixo. */
+  /** Etapas reais do funil; sem funil configurado o stepper fica oculto. */
   stages?: Array<{ key: string; label: string }>;
 }) {
-  const segments = stages ?? buildPipelineLabels(daysContact);
+  const segments = stages ?? [];
+  if (!segments.length) {
+    return null;
+  }
   const interactive = Boolean(onStageSelect);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | HTMLDivElement | null>(null);
@@ -800,8 +802,8 @@ export function ClienteRdPerfilView({
       const idx = Math.min(Math.max(pipelineActiveIndex, 0), pipelineStages.length - 1);
       return pipelineStages[idx]?.label ?? "—";
     }
-    return buildPipelineLabels(daysContact)[pipelineActiveIndex]?.label ?? "—";
-  }, [pipelineActiveIndex, pipelineStages, daysContact]);
+    return "—";
+  }, [pipelineActiveIndex, pipelineStages]);
 
   const [promoVisible, setPromoVisible] = useState(true);
   const [negoPanelEditing, setNegoPanelEditing] = useState(false);

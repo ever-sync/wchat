@@ -450,7 +450,7 @@ Deno.serve(async (request) => {
       .or(`and(status.eq.pending,next_attempt_at.lte.${nowIso}),and(status.eq.error,created_at.gte.${since24h}),and(status.eq.success,created_at.gte.${since24h})`),
     admin
       .from("marketing_flow_worker_heartbeats")
-      .select("worker_id, last_seen, metadata")
+      .select("worker_key, worker_id, last_seen, claimed")
       .order("last_seen", { ascending: false })
       .limit(1),
     admin

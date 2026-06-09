@@ -50,6 +50,12 @@ import {
   isClientePerfilCrmLocked,
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
+import {
+  customerStatusForNegotiationPause,
+  negotiationCanPause,
+  negotiationCanResume,
+} from "@/lib/crm/negotiation-status";
+import { isPersistedCrmNegotiationId } from "@/lib/crm/negotiation-model";
 import { useCrmActivitiesForCustomer } from "@/lib/api/crm-activities";
 import {
   useCreateCrmTask,
@@ -496,6 +502,74 @@ export function ClientePerfilContent({
   const customerFunnelLabel = customerPipelineView?.funnelLabel;
   const customerFunnelId = customerPipelineView?.funnelId ?? effectiveCrmFunnels[0]?.id ?? "comercial";
 
+  /** Negociação ativa do funil atual — habilita Pausar/Retomar na ficha. */
+  const pausableNegotiation = useMemo(() => {
+    const inFunnel = customerNegotiations.filter(
+      (n) => n.funnelId === customerFunnelId && isPersistedCrmNegotiationId(n.id),
+    );
+    return (
+      inFunnel.find((n) => n.status === "em_andamento" || n.status === "nao_pausado") ??
+      inFunnel.find((n) => n.status === "pausado") ??
+      null
+    );
+  }, [customerFunnelId, customerNegotiations]);
+
+  const handleTogglePauseNegotiation = async () => {
+    if (clientePerfilCrmLocked) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!pausableNegotiation || !cliente) {
+      return;
+    }
+    const nextStatus = negotiationCanResume(pausableNegotiation.status)
+      ? "em_andamento"
+      : "pausado";
+    if (
+      !negotiationCanPause(pausableNegotiation.status) &&
+      !negotiationCanResume(pausableNegotiation.status)
+    ) {
+      return;
+    }
+    try {
+      await updateNegotiation.mutateAsync({
+        id: pausableNegotiation.id,
+        patch: { status: nextStatus },
+      });
+      const customerStatus = customerStatusForNegotiationPause(nextStatus, cliente.status);
+      if (customerStatus !== undefined) {
+        await updateCustomer.mutateAsync({
+          id: cliente.id,
+          input: {
+            ...toCustomerInput(cliente, customerStatus),
+            sourceColumns: {
+              ...(cliente.sourceColumns ?? {}),
+              [CRM_FUNNEL_ID_KEY]: pausableNegotiation.funnelId,
+              [CRM_PIPELINE_STAGE_KEY]: pausableNegotiation.stageId,
+            },
+          },
+        });
+      }
+      toast({
+        title: nextStatus === "pausado" ? "Negócio pausado" : "Negócio retomado",
+        description:
+          nextStatus === "pausado"
+            ? "Alertas de follow-up ficam suspensos até retomar."
+            : "O negócio voltou para em andamento.",
+      });
+    } catch (e) {
+      toast({
+        title: "Não foi possível salvar",
+        description: e instanceof Error ? e.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handlePipelineStageChange = async (stageIndex: number) => {
     if (clientePerfilCrmLocked) {
       toast({
@@ -525,8 +599,13 @@ export function ClientePerfilContent({
       return;
     }
 
-    const openNegotiations = customerNegotiations.filter((n) => n.status === "em_andamento");
-    if (openNegotiations.length === 0 && crmEnabled) {
+    const activeNegotiations = customerNegotiations.filter(
+      (n) =>
+        n.status === "em_andamento" ||
+        n.status === "pausado" ||
+        n.status === "nao_pausado",
+    );
+    if (activeNegotiations.length === 0 && crmEnabled) {
       await createNegotiation.mutateAsync({
         title: cliente.nome?.trim() || "Nova negociação",
         funnelId: funnel.id,
@@ -534,11 +613,15 @@ export function ClientePerfilContent({
         customerId: cliente.id,
       });
     } else {
-      for (const n of openNegotiations) {
-        if (n.funnelId !== funnel.id || n.stageId !== stage.id) {
+      for (const n of activeNegotiations) {
+        if (n.funnelId !== funnel.id || n.stageId !== stage.id || n.status === "pausado") {
           await updateNegotiation.mutateAsync({
             id: n.id,
-            patch: { funnelId: funnel.id, stageId: stage.id },
+            patch: {
+              funnelId: funnel.id,
+              stageId: stage.id,
+              ...(n.status === "pausado" ? { status: "em_andamento" as const } : {}),
+            },
           });
         }
       }
@@ -808,6 +891,13 @@ export function ClientePerfilContent({
                 });
               }
         }
+        negotiationStatus={pausableNegotiation?.status}
+        onTogglePauseNegotiation={
+          crmEnabled && canEditCrm && pausableNegotiation
+            ? () => void handleTogglePauseNegotiation()
+            : undefined
+        }
+        pauseTogglePending={updateNegotiation.isPending || updateCustomer.isPending}
         onEdit={() => {
           if (!canEditCustomer) {
             toast({
