@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CRM_FUNNELS, resolveConfiguredSaleStageId } from "@/data/crm-funnels";
+import {
+  DEFAULT_CRM_FUNNELS,
+  resolveConfiguredLostStageId,
+  resolveConfiguredSaleStageId,
+} from "@/data/crm-funnels";
 import {
   hasSaleAttendant,
+  isLostDestinationStage,
   isSaleDestinationStage,
   negotiationHasCompletedSale,
   validateMarkWinLines,
@@ -50,6 +55,13 @@ describe("sale-rules", () => {
     const saleId = resolveConfiguredSaleStageId(DEFAULT_CRM_FUNNELS, funnelId);
     expect(isSaleDestinationStage(DEFAULT_CRM_FUNNELS, funnelId, saleId)).toBe(true);
     expect(isSaleDestinationStage(DEFAULT_CRM_FUNNELS, funnelId, "lead")).toBe(false);
+  });
+
+  it("identifica etapa de perda do funil", () => {
+    const funnelId = DEFAULT_CRM_FUNNELS[0]!.id;
+    const lostId = resolveConfiguredLostStageId(DEFAULT_CRM_FUNNELS, funnelId);
+    expect(isLostDestinationStage(DEFAULT_CRM_FUNNELS, funnelId, lostId)).toBe(true);
+    expect(isLostDestinationStage(DEFAULT_CRM_FUNNELS, funnelId, "lead")).toBe(false);
   });
 
   it("valida linhas da venda", () => {

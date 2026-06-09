@@ -58,6 +58,7 @@ import {
   X,
 } from "lucide-react";
 import { CrmCreateNegotiationDialog } from "@/components/crm/CrmCreateNegotiationDialog";
+import { CrmWhatsappPhoneDialog } from "@/components/crm/CrmWhatsappPhoneDialog";
 import { AdvancedFilterDialog } from "@/components/crm/AdvancedFilterDialog";
 import { LeadScoreBadge } from "@/components/crm/LeadScoreBadge";
 import { NegotiationScoreCard } from "@/components/crm/NegotiationScoreCard";
@@ -140,7 +141,12 @@ import { createStageTemplateTask } from "@/lib/api/crm-tasks";
 import { useCrmTaskTemplates } from "@/lib/api/crm-task-templates";
 import { useTenantSettings } from "@/lib/api/integrations";
 import { useTenantCollaborators } from "@/lib/api/settings";
-import { toCustomerUpsertInput, useCustomers, useUpdateCustomer } from "@/lib/api/customers";
+import {
+  toCustomerUpsertInput,
+  updateCustomer as updateCustomerDirect,
+  useCustomers,
+  useUpdateCustomer,
+} from "@/lib/api/customers";
 import { useCrmNegotiationStageOverrides, useUpsertCrmNegotiationStageOverride } from "@/lib/api/crm-kanban";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import {
@@ -160,6 +166,7 @@ import {
   normalizeStaleNegotiationDays,
 } from "@/lib/crm/negotiation-alerts";
 import {
+  isLostDestinationStage,
   isSaleDestinationStage,
   negotiationHasCompletedSale,
   saleAttendantBlockedMessage,
@@ -171,10 +178,22 @@ import {
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
+import {
+  buildInboxUrlForWhatsapp,
+  openCrmWhatsappInbox,
+  resolveCrmWhatsappOpenAction,
+  resolveCustomerForNegotiation,
+  type CrmWhatsappPhoneOption,
+} from "@/lib/crm/crm-whatsapp-inbox";
+import { useInboxChats } from "@/lib/api/whatsapp";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type { CrmFunnel, CrmStageDef } from "@/data/crm-funnels";
-import { DEFAULT_CRM_FUNNELS, resolveConfiguredSaleStageId } from "@/data/crm-funnels";
+import {
+  DEFAULT_CRM_FUNNELS,
+  resolveConfiguredLostStageId,
+  resolveConfiguredSaleStageId,
+} from "@/data/crm-funnels";
 import { E2E_POOL_NEGOTIATION } from "@/data/crm-e2e-fixtures";
 import { MOCK_NEGOTIATIONS } from "@/data/crm-mock-negotiations";
 import { isE2eMockAuth } from "@/lib/e2e";
@@ -519,11 +538,59 @@ export default function Crm() {
   const updateCrmSavedViewMut = useUpdateCrmSavedView();
   const deleteCrmSavedViewMut = useDeleteCrmSavedView();
 
-  const openChatInbox = useCallback(
-    (chatId: string) => {
-      navigate(`/inbox?chatId=${encodeURIComponent(chatId)}`);
+  const { data: inboxChats = [] } = useInboxChats(
+    { status: "all", hideLost: false, limit: 1000 },
+    { enabled: isSupabaseConfigured, staleTime: 60_000 },
+  );
+
+  const openWhatsappFromCard = useCallback(
+    (card: CrmNegotiation, phone?: string) => {
+      const customer = resolveCustomerForNegotiation(card, customers);
+
+      if (phone) {
+        openCrmWhatsappInbox({
+          navigate,
+          chats: inboxChats,
+          card,
+          customer,
+          phone,
+        });
+        return;
+      }
+
+      const action = resolveCrmWhatsappOpenAction({ card, customer });
+      if (action.kind === "pick") {
+        setWhatsappPhonePick({ card, options: action.options });
+        return;
+      }
+      if (action.kind === "open") {
+        openCrmWhatsappInbox({
+          navigate,
+          chats: inboxChats,
+          card,
+          customer,
+          phone: action.phone,
+        });
+        return;
+      }
+      if (action.kind === "open_chat") {
+        navigate(buildInboxUrlForWhatsapp({ chatId: action.chatId }));
+        return;
+      }
+      toast({
+        title: "WhatsApp indisponível",
+        description: action.message,
+        variant: "destructive",
+      });
     },
-    [navigate],
+    [customers, inboxChats, navigate, toast],
+  );
+
+  const handleOpenWhatsappFromCard = useCallback(
+    (card: CrmNegotiation) => {
+      openWhatsappFromCard(card);
+    },
+    [openWhatsappFromCard],
   );
 
   const { data: tenantFunnelsSaved } = useTenantCrmFunnelConfig({
@@ -646,6 +713,10 @@ export default function Crm() {
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CrmNegotiation | null>(null);
+  const [whatsappPhonePick, setWhatsappPhonePick] = useState<{
+    card: CrmNegotiation;
+    options: CrmWhatsappPhoneOption[];
+  } | null>(null);
   const [e2eAssigneeOverrides, setE2eAssigneeOverrides] = useState<Record<string, string>>({});
   const [pendingLostDrag, setPendingLostDrag] = useState<{
     negId: string;
@@ -698,6 +769,10 @@ export default function Crm() {
           customer,
           stageOverride: stageOverrides[merged.id],
           persisted: null,
+          terminalStages: {
+            lostStageId: resolveConfiguredLostStageId(funnels, merged.funnelId),
+            saleStageId: resolveConfiguredSaleStageId(funnels, merged.funnelId),
+          },
         });
         return { ...merged, stageId };
       });
@@ -720,6 +795,10 @@ export default function Crm() {
         customer,
         stageOverride: stageOverrides[base.id],
         persisted: { funnelId: row.funnelId, stageId: row.stageId },
+        terminalStages: {
+          lostStageId: resolveConfiguredLostStageId(funnels, base.funnelId),
+          saleStageId: resolveConfiguredSaleStageId(funnels, base.funnelId),
+        },
       });
       return {
         ...base,
@@ -1471,15 +1550,54 @@ export default function Crm() {
         });
         return;
       }
+      if (
+        patch.stageId &&
+        (isLostDestinationStage(funnels, funnelId, patch.stageId) ||
+          isSaleDestinationStage(funnels, funnelId, patch.stageId))
+      ) {
+        toast({
+          title: "Etapa não permitida em lote",
+          description: "Marque venda ou perda negócio a negócio — exige confirmação e motivo.",
+          variant: "destructive",
+        });
+        return;
+      }
       const ids = Array.from(bulkSelected);
       setBulkBusy(true);
+      const effectiveFunnelId = patch.funnelId ?? funnelId;
+      const shouldSyncCustomerPipeline = Boolean(patch.stageId || patch.funnelId);
       // Roda em paralelo + invalida uma vez no fim (mais barato que `mutateAsync` por linha).
       const results = await Promise.allSettled(
-        ids.map((id) => updateCrmNegotiationDirect(id, patch)),
+        ids.map(async (id) => {
+          await updateCrmNegotiationDirect(id, patch);
+          if (!shouldSyncCustomerPipeline) return;
+          const row = dbRecords.find((r) => r.id === id);
+          const card = sourceNegotiations.find((n) => n.id === id);
+          const cid =
+            row?.customerId ??
+            card?.customerId ??
+            (card ? resolveCustomerIdForNegotiation(card, customers) : null);
+          if (!cid) return;
+          const customer = customers.find((c) => c.id === cid);
+          if (!customer) return;
+          const stageId = patch.stageId ?? row?.stageId ?? card?.stageId;
+          if (!stageId) return;
+          await updateCustomerDirect(cid, {
+            ...toCustomerUpsertInput(customer),
+            sourceColumns: {
+              ...customer.sourceColumns,
+              [CRM_PIPELINE_STAGE_KEY]: stageId,
+              [CRM_FUNNEL_ID_KEY]: row?.funnelId ?? card?.funnelId ?? effectiveFunnelId,
+            },
+          });
+        }),
       );
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const failed = ids.length - ok;
       await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      if (shouldSyncCustomerPipeline) {
+        await queryClient.invalidateQueries({ queryKey: ["customers"] });
+      }
       setBulkBusy(false);
       setBulkAssignOpen(false);
       setBulkStageOpen(false);
@@ -1497,7 +1615,7 @@ export default function Crm() {
         });
       }
     },
-    [bulkSelected, canBulkAct, queryClient, toast],
+    [bulkSelected, canBulkAct, customers, dbRecords, funnelId, funnels, queryClient, sourceNegotiations, toast],
   );
 
   const handleBulkExport = useCallback(() => {
@@ -1622,7 +1740,7 @@ export default function Crm() {
         }
       }
 
-      if (stageDropId === "perdido") {
+      if (isLostDestinationStage(funnels, funnelId, stageDropId)) {
         if (!persistedRow) {
           toast({
             title: "Marcar perda",
@@ -3144,7 +3262,7 @@ export default function Crm() {
                   onDeleteNegotiation={setDeleteTarget}
                   onOpenNegotiation={openNegotiationCard}
                   onOpenCustomer={handleOpenCustomerCard}
-                  onOpenChat={openChatInbox}
+                  onOpenWhatsapp={handleOpenWhatsappFromCard}
                   onUpdateInline={handleUpdateInlineNegotiation}
                   resolveAssigneeName={resolveAssigneeName}
                   attendantsForReassign={attendants}
@@ -3473,22 +3591,30 @@ export default function Crm() {
                     </div>
                     <Separator />
                     <ul className="max-h-64 overflow-y-auto py-1">
-                      {funnel.stages.map((s) => (
-                        <li key={s.id}>
-                          <button
-                            type="button"
-                            className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
-                            onClick={() =>
-                              void runBulkPatch("Mudar etapa", {
-                                funnelId: funnel.id,
-                                stageId: s.id,
-                              })
-                            }
-                          >
-                            {s.title}
-                          </button>
-                        </li>
-                      ))}
+                      {funnel.stages
+                        .filter(
+                          (s) =>
+                            !s.isLostStage &&
+                            !s.isSaleStage &&
+                            !isLostDestinationStage(funnels, funnel.id, s.id) &&
+                            !isSaleDestinationStage(funnels, funnel.id, s.id),
+                        )
+                        .map((s) => (
+                          <li key={s.id}>
+                            <button
+                              type="button"
+                              className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--crm-surface)]"
+                              onClick={() =>
+                                void runBulkPatch("Mudar etapa", {
+                                  funnelId: funnel.id,
+                                  stageId: s.id,
+                                })
+                              }
+                            >
+                              {s.title}
+                            </button>
+                          </li>
+                        ))}
                     </ul>
                   </PopoverContent>
                 </Popover>
@@ -3587,6 +3713,24 @@ export default function Crm() {
         pending={updateCrmNegotiation.isPending}
         onConfirm={completeWinDrag}
       />
+      <CrmWhatsappPhoneDialog
+        open={whatsappPhonePick != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWhatsappPhonePick(null);
+          }
+        }}
+        leadTitle={whatsappPhonePick?.card.title ?? ""}
+        options={whatsappPhonePick?.options ?? []}
+        onSelect={(option) => {
+          const card = whatsappPhonePick?.card;
+          setWhatsappPhonePick(null);
+          if (card) {
+            openWhatsappFromCard(card, option.value);
+          }
+        }}
+      />
+
       <AlertDialog
         open={deleteTarget != null}
         onOpenChange={(open) => {
@@ -3784,7 +3928,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onDeleteNegotiation,
   onOpenNegotiation,
   onOpenCustomer,
-  onOpenChat,
+  onOpenWhatsapp,
   onUpdateInline,
   resolveAssigneeName,
   attendantsForReassign,
@@ -3804,7 +3948,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   onDeleteNegotiation: (card: CrmNegotiation) => void;
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
-  onOpenChat?: (chatId: string) => void;
+  onOpenWhatsapp?: (card: CrmNegotiation) => void;
   onUpdateInline?: (
     card: CrmNegotiation,
     patch: { qualification?: number; totalValue?: number; assigneeId?: string },
@@ -3849,7 +3993,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
     canClaim && isPersistedCrmNegotiationId(card.id) && isInPool;
   const showRelease =
     canReleaseToPool && isPersistedCrmNegotiationId(card.id) && !isInPool;
-  const showChatAction = Boolean(card.sourceChatId && onOpenChat);
+  const showWhatsappAction = Boolean(onOpenWhatsapp);
   const showDelete = canDelete && isPersistedCrmNegotiationId(card.id);
   const assigneeBusy = isClaimPending || isReleasePending;
 
@@ -4139,27 +4283,37 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
             ASSUMIR
           </Button>
         ) : null}
-        {showChatAction || showRelease ? (
-          <div className={cn("grid gap-2", showChatAction && showRelease ? "grid-cols-2" : "grid-cols-1")}>
-            {showChatAction ? (
+        {showWhatsappAction || showRelease ? (
+          <div
+            className={cn(
+              "grid gap-2 overflow-visible",
+              showWhatsappAction && showRelease ? "grid-cols-2" : "grid-cols-1",
+            )}
+          >
+            {showWhatsappAction ? (
               <Button
                 type="button"
                 variant="outline"
                 className={cn(
-                  "gap-2 border-[var(--crm-success-border)] bg-card font-medium text-[var(--crm-wa-teal)] shadow-none hover:bg-[var(--crm-success-tint)]",
-                  isCompact ? "h-8 text-xs" : "h-9 text-sm",
+                  "relative w-full min-w-0 justify-center gap-1 border-[var(--crm-success-border)] bg-card px-2 font-medium text-[var(--crm-wa-teal)] shadow-none hover:bg-[var(--crm-success-tint)]",
+                  (card.sourceChatUnread ?? 0) > 0 && "overflow-visible",
+                  isCompact ? "h-8 text-[11px]" : "h-9 text-xs sm:text-sm",
                 )}
                 onPointerDown={(e) => e.stopPropagation()}
+                data-testid={`crm-whatsapp-${card.id}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenChat?.(card.sourceChatId!);
+                  onOpenWhatsapp?.(card);
                 }}
               >
-                <MessageCircle className="h-4 w-4 shrink-0" aria-hidden />
-                WhatsApp
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="truncate">WhatsApp</span>
                 {(card.sourceChatUnread ?? 0) > 0 ? (
-                  <span className="rounded-full bg-[var(--crm-wa-green)] px-1.5 text-[10px] font-bold leading-5 text-white">
-                    {card.sourceChatUnread}
+                  <span
+                    className="pointer-events-none absolute -right-1 -top-1 z-[1] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--crm-wa-green)] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-card"
+                    aria-label={`${card.sourceChatUnread} mensagem(ns) não lida(s)`}
+                  >
+                    {(card.sourceChatUnread ?? 0) > 99 ? "99+" : card.sourceChatUnread}
                   </span>
                 ) : null}
               </Button>
@@ -4169,8 +4323,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
                 type="button"
                 variant="outline"
                 className={cn(
-                  "gap-2 border-[var(--crm-brand-border)] bg-card font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]",
-                  isCompact ? "h-8 text-xs" : "h-9 text-sm",
+                  "w-full min-w-0 justify-center gap-1 border-[var(--crm-brand-border)] bg-card px-2 font-medium text-[var(--crm-brand)] shadow-none hover:bg-[var(--crm-brand-tint)]",
+                  isCompact ? "h-8 text-[11px]" : "h-9 text-xs sm:text-sm",
                 )}
                 disabled={assigneeBusy}
                 onPointerDown={(e) => e.stopPropagation()}
@@ -4179,8 +4333,8 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
                   onReleaseNegotiation(card);
                 }}
               >
-                <Users className="h-4 w-4 shrink-0" aria-hidden />
-                DEVOLVER
+                <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="truncate">DEVOLVER</span>
               </Button>
             ) : null}
           </div>
@@ -4220,7 +4374,7 @@ function KanbanColumn({
   onDeleteNegotiation,
   onOpenNegotiation,
   onOpenCustomer,
-  onOpenChat,
+  onOpenWhatsapp,
   onUpdateInline,
   onColumnRefresh,
   onColumnValueSort,
@@ -4242,7 +4396,7 @@ function KanbanColumn({
   onDeleteNegotiation: (card: CrmNegotiation) => void;
   onOpenNegotiation: (card: CrmNegotiation) => void;
   onOpenCustomer?: (customerId: string) => void;
-  onOpenChat?: (chatId: string) => void;
+  onOpenWhatsapp?: (card: CrmNegotiation) => void;
   onUpdateInline?: (
     card: CrmNegotiation,
     patch: { qualification?: number; totalValue?: number; assigneeId?: string },
@@ -4348,7 +4502,7 @@ function KanbanColumn({
                   onDeleteNegotiation={onDeleteNegotiation}
                   onOpenNegotiation={onOpenNegotiation}
                   onOpenCustomer={onOpenCustomer}
-                  onOpenChat={onOpenChat}
+                  onOpenWhatsapp={onOpenWhatsapp}
                   onUpdateInline={onUpdateInline}
                   resolveAssigneeName={resolveAssigneeName}
                   attendantsForReassign={attendantsForReassign}

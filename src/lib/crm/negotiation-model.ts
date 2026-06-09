@@ -22,13 +22,13 @@ export function isPersistedCrmNegotiationId(id: string): boolean {
 }
 
 /**
- * Ordem de precedência para `stageId` exibido no Kanban (Fase 1 — fonte única documentada):
+ * Ordem de precedência para `stageId` exibido no Kanban:
  *
- * 1. **crm_negotiations** — se `persisted` for passado, `persisted.stageId` é canônico (API nas fases seguintes).
- * 2. **Cliente vinculado** — `customers.source_columns`: `crm_pipeline_stage` + `crm_funnel_id`
- *    quando o estágio é válido no funil atual (`customerStageForFunnel`).
- * 3. **crm_negotiation_stages** / localStorage — override por `negotiation_id` (leads sem cliente, mocks).
- * 4. **Fallback** — `base.stageId` do card (mock ou valor inicial).
+ * 1. **Status terminal** — `perdido` / `vendido` → etapa `isLostStage` / `isSaleStage` do funil.
+ * 2. **crm_negotiations** — `persisted.stageId` quando válido no funil (fonte canônica por negócio).
+ * 3. **Cliente vinculado** — só quando **não** há linha persistida (`persisted` ausente): mocks/offline.
+ * 4. **crm_negotiation_stages** / localStorage — override por `negotiation_id`.
+ * 5. **Fallback** — `base.stageId` ou primeira etapa do funil.
  */
 
 export type CrmStageOverride = { funnel_id: string; stage_id: string };
@@ -73,6 +73,8 @@ export function parseSyntheticCustomerCardId(cardId: string): string | null {
   return rest || null;
 }
 
+export type KanbanTerminalStages = { lostStageId: string; saleStageId: string };
+
 export function resolveKanbanStageId(params: {
   base: CrmNegotiation;
   funnelId: string;
@@ -81,16 +83,37 @@ export function resolveKanbanStageId(params: {
   stageOverride: CrmStageOverride | undefined;
   /** Linha `crm_negotiations` quando a listagem vier do banco (fases 2+). */
   persisted?: Pick<CrmNegotiationRecord, "stageId" | "funnelId"> | null;
+  /** Etapas terminais do funil (`isLostStage` / `isSaleStage`) — evita cair na 1ª coluna. */
+  terminalStages?: KanbanTerminalStages;
 }): string {
-  const { base, funnelId, validStageIds, customer, stageOverride, persisted } = params;
+  const { base, funnelId, validStageIds, customer, stageOverride, persisted, terminalStages } =
+    params;
 
-  if (persisted && persisted.funnelId === funnelId && validStageIds.has(persisted.stageId)) {
-    return persisted.stageId;
+  if (base.status === "perdido") {
+    const lostId = terminalStages?.lostStageId;
+    if (lostId && validStageIds.has(lostId)) {
+      return lostId;
+    }
+  }
+  if (base.status === "vendido") {
+    const saleId = terminalStages?.saleStageId;
+    if (saleId && validStageIds.has(saleId)) {
+      return saleId;
+    }
   }
 
-  const fromCustomer = customerStageForFunnel(customer, funnelId, validStageIds);
-  if (fromCustomer) {
-    return fromCustomer;
+  const persistedMatchesFunnel = Boolean(persisted && persisted.funnelId === funnelId);
+
+  if (persistedMatchesFunnel && validStageIds.has(persisted!.stageId)) {
+    return persisted!.stageId;
+  }
+
+  // Negociação no banco: não deixa `source_columns` do cliente sobrescrever a etapa persistida.
+  if (!persistedMatchesFunnel) {
+    const fromCustomer = customerStageForFunnel(customer, funnelId, validStageIds);
+    if (fromCustomer) {
+      return fromCustomer;
+    }
   }
 
   if (

@@ -91,6 +91,84 @@ describe("resolveKanbanStageId", () => {
     });
     expect(stageId).toBe("andamento");
   });
+
+  it("status perdido vai para etapa de perda mesmo com cliente na primeira etapa", () => {
+    const customer: Customer = {
+      id: "c1",
+      nome: "Raphael",
+      telefone: "",
+      perfil: "B",
+      rota: "",
+      ultimoPedido: "",
+      status: "ativo",
+      email: "",
+      cnpj: "",
+      endereco: "",
+      vendedor: "",
+      ticketMedio: 0,
+      frequenciaCompra: "",
+      totalGasto: 0,
+      sourceColumns: {
+        crm_pipeline_stage: "lead",
+        crm_funnel_id: "comercial",
+      },
+    };
+    const stageId = resolveKanbanStageId({
+      base: { ...baseCard(), status: "perdido", stageId: "perdido" },
+      funnelId: "comercial",
+      validStageIds: new Set([...stages, "lead-perdido"]),
+      customer,
+      stageOverride: undefined,
+      persisted: { funnelId: "comercial", stageId: "perdido" },
+      terminalStages: { lostStageId: "lead-perdido", saleStageId: "venda" },
+    });
+    expect(stageId).toBe("lead-perdido");
+  });
+
+  it("ignora etapa do cliente quando há negociação persistida", () => {
+    const customer: Customer = {
+      id: "c1",
+      nome: "X",
+      telefone: "",
+      perfil: "B",
+      rota: "",
+      ultimoPedido: "",
+      status: "ativo",
+      email: "",
+      cnpj: "",
+      endereco: "",
+      vendedor: "",
+      ticketMedio: 0,
+      frequenciaCompra: "",
+      totalGasto: 0,
+      sourceColumns: {
+        crm_pipeline_stage: "contato",
+        crm_funnel_id: "comercial",
+      },
+    };
+    const stageId = resolveKanbanStageId({
+      base: baseCard(),
+      funnelId: "comercial",
+      validStageIds: stages,
+      customer,
+      stageOverride: undefined,
+      persisted: { funnelId: "comercial", stageId: "andamento" },
+    });
+    expect(stageId).toBe("andamento");
+  });
+
+  it("status vendido vai para etapa de venda configurada", () => {
+    const stageId = resolveKanbanStageId({
+      base: { ...baseCard(), status: "vendido" },
+      funnelId: "comercial",
+      validStageIds: new Set([...stages, "clientes"]),
+      customer: undefined,
+      stageOverride: undefined,
+      persisted: { funnelId: "comercial", stageId: "lead" },
+      terminalStages: { lostStageId: "perdido", saleStageId: "clientes" },
+    });
+    expect(stageId).toBe("clientes");
+  });
 });
 
 describe("customerStageForFunnel", () => {

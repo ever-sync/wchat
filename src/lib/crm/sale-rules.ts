@@ -1,4 +1,9 @@
-import { isLegacyContractOrSaleSlug, resolveConfiguredSaleStageId, type CrmFunnel } from "@/data/crm-funnels";
+import {
+  isLegacyContractOrSaleSlug,
+  resolveConfiguredLostStageId,
+  resolveConfiguredSaleStageId,
+  type CrmFunnel,
+} from "@/data/crm-funnels";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { isNegotiationAssignedToProfile } from "@/lib/crm/negotiation-assignee";
 import type { MarkWinSaleLine } from "@/components/crm/MarkWinDialog";
@@ -18,6 +23,11 @@ export type SaleAttendantCheck = {
 /** Etapa de destino configurada como venda no funil. */
 export function isSaleDestinationStage(funnels: CrmFunnel[], funnelId: string, stageId: string): boolean {
   return resolveConfiguredSaleStageId(funnels, funnelId) === stageId;
+}
+
+/** Etapa de destino configurada como perda no funil. */
+export function isLostDestinationStage(funnels: CrmFunnel[], funnelId: string, stageId: string): boolean {
+  return resolveConfiguredLostStageId(funnels, funnelId) === stageId;
 }
 
 /** Slug legado do funil fixo na tela de negociação (índice 4 = venda). */
