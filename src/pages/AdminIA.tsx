@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { type AiTenantRow, useAiTenants, useSetAiTenantSubscription } from "@/lib/api/ai-agent";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { PageShell } from "@/components/layout/PageShell";
 
 function nf(n: number): string {
   return n.toLocaleString("pt-BR");
@@ -22,7 +23,7 @@ export default function AdminIA() {
   const { data: tenants = [], isLoading, isError, error } = useAiTenants();
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto space-y-6 p-4 md:p-8">
+    <PageShell contentClassName="flex flex-col space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -60,7 +61,7 @@ export default function AdminIA() {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

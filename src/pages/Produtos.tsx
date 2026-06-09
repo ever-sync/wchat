@@ -75,6 +75,7 @@ import {
   maskCurrencyInputChange,
   parseCurrencyInput,
 } from "@/lib/currency-input";
+import { PageShell } from "@/components/layout/PageShell";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { cn } from "@/lib/utils";
 
@@ -149,9 +150,6 @@ function productToInput(p: Product): ProductUpsertInput {
     status: p.status,
   };
 }
-
-const screen =
-  "min-h-0 flex-1 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:pb-8";
 
 // Aba estilo "sublinhado" (premium) sobrescrevendo o pill padrão do shadcn.
 const UNDERLINE_TAB =
@@ -416,8 +414,8 @@ export default function Produtos() {
   const extrasDisabled = !isSupabaseConfigured;
 
   return (
-    <div className={screen}>
-      <div className="mx-auto max-w-5xl space-y-4">
+    <>
+    <PageShell contentClassName="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--wchat-brand-700))] text-primary-foreground shadow-[0_6px_16px_-8px_hsl(262_60%_40%/0.7)]">
             <Package className="h-5 w-5" aria-hidden />
@@ -1022,7 +1020,7 @@ export default function Produtos() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+    </PageShell>
 
       <Dialog
         open={dialogOpen && canEditProdutos}
@@ -1392,7 +1390,7 @@ export default function Produtos() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 

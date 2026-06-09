@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketingAutomations } from "@/components/marketing/MarketingAutomations";
 import { MarketingCampaigns } from "@/components/marketing/MarketingCampaigns";
 import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTab";
+import { PageShell } from "@/components/layout/PageShell";
 import { cn } from "@/lib/utils";
 
 const CONVERTER_SUB_TABS = [
@@ -135,7 +136,7 @@ export default function Marketing() {
     : null;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4 md:p-6">
+    <PageShell contentClassName="flex flex-col gap-6">
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Megaphone className="h-5 w-5" aria-hidden />
@@ -178,6 +179,6 @@ export default function Marketing() {
           </TabsContent>
         ))}
       </Tabs>
-    </div>
+    </PageShell>
   );
 }

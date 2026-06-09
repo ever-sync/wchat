@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Layers, Plus, ShieldCheck } from "lucide-react";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { PageShell } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,7 +189,7 @@ export default function AdminPlansCatalog() {
   }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col space-y-6 overflow-y-auto p-4 md:p-8">
+    <PageShell contentClassName="flex flex-col space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -449,6 +450,6 @@ export default function AdminPlansCatalog() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

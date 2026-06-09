@@ -59,7 +59,7 @@ export function ChatTagsHeaderButton({ chatId, tags, disabled = false }: Props) 
               type="button"
               disabled={disabled}
               data-testid="chat-tags-header-button"
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-100 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Etiquetar conversa"
             >
               <Tag className="h-4 w-4" />

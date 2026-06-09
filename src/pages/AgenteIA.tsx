@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   Activity,
   BookOpen,
@@ -134,7 +135,7 @@ export default function AgenteIA() {
   const configuredChannels = channels.length;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 md:px-7">
+    <PageShell contentClassName="flex flex-col gap-4">
       <div className="relative shrink-0 overflow-hidden rounded-xl border border-border/70 bg-card px-5 py-4 shadow-sm">
         <div className="absolute inset-y-0 right-0 w-1/3 bg-primary/[0.04]" />
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -269,7 +270,7 @@ export default function AgenteIA() {
           <TestarTab />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }
 

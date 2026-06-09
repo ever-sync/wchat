@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,17 +154,14 @@ export default function ConfiguracoesFila() {
 
   if (!isSupabaseConfigured) {
     return (
-      <div className="min-h-0 w-full flex-1 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:py-8 md:pb-8">
-        <p className="mx-auto max-w-3xl text-sm text-muted-foreground">
-          Configure o Supabase para gerenciar a fila de atendimento.
-        </p>
-      </div>
+      <PageShell contentClassName="text-sm text-muted-foreground">
+        Configure o Supabase para gerenciar a fila de atendimento.
+      </PageShell>
     );
   }
 
   return (
-    <div className="min-h-0 w-full flex-1 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:py-8 md:pb-8">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <PageShell contentClassName="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Button variant="ghost" size="sm" className="-ml-2 mb-2" asChild>
@@ -336,7 +334,6 @@ export default function ConfiguracoesFila() {
           )}
         </CardContent>
       </Card>
-      </div>
-    </div>
+    </PageShell>
   );
 }

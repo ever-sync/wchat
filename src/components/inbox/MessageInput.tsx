@@ -1,9 +1,10 @@
-import { useLayoutEffect, type ChangeEvent, type RefObject } from "react";
+import { useLayoutEffect, useRef, type ChangeEvent, type RefObject } from "react";
 import {
   Calculator,
   FileText,
   Loader2,
   Mic,
+  MoreHorizontal,
   Paperclip,
   Pause,
   PenLine,
@@ -13,8 +14,17 @@ import {
   Smile,
   Sparkles,
   X,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NegotiationSuggestMessageButton } from "@/components/crm/NegotiationAiSummary";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +36,9 @@ import type { MessageType, QuickReply, WhatsappMessage } from "@/types/domain";
 import { useCalculadora } from "@/contexts/CalculadoraContext";
 import { QUICK_EMOJIS } from "./inboxComposerOptions";
 import { QuickReplyPicker } from "./QuickReplyPicker";
+
+const COMPOSER_ICON =
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50";
 
 export type MessageInputProps = {
   bodyTextareaRef: RefObject<HTMLTextAreaElement>;
@@ -155,6 +168,8 @@ export function MessageInput({
           : previewKind === "document"
             ? "Documento"
             : null;
+
+  const moreToolsRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
     const textarea = bodyTextareaRef.current;
@@ -351,13 +366,17 @@ export function MessageInput({
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
           onChange={onAttachmentChange}
         />
-        <div className="flex shrink-0 items-center gap-1 text-muted-foreground sm:gap-1.5">
+        <div className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
           <button
             type="button"
             onClick={onAttachmentButtonClick}
             disabled={attachmentUploading || composerActionsDisabled}
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 ${messageType === "document" ? "bg-wchat-200 text-primary" : ""}`}
-            title={composerActionsDisabled ? "Assuma a conversa e o negócio para anexar" : "Anexar documento"}
+            className={cn(
+              COMPOSER_ICON,
+              messageType === "document" && "bg-wchat-200 text-primary",
+            )}
+            title={composerActionsDisabled ? "Assuma a conversa e o negócio para anexar" : "Anexar arquivo"}
+            aria-label="Anexar arquivo"
           >
             {attachmentUploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -367,13 +386,87 @@ export function MessageInput({
           </button>
           <button
             type="button"
-            onClick={openCalculadora}
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground"
-            title="Calculadora"
-            aria-label="Abrir calculadora"
+            onClick={onToggleEmojiPicker}
+            disabled={composerActionsDisabled}
+            className={cn(COMPOSER_ICON, showEmojiPicker && "bg-wchat-200 text-primary")}
+            title="Inserir emoji"
+            aria-label="Inserir emoji"
           >
-            <Calculator className="h-4 w-4" />
+            <Smile className="h-4 w-4" />
           </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                ref={moreToolsRef}
+                type="button"
+                className={COMPOSER_ICON}
+                aria-label="Mais ferramentas"
+                title="Mais ferramentas"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-56">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Ferramentas
+              </DropdownMenuLabel>
+              {onSelectQuickReply ? (
+                <DropdownMenuItem
+                  disabled={composerActionsDisabled}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onQuickReplyOpenChange?.(true);
+                  }}
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  Respostas rápidas
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onClick={openCalculadora}>
+                <Calculator className="mr-2 h-4 w-4" />
+                Calculadora
+              </DropdownMenuItem>
+              {onNoteModeChange ? (
+                <DropdownMenuItem
+                  disabled={composerActionsDisabled}
+                  onClick={() => onNoteModeChange(!noteMode)}
+                >
+                  <PenLine className="mr-2 h-4 w-4" />
+                  {noteMode ? "Sair do modo nota" : "Nota interna"}
+                </DropdownMenuItem>
+              ) : null}
+              {onSuggestReply ? (
+                <DropdownMenuItem
+                  disabled={composerActionsDisabled || suggestReplyDisabled || isSuggestingReply}
+                  onClick={onSuggestReply}
+                >
+                  {isSuggestingReply ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Sugerir resposta (IA)
+                </DropdownMenuItem>
+              ) : null}
+              {crmSuggestNegotiationId && onCrmSuggestApply ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      document
+                        .querySelector<HTMLButtonElement>(
+                          '[data-testid="composer-suggest-crm-message"] button',
+                        )
+                        ?.click();
+                    }}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Sugerir com contexto CRM
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {onSelectQuickReply ? (
             <QuickReplyPicker
               open={quickReplyOpen}
@@ -381,65 +474,17 @@ export function MessageInput({
               replies={quickReplies}
               onSelect={onSelectQuickReply}
               disabled={composerActionsDisabled}
+              hideTrigger
+              anchorRef={moreToolsRef}
             />
           ) : null}
-          {onNoteModeChange ? (
-            <button
-              type="button"
-              disabled={composerActionsDisabled}
-              onClick={() => onNoteModeChange(!noteMode)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${noteMode ? "bg-[var(--inbox-gold-ink)] text-[var(--inbox-gold-bg)] hover:bg-[var(--inbox-gold-ink)]" : "text-muted-foreground hover:bg-wchat-200 hover:text-foreground"}`}
-              title={noteMode ? "Sair do modo nota" : "Escrever nota interna"}
-            >
-              <PenLine className="h-4 w-4" />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onToggleEmojiPicker}
-            disabled={composerActionsDisabled}
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 ${showEmojiPicker ? "bg-wchat-200 text-primary" : ""}`}
-            title="Inserir emoji"
-          >
-            <Smile className="h-4 w-4" />
-          </button>
-          {onSuggestReply ? (
-            <button
-              type="button"
-              onClick={onSuggestReply}
-              disabled={composerActionsDisabled || suggestReplyDisabled || isSuggestingReply}
-              className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
-                isSuggestingReply && "bg-wchat-100 text-primary",
-              )}
-              title={
-                isSuggestingReply
-                  ? "Gerando sugestão da IA…"
-                  : suggestReplyDisabled
-                    ? "Limpe o composer pra usar a sugestão da IA"
-                    : "Sugerir resposta com IA"
-              }
-              aria-label="Sugerir resposta com IA"
-              data-testid="composer-suggest-reply"
-            >
-              {isSuggestingReply ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-            </button>
-          ) : null}
           {crmSuggestNegotiationId && onCrmSuggestApply ? (
-            <div
-              className="flex items-center"
-              data-testid="composer-suggest-crm-message"
-            >
+            <div className="sr-only" data-testid="composer-suggest-crm-message">
               <NegotiationSuggestMessageButton
                 negotiationId={crmSuggestNegotiationId}
                 variant="ghost"
                 iconOnly
-                buttonTitle="Sugerir com contexto do CRM (negócio + tarefas + comentários)"
-                buttonClassName="h-10 w-10 rounded-full p-0 hover:bg-wchat-200 hover:text-foreground"
+                buttonTitle="Sugerir com contexto do CRM"
                 onApplyToCurrent={onCrmSuggestApply}
               />
             </div>
@@ -483,7 +528,7 @@ export function MessageInput({
           )}
         />
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => {
@@ -491,20 +536,21 @@ export function MessageInput({
             }}
             disabled={composerActionsDisabled}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+              COMPOSER_ICON,
               isRecording
                 ? "bg-red-900/40 text-red-300 ring-2 ring-red-500/50 animate-pulse"
                 : microphoneState === "granted"
-                  ? "bg-wchat-200 text-primary hover:bg-wchat-200"
+                  ? "bg-wchat-200 text-primary"
                   : microphoneState === "denied"
                     ? "bg-red-900/30 text-red-300 hover:bg-red-900/50"
-                    : "text-muted-foreground hover:bg-wchat-200 hover:text-foreground",
+                    : undefined,
             )}
             title={
               isRecording
                 ? `Gravando (${recordingDurationSec}s) — clique para parar e salvar`
-                : "Gravar audio (clique para iniciar; clique de novo para parar)"
+                : "Gravar áudio"
             }
+            aria-label="Gravar áudio"
           >
             {microphoneState === "requesting" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -517,7 +563,7 @@ export function MessageInput({
               type="button"
               onClick={onRecordingPauseToggle}
               disabled={composerActionsDisabled}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-wchat-100 text-muted-foreground transition-colors hover:bg-wchat-200 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              className={COMPOSER_ICON}
               title={isRecordingPaused ? "Continuar gravação" : "Pausar gravação"}
               aria-label={isRecordingPaused ? "Continuar gravação" : "Pausar gravação"}
             >
@@ -530,31 +576,25 @@ export function MessageInput({
             </span>
           ) : null}
           <Button
+            size="icon"
             className={cn(
-              "h-11 shrink-0 rounded-full px-5 text-foreground shadow-none",
-              noteMode ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-wchat-700 text-primary-foreground",
+              "h-9 w-9 shrink-0 rounded-full shadow-none",
+              noteMode ? "bg-amber-600 hover:bg-amber-700" : "bg-primary text-primary-foreground hover:bg-wchat-700",
             )}
             disabled={sendDisabled || composerActionsDisabled || attachmentUploading}
             aria-busy={attachmentUploading}
+            aria-label={noteMode ? "Salvar nota" : attachmentUploading ? "Enviando arquivo" : "Enviar mensagem"}
+            title={noteMode ? "Salvar nota" : "Enviar"}
             onClick={() => {
               void onSend();
             }}
           >
             {noteMode ? (
-              <>
-                <PenLine className="mr-2 h-4 w-4" />
-                Nota
-              </>
+              <PenLine className="h-4 w-4" />
             ) : attachmentUploading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Subindo arquivo...
-              </>
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <>
-                <Send className="mr-2 h-4 w-4" />
-                Enviar
-              </>
+              <Send className="h-4 w-4" />
             )}
           </Button>
         </div>
