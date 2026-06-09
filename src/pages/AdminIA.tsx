@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { type AiTenantRow, useAiTenants, useSetAiTenantSubscription } from "@/lib/api/ai-agent";
-import { Link } from "react-router-dom";
+import { AdminNav } from "@/components/admin/AdminNav";
 
 function nf(n: number): string {
   return n.toLocaleString("pt-BR");
@@ -35,10 +35,9 @@ export default function AdminIA() {
             </p>
           </div>
         </div>
-        <Button variant="outline" asChild>
-          <Link to="/admin/billing">Abrir planos</Link>
-        </Button>
       </div>
+
+      <AdminNav />
 
       {isLoading ? (
         <Card>

@@ -35,6 +35,7 @@ const MarketingFlowEditor = lazyWithReload(() => import("./pages/MarketingFlowEd
 const AgenteIA = lazyWithReload(() => import("./pages/AgenteIA"));
 const AdminIA = lazyWithReload(() => import("./pages/AdminIA"));
 const AdminBilling = lazyWithReload(() => import("./pages/AdminBilling"));
+const AdminPlansCatalog = lazyWithReload(() => import("./pages/AdminPlansCatalog"));
 const AdminOperacao = lazyWithReload(() => import("./pages/AdminOperacao"));
 const PageFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background text-sm text-muted-foreground">
@@ -200,6 +201,14 @@ const App = () => (
                       element={
                         <PlatformAdminRoute>
                           <AdminBilling />
+                        </PlatformAdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/planos"
+                      element={
+                        <PlatformAdminRoute>
+                          <AdminPlansCatalog />
                         </PlatformAdminRoute>
                       }
                     />

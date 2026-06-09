@@ -18,7 +18,7 @@ import {
   useOperationAdminWorkerRecheck,
   useOperationAdminSnapshot,
 } from "@/lib/api/operation-admin";
-import { Link } from "react-router-dom";
+import { AdminNav } from "@/components/admin/AdminNav";
 
 const SEVERITY_LABEL: Record<OperationSeverity | "all", string> = {
   all: "Todos",
@@ -43,7 +43,8 @@ const METRIC_LABEL: Record<string, string> = {
 };
 
 const AUDIT_TYPE_LABEL: Record<string, string> = {
-  billing_subscription: "Planos",
+  billing_subscription: "Assinaturas",
+  billing_plan: "Catalogo",
   tenant_ai_subscription: "IA",
   operation_job: "Operacao",
 };
@@ -99,12 +100,6 @@ export default function AdminOperacao() {
             <ShieldCheck className="h-4 w-4" aria-hidden />
             Somente plataforma
           </Badge>
-          <Button variant="outline" asChild>
-            <Link to="/admin/billing">Planos</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/admin/ia">IA</Link>
-          </Button>
           <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
             <RefreshCw className={isFetching ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
             Atualizar
@@ -115,6 +110,8 @@ export default function AdminOperacao() {
           </Button>
         </div>
       </div>
+
+      <AdminNav />
 
       {isLoading ? (
         <Card>

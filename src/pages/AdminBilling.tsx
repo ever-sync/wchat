@@ -13,7 +13,7 @@ import {
   useSetBillingAdminTenantPlan,
 } from "@/lib/api/billing-admin";
 import type { BillingPeriod, BillingStatus } from "@/lib/api/billing";
-import { Link } from "react-router-dom";
+import { AdminNav } from "@/components/admin/AdminNav";
 
 const METRIC_LABEL: Record<string, string> = {
   customers: "Clientes",
@@ -67,22 +67,19 @@ export default function AdminBilling() {
             <CreditCard className="h-5 w-5" aria-hidden />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Admin de planos</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Assinaturas</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Controle assinaturas, limites e tenants acima do uso contratado.
+              Atribua planos aos tenants e acompanhe uso acima do limite contratado.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-2 px-3 py-1.5">
-            <ShieldCheck className="h-4 w-4" aria-hidden />
-            Somente plataforma
-          </Badge>
-          <Button variant="outline" asChild>
-            <Link to="/admin/ia">Abrir IA</Link>
-          </Button>
-        </div>
+        <Badge variant="outline" className="gap-2 px-3 py-1.5">
+          <ShieldCheck className="h-4 w-4" aria-hidden />
+          Somente plataforma
+        </Badge>
       </div>
+
+      <AdminNav />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
