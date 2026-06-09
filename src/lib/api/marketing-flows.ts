@@ -90,6 +90,7 @@ export type MarketingFlowCreateInput = {
   status?: MarketingFlowStatus;
   definition?: Record<string, unknown>;
   criteria?: Record<string, unknown>;
+  trigger?: Record<string, unknown>;
 };
 
 export type MarketingFlowPatch = Partial<{
@@ -158,6 +159,7 @@ export async function createMarketingFlow(
       status: input.status ?? "rascunho",
       definition: input.definition ?? { steps: [] },
       criteria: input.criteria ?? {},
+      trigger: input.trigger ?? {},
     })
     .select(SELECT)
     .single();

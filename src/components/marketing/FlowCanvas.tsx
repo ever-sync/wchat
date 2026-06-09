@@ -19,6 +19,7 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
+  MiniMap,
   Handle,
   Position,
   useReactFlow,
@@ -236,6 +237,10 @@ type FlowCanvasProps = {
   onGraphChange: (next: { edges: MarketingFlowEdge[]; positions: NodePositions }) => void;
   /** Soltar acao do painel: cria no na posicao do drop. */
   onDropAction: (payload: DragPayload, position: { x: number; y: number }) => void;
+  /** Centraliza e seleciona o passo informado (ex.: ao clicar numa validacao). */
+  focusStepId?: string | null;
+  /** Chamado depois de focar, pra o pai limpar o focusStepId. */
+  onFocusHandled?: () => void;
 };
 
 function toRFNodes(
@@ -281,9 +286,11 @@ function FlowCanvasInner({
   onRemoveStep,
   onGraphChange,
   onDropAction,
+  focusStepId,
+  onFocusHandled,
 }: FlowCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setCenter } = useReactFlow();
 
   // Posicoes iniciais: usa as salvas; deriva layout pros nos sem posicao.
   const initialPositions = useMemo(() => {
@@ -308,6 +315,20 @@ function FlowCanvasInner({
   useEffect(() => {
     edgesRef.current = rfEdges;
   }, [rfEdges]);
+
+  // Foco em um passo (ex.: vindo da validacao): centraliza e seleciona o no.
+  useEffect(() => {
+    if (!focusStepId) return;
+    const node = nodesRef.current.find((n) => n.id === focusStepId);
+    if (node) {
+      setCenter(node.position.x + NODE_W / 2, node.position.y + NODE_H / 2, {
+        zoom: 1.2,
+        duration: 600,
+      });
+      setRfNodes((nodes) => nodes.map((n) => ({ ...n, selected: n.id === focusStepId })));
+    }
+    onFocusHandled?.();
+  }, [focusStepId, setCenter, setRfNodes, onFocusHandled]);
 
   // Emite o grafo normalizado pro pai. Deferido (setTimeout 0) pra rodar fora da
   // fase de render — assim os refs ja refletem o commit e nunca chamamos
@@ -418,6 +439,13 @@ function FlowCanvasInner({
       >
         <Background gap={20} className="text-border" />
         <Controls showInteractive={false} />
+        <MiniMap
+          pannable
+          zoomable
+          className="!bg-card"
+          nodeClassName="fill-primary/40"
+          maskColor="hsl(var(--muted) / 0.6)"
+        />
       </ReactFlow>
 
       <button

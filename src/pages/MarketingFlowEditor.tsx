@@ -749,7 +749,13 @@ function FlowExitPanel({
   );
 }
 
-function ValidationIssueList({ issues }: { issues: ValidationIssue[] }) {
+function ValidationIssueList({
+  issues,
+  onSelectIssue,
+}: {
+  issues: ValidationIssue[];
+  onSelectIssue?: (stepId: string) => void;
+}) {
   if (issues.length === 0) return null;
   return (
     <ul className="flex flex-col gap-1.5">
@@ -759,10 +765,28 @@ function ValidationIssueList({ issues }: { issues: ValidationIssue[] }) {
           issue.severity === "error"
             ? "text-destructive"
             : "text-amber-600 dark:text-amber-400";
+        const clickable = Boolean(issue.stepId && onSelectIssue);
         return (
-          <li key={`${issue.code}-${index}`} className="flex items-start gap-2 text-sm">
-            <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", tone)} aria-hidden />
-            <span className="leading-snug text-foreground">{issue.message}</span>
+          <li key={`${issue.code}-${index}`}>
+            <button
+              type="button"
+              disabled={!clickable}
+              onClick={clickable ? () => onSelectIssue!(issue.stepId!) : undefined}
+              className={cn(
+                "flex w-full items-start gap-2 rounded-md text-left text-sm",
+                clickable
+                  ? "cursor-pointer px-2 py-1 transition-colors hover:bg-muted"
+                  : "cursor-default",
+              )}
+            >
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", tone)} aria-hidden />
+              <span className="leading-snug text-foreground">
+                {issue.message}
+                {clickable ? (
+                  <span className="ml-1 text-xs font-medium text-primary">— ver passo</span>
+                ) : null}
+              </span>
+            </button>
           </li>
         );
       })}
@@ -776,12 +800,14 @@ function FlowValidationDialog({
   isPublishing,
   onOpenChange,
   onConfirm,
+  onSelectIssue,
 }: {
   open: boolean;
   result: ValidationResult | null;
   isPublishing: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  onSelectIssue?: (stepId: string) => void;
 }) {
   const hasErrors = (result?.errors.length ?? 0) > 0;
   const title = hasErrors ? "Não foi possível ativar o fluxo" : "Atenção antes de ativar";
@@ -802,7 +828,7 @@ function FlowValidationDialog({
               <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
                 Erros ({result.errors.length})
               </p>
-              <ValidationIssueList issues={result.errors} />
+              <ValidationIssueList issues={result.errors} onSelectIssue={onSelectIssue} />
             </div>
           ) : null}
           {result && result.warnings.length > 0 ? (
@@ -810,7 +836,7 @@ function FlowValidationDialog({
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
                 Avisos ({result.warnings.length})
               </p>
-              <ValidationIssueList issues={result.warnings} />
+              <ValidationIssueList issues={result.warnings} onSelectIssue={onSelectIssue} />
             </div>
           ) : null}
         </div>
@@ -858,6 +884,7 @@ export default function MarketingFlowEditor() {
     result: ValidationResult | null;
   }>({ open: false, result: null });
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [focusStepId, setFocusStepId] = useState<string | null>(null);
   const stepCounter = useRef(0);
   const stepIdPrefix = useId();
   const hydratedFor = useRef<string | null>(null);
@@ -1212,6 +1239,38 @@ export default function MarketingFlowEditor() {
             ) : null}
             Salvar
           </Button>
+          {flow && validation ? (
+            <button
+              type="button"
+              onClick={() => setValidationDialog({ open: true, result: validation })}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                validation.errors.length > 0
+                  ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                  : validation.warnings.length > 0
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-600 hover:bg-amber-500/15 dark:text-amber-400"
+                    : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400",
+              )}
+            >
+              {validation.errors.length > 0 ? (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+                  {validation.errors.length} erro(s)
+                  {validation.warnings.length > 0 ? ` · ${validation.warnings.length} aviso(s)` : ""}
+                </>
+              ) : validation.warnings.length > 0 ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                  {validation.warnings.length} aviso(s)
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                  Pronto para ativar
+                </>
+              )}
+            </button>
+          ) : null}
           <Button
             type="button"
             onClick={handlePublishClick}
@@ -1222,15 +1281,6 @@ export default function MarketingFlowEditor() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
             ) : null}
             Salvar e Ativar
-            {validation && validation.errors.length > 0 ? (
-              <Badge variant="destructive" className="ml-1 h-5 min-w-[20px] justify-center px-1">
-                {validation.errors.length}
-              </Badge>
-            ) : validation && validation.warnings.length > 0 ? (
-              <Badge className="ml-1 h-5 min-w-[20px] justify-center bg-amber-500 px-1 text-white hover:bg-amber-500">
-                {validation.warnings.length}
-              </Badge>
-            ) : null}
           </Button>
         </div>
       </header>
@@ -1286,6 +1336,8 @@ export default function MarketingFlowEditor() {
               onRemoveStep={handleRemoveStep}
               onGraphChange={handleGraphChange}
               onDropAction={handleDropOnCanvas}
+              focusStepId={focusStepId}
+              onFocusHandled={() => setFocusStepId(null)}
             />
 
             {steps.length === 0 ? (
@@ -1349,6 +1401,11 @@ export default function MarketingFlowEditor() {
         }}
         onConfirm={() => {
           if (validationDialog.result) doPublish(validationDialog.result);
+        }}
+        onSelectIssue={(stepId) => {
+          setValidationDialog({ open: false, result: null });
+          setTab("editor");
+          setFocusStepId(stepId);
         }}
       />
 

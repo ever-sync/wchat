@@ -72,6 +72,12 @@ import {
 } from "@/lib/marketing/flow-types";
 import { statsFor, useMarketingFlowStats } from "@/lib/api/marketing-flow-stats";
 import { ChannelLimitsDialog } from "@/components/marketing/ChannelLimitsDialog";
+import { ACTION_ICONS } from "@/components/marketing/flow-actions";
+import {
+  MARKETING_TRIGGER_DEFINITIONS,
+  MARKETING_TRIGGER_CATEGORY_LABEL,
+} from "@/lib/marketing/flow-triggers";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 type SortField = "createdAt" | "updatedAt";
@@ -114,14 +120,51 @@ type FlowTemplate = {
   id: string;
   name: string;
   description: string;
+  category: string;
+  /** Gatilho de entrada sugerido (preenche o fluxo ao usar o modelo). */
+  trigger?: string;
   steps: FlowTemplateStep[];
 };
+
+/** Prévia visual dos passos de um modelo: bolinhas com o ícone de cada ação. */
+function TemplateStepsPreview({ steps }: { steps: FlowTemplateStep[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {steps.map((step, index) => {
+        const Icon = ACTION_ICONS[step.iconKey];
+        return (
+          <div key={`${step.actionId}-${index}`} className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white",
+                step.iconClass,
+              )}
+              title={step.label}
+            >
+              {Icon ? (
+                <Icon
+                  className={cn("h-3 w-3", step.iconKey === "star" ? "fill-current" : "")}
+                  aria-hidden
+                />
+              ) : null}
+            </span>
+            {index < steps.length - 1 ? (
+              <span className="h-px w-3 bg-border" aria-hidden />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const FLOW_TEMPLATES: FlowTemplate[] = [
   {
     id: "boas-vindas-whatsapp",
     name: "Boas-vindas no WhatsApp",
     description: "Marca o lead como oportunidade e dispara uma mensagem de WhatsApp.",
+    category: "Vendas",
+    trigger: "form_submitted",
     steps: [
       {
         actionId: "marcar-oportunidade",
@@ -143,6 +186,8 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     id: "captura-lead-crm",
     name: "Captura de lead no CRM",
     description: "Adiciona uma etiqueta no lead e abre uma negociação no CRM.",
+    category: "Vendas",
+    trigger: "form_submitted",
     steps: [
       {
         actionId: "adicionar-tags",
@@ -164,6 +209,8 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     id: "espera-e-email",
     name: "Espera + e-mail",
     description: "Aguarda 1 dia e envia um e-mail de follow-up ao lead.",
+    category: "Pós-venda",
+    trigger: "form_submitted",
     steps: [
       {
         actionId: "espera",
@@ -181,6 +228,62 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
       },
     ],
   },
+  {
+    id: "recuperacao-carrinho",
+    name: "Recuperação de lead frio",
+    description: "Espera 2 dias sem resposta e reengaja o lead por WhatsApp.",
+    category: "Recuperação",
+    trigger: "form_submitted",
+    steps: [
+      {
+        actionId: "espera",
+        label: "Espera",
+        iconKey: "clock",
+        iconClass: "bg-orange-500",
+        subtitle: "2 dia(s), 0 hora(s) e 0 minuto(s)",
+        subtitleVariant: "plain",
+      },
+      {
+        actionId: "whatsapp",
+        label: "Enviar WhatsApp",
+        iconKey: "message-circle",
+        iconClass: "bg-violet-600",
+        subtitle: "Reengajamento",
+        subtitleVariant: "primary",
+      },
+      {
+        actionId: "adicionar-tags",
+        label: "Adicionar Tags",
+        iconKey: "tag",
+        iconClass: "bg-pink-500",
+        subtitle: "reengajado",
+        subtitleVariant: "chip",
+      },
+    ],
+  },
+  {
+    id: "qualificacao-whatsapp",
+    name: "Qualificação no WhatsApp",
+    description: "Responde quem mandou mensagem e marca como oportunidade.",
+    category: "Vendas",
+    trigger: "whatsapp_message_received",
+    steps: [
+      {
+        actionId: "whatsapp",
+        label: "Enviar WhatsApp",
+        iconKey: "message-circle",
+        iconClass: "bg-violet-600",
+        subtitle: "Saudação",
+        subtitleVariant: "primary",
+      },
+      {
+        actionId: "marcar-oportunidade",
+        label: "Marcar Oportunidade",
+        iconKey: "star",
+        iconClass: "bg-pink-500",
+      },
+    ],
+  },
 ];
 
 export function MarketingAutomations() {
@@ -192,7 +295,9 @@ export function MarketingAutomations() {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [deleteTarget, setDeleteTarget] = useState<MarketingFlowRecord | null>(null);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState("Novo fluxo");
+  const [newTrigger, setNewTrigger] = useState<string>("none");
   const [channelLimitsOpen, setChannelLimitsOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<MarketingFlowStatus>>(new Set());
@@ -205,11 +310,23 @@ export function MarketingAutomations() {
   const duplicateFlow = useDuplicateMarketingFlow();
   const deleteFlow = useDeleteMarketingFlow();
 
-  const handleCreate = () => {
+  const openCreateDialog = () => {
+    setNewName("Novo fluxo");
+    setNewTrigger("none");
+    setCreateOpen(true);
+  };
+
+  const triggerPatch = (triggerType: string): Record<string, unknown> | undefined =>
+    triggerType && triggerType !== "none" ? { type: triggerType } : undefined;
+
+  const handleCreateBlank = () => {
     createFlow.mutate(
-      { name: "Novo fluxo" },
+      { name: newName.trim() || "Novo fluxo", trigger: triggerPatch(newTrigger) },
       {
-        onSuccess: (flow) => navigate(`/marketing/fluxo/${flow.id}`),
+        onSuccess: (flow) => {
+          setCreateOpen(false);
+          navigate(`/marketing/fluxo/${flow.id}`);
+        },
         onError: (e) =>
           toast({ title: "Erro ao criar fluxo", description: e.message, variant: "destructive" }),
       },
@@ -250,14 +367,16 @@ export function MarketingAutomations() {
   };
 
   const handleUseTemplate = (template: FlowTemplate) => {
+    const trimmed = newName.trim();
     createFlow.mutate(
       {
-        name: template.name,
+        name: trimmed && trimmed !== "Novo fluxo" ? trimmed : template.name,
         definition: { steps: template.steps },
+        trigger: triggerPatch(newTrigger !== "none" ? newTrigger : template.trigger ?? "none"),
       },
       {
         onSuccess: (flow) => {
-          setTemplatesOpen(false);
+          setCreateOpen(false);
           navigate(`/marketing/fluxo/${flow.id}`);
         },
         onError: (e) =>
@@ -463,14 +582,14 @@ export function MarketingAutomations() {
             type="button"
             variant="secondary"
             className="bg-primary/10 text-primary hover:bg-primary/15"
-            onClick={() => setTemplatesOpen(true)}
+            onClick={openCreateDialog}
           >
             Modelos
           </Button>
           <Button
             type="button"
             className="gap-2"
-            onClick={handleCreate}
+            onClick={openCreateDialog}
             disabled={createFlow.isPending}
           >
             {createFlow.isPending ? (
@@ -765,42 +884,96 @@ export function MarketingAutomations() {
 
       <ChannelLimitsDialog open={channelLimitsOpen} onOpenChange={setChannelLimitsOpen} />
 
-      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Modelos de fluxo</DialogTitle>
+            <DialogTitle>Novo fluxo</DialogTitle>
             <DialogDescription>
-              Comece a partir de um modelo pronto. Você poderá editar todos os passos depois.
+              Dê um nome, escolha o gatilho de entrada e comece do zero ou a partir de um modelo.
+              Tudo pode ser editado depois.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            {FLOW_TEMPLATES.map((template) => (
-              <div
-                key={template.id}
-                className="rounded-lg border border-border p-4 transition-colors hover:border-primary/50"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex flex-col gap-1">
-                    <h3 className="text-sm font-semibold text-foreground">{template.name}</h3>
-                    <p className="text-xs text-muted-foreground">{template.description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {template.steps.length} passo(s)
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={() => handleUseTemplate(template)}
-                    disabled={createFlow.isPending}
-                  >
-                    {createFlow.isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                    ) : null}
-                    Usar modelo
-                  </Button>
-                </div>
-              </div>
-            ))}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-flow-name" className="text-xs text-muted-foreground">
+                Nome do fluxo
+              </Label>
+              <Input
+                id="new-flow-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ex.: Boas-vindas de novos leads"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">Gatilho de entrada</Label>
+              <Select value={newTrigger} onValueChange={setNewTrigger}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolher depois" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Escolher depois</SelectItem>
+                  {MARKETING_TRIGGER_DEFINITIONS.map((def) => (
+                    <SelectItem key={def.type} value={def.type}>
+                      {MARKETING_TRIGGER_CATEGORY_LABEL[def.category]} · {def.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Comece com
+            </p>
+            <div className="grid max-h-[46vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleCreateBlank}
+                disabled={createFlow.isPending}
+                className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border p-4 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-60"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <Plus className="h-4 w-4" aria-hidden />
+                </span>
+                <span className="text-sm font-semibold text-foreground">Em branco</span>
+                <span className="text-xs text-muted-foreground">
+                  Monte o fluxo do zero arrastando ações no editor.
+                </span>
+              </button>
+
+              {FLOW_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => handleUseTemplate(template)}
+                  disabled={createFlow.isPending}
+                  className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-60"
+                >
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">{template.name}</span>
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {template.category}
+                    </Badge>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{template.description}</span>
+                  <TemplateStepsPreview steps={template.steps} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {template.steps.length} passo(s)
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {createFlow.isPending ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Criando fluxo…
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
