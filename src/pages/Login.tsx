@@ -178,7 +178,7 @@ export default function Login() {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto overscroll-y-contain px-4 py-3 sm:px-6 lg:px-10 lg:py-2 xl:px-12">
-              <div className="my-auto w-full max-w-[400px] shrink-0 rounded-xl bg-card px-5 py-5 shadow-[0_1px_8px_hsl(var(--wchat-purple-600)/0.1),0_4px_24px_hsl(var(--wchat-purple-600)/0.06)] sm:px-7 sm:py-6 lg:px-8 lg:py-7">
+              <div className="my-auto w-full max-w-[400px] shrink-0 rounded-xl bg-card px-5 py-5 shadow-[0_1px_8px_hsl(var(--wchat-brand-600)/0.1),0_4px_24px_hsl(var(--wchat-brand-600)/0.06)] sm:px-7 sm:py-6 lg:px-8 lg:py-7">
                 <h1 className="text-2xl font-bold text-wchat-900 sm:text-[28px]">Olá!</h1>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   Entre para gerenciar suas conversas no WhatsApp.

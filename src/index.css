@@ -4,22 +4,22 @@
 
 @layer base {
   :root {
-    /* wChat — paleta extraída da arte de marketing (img/image.png) */
-    --wchat-purple-900: 270 42% 18%;
-    --wchat-purple-800: 264 55% 28%;
-    --wchat-purple-700: 264 70% 35%;
-    --wchat-purple-600: 262 73% 40%;
-    --wchat-purple-500: 262 66% 51%;
-    --wchat-purple-400: 262 55% 62%;
-    --wchat-purple-200: 270 45% 90%;
-    --wchat-purple-100: 270 48% 96%;
-    --wchat-purple-50: 270 43% 98%;
+    /* wChat — paleta extraída do template Aior */
+    --wchat-brand-900: 90 100% 18%;
+    --wchat-brand-800: 90 100% 28%;
+    --wchat-brand-700: 90 100% 35%;
+    --wchat-brand-600: 90 100% 45%;
+    --wchat-brand-500: 90 100% 55%;
+    --wchat-brand-400: 90 100% 68%;
+    --wchat-brand-200: 90 100% 90%;
+    --wchat-brand-100: 90 100% 95%;
+    --wchat-brand-50: 90 100% 98%;
     --wchat-text: 252 7% 34%;
     --wchat-text-muted: 252 6% 45%;
     --wchat-white: 0 0% 100%;
 
     /* Semânticos (shadcn / Tailwind) */
-    --background: var(--wchat-purple-50);
+    --background: var(--wchat-brand-50);
     --foreground: var(--wchat-text);
 
     --card: var(--wchat-white);
@@ -28,56 +28,54 @@
     --popover: var(--wchat-white);
     --popover-foreground: var(--wchat-text);
 
-    --primary: var(--wchat-purple-600);
+    --primary: var(--wchat-brand-600);
     --primary-foreground: var(--wchat-white);
 
-    --secondary: var(--wchat-purple-100);
+    --secondary: var(--wchat-brand-100);
     --secondary-foreground: var(--wchat-text);
 
-    --muted: var(--wchat-purple-100);
+    --muted: var(--wchat-brand-100);
     --muted-foreground: var(--wchat-text-muted);
 
-    --accent: var(--wchat-purple-500);
+    --accent: var(--wchat-brand-500);
     --accent-foreground: var(--wchat-white);
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: var(--wchat-purple-600);
+    --success: var(--wchat-brand-600);
     --success-foreground: var(--wchat-white);
 
-    --warning: var(--wchat-purple-700);
+    --warning: var(--wchat-brand-700);
     --warning-foreground: var(--wchat-white);
 
     --border: 270 28% 88%;
     --input: 270 28% 88%;
-    --ring: var(--wchat-purple-600);
+    --ring: var(--wchat-brand-600);
 
     --radius: 0.625rem;
 
     --sidebar-background: var(--wchat-white);
     --sidebar-foreground: var(--wchat-text);
-    --sidebar-primary: var(--wchat-purple-600);
+    --sidebar-primary: var(--wchat-brand-600);
     --sidebar-primary-foreground: var(--wchat-white);
-    --sidebar-accent: var(--wchat-purple-100);
+    --sidebar-accent: var(--wchat-brand-100);
     --sidebar-accent-foreground: var(--wchat-text);
     --sidebar-border: 270 28% 88%;
-    --sidebar-ring: var(--wchat-purple-600);
+    --sidebar-ring: var(--wchat-brand-600);
   }
 
   .dark {
-    /* Paleta wChat reinterpretada para fundo escuro. Mantém o roxo da marca.
-       --wchat-white continua branco (é usado como texto sobre cor, ex.
-       primary-foreground); as superfícies escuras vêm das vars semânticas. */
-    --wchat-purple-900: 270 35% 92%; /* texto forte / headings → claro */
-    --wchat-purple-800: 264 30% 82%;
-    --wchat-purple-700: 262 58% 54%; /* bg-wchat-700 segue roxo, visível no escuro */
-    --wchat-purple-600: 262 66% 60%;
-    --wchat-purple-500: 262 62% 62%;
-    --wchat-purple-400: 262 48% 56%;
-    --wchat-purple-200: 264 14% 24%; /* bg-wchat-200 = divisórias */
-    --wchat-purple-100: 264 17% 19%; /* bg-wchat-100 = hover/superfície sutil */
-    --wchat-purple-50: 264 20% 15%; /* bg-wchat-50 = superfície */
+    /* Paleta wChat reinterpretada para fundo escuro com base Aior. */
+    --wchat-brand-900: 90 100% 92%;
+    --wchat-brand-800: 90 100% 82%;
+    --wchat-brand-700: 90 100% 68%; /* bg-wchat-700 segue verde neon */
+    --wchat-brand-600: 90 100% 60%;
+    --wchat-brand-500: 90 100% 55%;
+    --wchat-brand-400: 90 100% 45%;
+    --wchat-brand-200: 90 50% 24%;
+    --wchat-brand-100: 90 50% 19%;
+    --wchat-brand-50: 90 50% 15%;
     --wchat-text: 270 15% 90%;
     --wchat-text-muted: 265 9% 62%;
     --wchat-white: 0 0% 100%;
@@ -132,12 +130,12 @@
      JSX (não adaptavam ao tema). Aqui o valor CLARO é o hex original (claro fica
      idêntico) e o ESCURO é a contraparte para o dark mode. Uso: text-[var(--crm-ink)]. */
   :root {
-    --crm-brand: #4e1bb1;
-    --crm-brand-2: #5b2fd4;
-    --crm-brand-strong: #3c1494;
-    --crm-brand-tint: #f3ebfc;
-    --crm-brand-tint-hover: #e9d5ff;
-    --crm-brand-border: #c4b5fd;
+    --crm-brand: #7bd436;
+    --crm-brand-2: #aeff5d;
+    --crm-brand-strong: #5a9b28;
+    --crm-brand-tint: #f6fee9;
+    --crm-brand-tint-hover: #e5fcd4;
+    --crm-brand-border: #d4fbaa;
 
     --crm-ink: #212529;
     --crm-ink-2: #495057;
@@ -188,12 +186,12 @@
   }
 
   .dark {
-    --crm-brand: #a78bfa;
-    --crm-brand-2: #b49dfb;
-    --crm-brand-strong: #8b6df0;
-    --crm-brand-tint: #241b3a;
-    --crm-brand-tint-hover: #2f2548;
-    --crm-brand-border: #4b3e72;
+    --crm-brand: #aeff5d;
+    --crm-brand-2: #7bd436;
+    --crm-brand-strong: #d4ff12;
+    --crm-brand-tint: #1c2b0c;
+    --crm-brand-tint-hover: #263c11;
+    --crm-brand-border: #3b5d1a;
 
     --crm-ink: #ececf2;
     --crm-ink-2: #c3c3ce;
@@ -265,7 +263,7 @@
   h4,
   h5,
   h6 {
-    @apply text-[hsl(var(--wchat-purple-900))];
+    @apply text-[hsl(var(--wchat-brand-900))];
   }
 }
 
