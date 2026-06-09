@@ -3,6 +3,7 @@ import type { WhatsappMessage } from "@/types/domain";
 import {
   dedupeInboxMessagesById,
   findOutboundCacheTarget,
+  inboxSearchTermsForPostgrest,
   reconcileOptimisticInboxMessage,
   type InboxMessagesPageResult,
 } from "@/lib/api/whatsapp";
@@ -360,5 +361,14 @@ describe("reconcileOptimisticInboxMessage", () => {
 
     expect(result.matched).toBe(true);
     expect(result.pages[0]?.messages).toEqual([serverLine]);
+  });
+});
+
+describe("inboxSearchTermsForPostgrest", () => {
+  it("strips formatting from phone search", () => {
+    expect(inboxSearchTermsForPostgrest("+556799466929")).toEqual({
+      text: "+556799466929",
+      digits: "556799466929",
+    });
   });
 });

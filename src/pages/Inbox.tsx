@@ -41,6 +41,7 @@ import {
   fetchInboxMessagesPage,
   getNextInboxMessagesPageParam,
   type InboxMessagesPageCursor,
+  useInboxChatById,
   useInboxChats,
   useInboxChatsRealtime,
   useInboxMessages,
@@ -248,23 +249,43 @@ export default function Inbox() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
+
+  const requestedChatInList = useMemo(
+    () => Boolean(requestedChatId && chats.some((chat) => chat.id === requestedChatId)),
+    [requestedChatId, chats],
+  );
+
+  const {
+    data: deepLinkedChat = null,
+    isLoading: deepLinkChatLoading,
+    isFetched: deepLinkChatFetched,
+  } = useInboxChatById(requestedChatId, {
+    enabled: Boolean(requestedChatId?.trim() && !requestedChatInList && isSupabaseConfigured),
+  });
+
   const activeChat = useMemo(() => {
     if (!activeChatId) {
       return null;
     }
-    return chats.find((chat) => chat.id === activeChatId) ?? activeChatSnapshot;
-  }, [activeChatId, chats, activeChatSnapshot]);
+    return (
+      chats.find((chat) => chat.id === activeChatId) ??
+      (deepLinkedChat?.id === activeChatId ? deepLinkedChat : null) ??
+      activeChatSnapshot
+    );
+  }, [activeChatId, chats, deepLinkedChat, activeChatSnapshot]);
 
   useEffect(() => {
     if (!activeChatId) {
       setActiveChatSnapshot(null);
       return;
     }
-    const found = chats.find((chat) => chat.id === activeChatId);
+    const found =
+      chats.find((chat) => chat.id === activeChatId) ??
+      (deepLinkedChat?.id === activeChatId ? deepLinkedChat : null);
     if (found) {
       setActiveChatSnapshot(found);
     }
-  }, [activeChatId, chats]);
+  }, [activeChatId, chats, deepLinkedChat]);
 
   // O botão de pausar/retomar IA só faz sentido se o canal do chat tem IA ligada.
   const activeChannelAiEnabled = useMemo(
@@ -280,14 +301,23 @@ export default function Inbox() {
   }, [assignDialogChatId, chats]);
 
   const blockedRequestedChatId = useMemo(() => {
-    if (!requestedChatId?.trim() || chatsLoading) {
+    if (!requestedChatId?.trim()) {
       return null;
     }
-    if (chats.some((chat) => chat.id === requestedChatId)) {
+    if (requestedChatInList || deepLinkedChat?.id === requestedChatId) {
+      return null;
+    }
+    if (deepLinkChatLoading || !deepLinkChatFetched) {
       return null;
     }
     return requestedChatId;
-  }, [requestedChatId, chats, chatsLoading]);
+  }, [
+    requestedChatId,
+    requestedChatInList,
+    deepLinkedChat?.id,
+    deepLinkChatLoading,
+    deepLinkChatFetched,
+  ]);
 
   const isManagerInbox = profile?.role === "admin" || profile?.role === "operacao";
   const canManageChatPool =
@@ -426,11 +456,17 @@ export default function Inbox() {
 
     setActiveChatId((current) => {
       if (requestedChatId) {
-        if (chats.some((chat) => chat.id === requestedChatId)) {
+        if (
+          chats.some((chat) => chat.id === requestedChatId) ||
+          deepLinkedChat?.id === requestedChatId
+        ) {
           return requestedChatId;
         }
-        // Deep link para conversa inacessível (outro atendente / RLS): não faz fallback na lista.
-        return null;
+        if (!deepLinkChatLoading && deepLinkChatFetched) {
+          // Deep link inacessível (RLS / outro atendente): não faz fallback na lista.
+          return null;
+        }
+        return requestedChatId;
       }
 
       if (requestedCustomerId) {
@@ -456,7 +492,15 @@ export default function Inbox() {
 
       return chats[0].id;
     });
-  }, [chats, requestedChatId, requestedCustomerId, quickFilter]);
+  }, [
+    chats,
+    requestedChatId,
+    requestedCustomerId,
+    quickFilter,
+    deepLinkedChat?.id,
+    deepLinkChatLoading,
+    deepLinkChatFetched,
+  ]);
 
   useEffect(() => {
     if (quickFilter === "unread") {
