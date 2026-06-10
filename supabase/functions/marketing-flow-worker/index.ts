@@ -15,11 +15,12 @@ import { ensureChat, insertOrDedupeOutboundMessage } from "../_shared/domain.ts"
 import { sendMessageViaUazapi } from "../_shared/uazapi.ts";
 import { decryptSecret } from "../_shared/crypto.ts";
 import { createMessage } from "../_shared/anthropic.ts";
+import { emitWebhookEvent } from "../_shared/webhook-events.ts";
+import { flowRetryDelayMinutes } from "../_shared/retry-backoff.ts";
 
 // ---------------------------------------------------------------- Constants
 
 const JOB_LIMIT = 25;
-const RETRY_DELAY_MINUTES = [0, 1, 5, 30, 120] as const;
 
 // ---------------------------------------------------------------- Types
 
@@ -629,6 +630,14 @@ async function markFailed(admin: AdminClient, job: Job, message: string) {
     .from("marketing_flow_participants")
     .update({ status: "failed", exited_at: new Date().toISOString() })
     .eq("id", job.participant_id);
+  await emitWebhookEvent(admin, job.tenant_id, "marketing_flow.failed", {
+    flow_id: job.flow_id,
+    participant_id: job.participant_id,
+    step_id: job.step_id,
+    reason: "permanent",
+    attempts: job.attempts,
+    error: message,
+  });
 }
 
 /**
@@ -654,11 +663,18 @@ async function scheduleRetryOrDead(
       .from("marketing_flow_participants")
       .update({ status: "failed", exited_at: new Date().toISOString() })
       .eq("id", job.participant_id);
+    await emitWebhookEvent(admin, job.tenant_id, "marketing_flow.failed", {
+      flow_id: job.flow_id,
+      participant_id: job.participant_id,
+      step_id: job.step_id,
+      reason: "exhausted",
+      attempts,
+      error: message,
+    });
     return true;
   }
 
-  const delayMins =
-    RETRY_DELAY_MINUTES[Math.min(attempts, RETRY_DELAY_MINUTES.length - 1)] ?? 120;
+  const delayMins = flowRetryDelayMinutes(attempts);
   const runAt = new Date(Date.now() + delayMins * 60_000).toISOString();
 
   await admin

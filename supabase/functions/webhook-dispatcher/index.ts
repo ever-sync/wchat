@@ -10,6 +10,7 @@ import {
   requireTenantContext,
   requireTenantPermission,
 } from "../_shared/supabase.ts";
+import { webhookBackoffSeconds } from "../_shared/retry-backoff.ts";
 
 const MAX_BATCH = 50;
 const TIMEOUT_MS = 10_000;
@@ -50,52 +51,59 @@ async function postSigned(url: string, secret: string, event: string, deliveryId
   }
 }
 
-type DeliveryRow = {
+// Linha ja reivindicada (status='processing', attempts incrementado pelo RPC).
+type ClaimedDelivery = {
   id: string;
   tenant_id: string;
+  webhook_id: string;
   event: string;
   payload: unknown;
   attempts: number;
   max_attempts: number;
-  webhooks: { url: string; secret: string; active: boolean } | null;
 };
+
+type WebhookRow = { id: string; url: string; secret: string; active: boolean };
 
 async function processBatch(
   admin: ReturnType<typeof createAdminClient>,
   opts: { tenantId?: string } = {},
 ) {
-  const nowIso = new Date().toISOString();
-  let query = admin
-    .from("webhook_deliveries")
-    .select("id, tenant_id, event, payload, attempts, max_attempts, webhooks(url, secret, active)")
-    .eq("status", "pending")
-    .lte("next_attempt_at", nowIso)
-    .order("next_attempt_at", { ascending: true })
-    .limit(MAX_BATCH);
-  if (opts.tenantId) query = query.eq("tenant_id", opts.tenantId);
-
-  const { data, error } = await query;
+  // Claim atomico (FOR UPDATE SKIP LOCKED): marca 'processing' e ja incrementa
+  // attempts numa unica transacao. Elimina a pega dupla do SELECT+UPDATE antigo.
+  const { data: claimed, error } = await admin.rpc("claim_webhook_deliveries", {
+    p_limit: MAX_BATCH,
+    p_worker: "dispatcher",
+    p_tenant: opts.tenantId ?? null,
+  });
   if (error) throw new Error(error.message);
-  const rows = (data ?? []) as unknown as DeliveryRow[];
+  const rows = (claimed ?? []) as unknown as ClaimedDelivery[];
   if (rows.length === 0) return { processed: 0, success: 0, failed: 0 };
 
-  // Claim: empurra next_attempt_at p/ frente p/ evitar pega dupla por execução concorrente.
-  const ids = rows.map((r) => r.id);
-  await admin
-    .from("webhook_deliveries")
-    .update({ next_attempt_at: new Date(Date.now() + 120_000).toISOString() })
-    .in("id", ids)
-    .eq("status", "pending");
+  // Busca os webhooks das entregas reivindicadas (url/secret/active) de uma vez.
+  const webhookIds = [...new Set(rows.map((r) => r.webhook_id))];
+  const { data: webhooksData, error: whError } = await admin
+    .from("webhooks")
+    .select("id, url, secret, active")
+    .in("id", webhookIds);
+  if (whError) throw new Error(whError.message);
+  const webhookMap = new Map(
+    ((webhooksData ?? []) as WebhookRow[]).map((w) => [w.id, w]),
+  );
 
   let success = 0;
   let failed = 0;
 
   for (const row of rows) {
-    const webhook = row.webhooks;
+    const webhook = webhookMap.get(row.webhook_id);
     if (!webhook || !webhook.active) {
       await admin
         .from("webhook_deliveries")
-        .update({ status: "error", last_error: "webhook inativo ou removido", attempts: row.attempts + 1 })
+        .update({
+          status: "error",
+          last_error: "webhook inativo ou removido",
+          locked_at: null,
+          locked_by: null,
+        })
         .eq("id", row.id);
       failed++;
       continue;
@@ -109,25 +117,27 @@ async function processBatch(
         .from("webhook_deliveries")
         .update({
           status: "success",
-          attempts: row.attempts + 1,
           response_status: result.status,
           delivered_at: new Date().toISOString(),
           last_error: null,
+          locked_at: null,
+          locked_by: null,
         })
         .eq("id", row.id);
       success++;
     } else {
-      const attempts = row.attempts + 1;
-      const exhausted = attempts >= row.max_attempts;
-      const backoffSec = Math.min(attempts * attempts * 30, 3600);
+      // attempts ja foi incrementado no claim.
+      const exhausted = row.attempts >= row.max_attempts;
+      const backoffSec = webhookBackoffSeconds(row.attempts);
       await admin
         .from("webhook_deliveries")
         .update({
           status: exhausted ? "error" : "pending",
-          attempts,
           response_status: result.status,
           last_error: result.error,
           next_attempt_at: new Date(Date.now() + backoffSec * 1000).toISOString(),
+          locked_at: null,
+          locked_by: null,
         })
         .eq("id", row.id);
       failed++;

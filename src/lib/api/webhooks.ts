@@ -23,6 +23,7 @@ export const WEBHOOK_EVENTS = [
   { id: "ai.fact_remembered", label: "IA: fato salvo na memória" },
   { id: "ai.critique_blocked", label: "IA: auditoria bloqueou envio" },
   { id: "ai.circuit_tripped", label: "IA: circuit breaker disparou" },
+  { id: "marketing_flow.failed", label: "Automação: fluxo falhou (lead parou)" },
 ] as const;
 
 export type WebhookEventId = (typeof WEBHOOK_EVENTS)[number]["id"];
