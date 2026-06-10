@@ -405,24 +405,26 @@ export async function parseCustomersSpreadsheet(file: File): Promise<ParsedCusto
     return parseCustomersCsv(text);
   }
 
-  const buffer = await file.arrayBuffer();
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const firstSheetName = workbook.SheetNames[0];
-
-  if (!firstSheetName) {
-    return { rows: [], errors: ["A planilha nao possui abas validas."] };
+  // Le a primeira aba como matriz de linhas/celulas. read-excel-file vem do npm
+  // registry (auditavel) e nao carrega a superficie de ataque do SheetJS.
+  const { default: readXlsxFile } = await import("read-excel-file");
+  let jsonRows: unknown[][];
+  try {
+    jsonRows = (await readXlsxFile(file)) as unknown[][];
+  } catch {
+    return {
+      rows: [],
+      errors: ["Nao foi possivel ler a planilha. Salve como CSV e tente novamente."],
+    };
   }
 
-  const worksheet = workbook.Sheets[firstSheetName];
-  const jsonRows = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(worksheet, {
-    header: 1,
-    raw: false,
-    defval: "",
-    blankrows: false,
-  });
+  if (jsonRows.length === 0) {
+    return { rows: [], errors: ["A planilha nao possui dados validos."] };
+  }
 
-  const table = jsonRows.map((row) => row.map((cell) => cleanCell(String(cell ?? ""))));
+  const table = jsonRows.map((row) =>
+    row.map((cell) => cleanCell(cell == null ? "" : String(cell))),
+  );
   return parseCustomerTable(table);
 }
 
