@@ -730,6 +730,8 @@ async function executeStep(
       return await runUpdateDealStatus(admin, step, participant);
     case "definir-qualificacao":
       return await runSetQualification(admin, step, participant);
+    case "suprimir-canal":
+      return await runSuppressChannel(admin, step, participant);
     case "adicionar-anotacao":
       return await runAddNote(admin, step, participant);
     case "marcar-venda":
@@ -1435,6 +1437,39 @@ async function runSetQualification(
     .eq("tenant_id", participant.tenant_id);
   if (error) throw new Error(error.message);
   return { detail: { qualification } };
+}
+
+const SUPPRESSION_CHANNELS = ["whatsapp", "email", "sms", "all"] as const;
+
+async function runSuppressChannel(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.customer_id) {
+    throw new PermanentError("Participante sem cliente para suprimir (opt-out)");
+  }
+  const c = asRecord(step.config);
+  const channel = String(c.channel ?? "").trim();
+  if (!(SUPPRESSION_CHANNELS as readonly string[]).includes(channel)) {
+    throw new PermanentError(`Canal de opt-out inválido: "${channel}"`);
+  }
+  const reason = String(c.reason ?? "").trim() || "Opt-out via fluxo de marketing";
+
+  // Idempotente: unique (tenant_id, customer_id, channel) evita duplicar.
+  const { error } = await admin
+    .from("marketing_flow_suppressions")
+    .upsert(
+      {
+        tenant_id: participant.tenant_id,
+        customer_id: participant.customer_id,
+        channel,
+        reason,
+      },
+      { onConflict: "tenant_id,customer_id,channel", ignoreDuplicates: true },
+    );
+  if (error) throw new Error(error.message);
+  return { detail: { suppressed_channel: channel } };
 }
 
 async function runAddNote(

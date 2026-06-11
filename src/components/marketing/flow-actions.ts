@@ -314,6 +314,12 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       { id: "adicionar-tags", label: "Adicionar Tags", iconKey: "tag", iconClass: "bg-pink-500" },
       { id: "remover-tag", label: "Remover Tag", iconKey: "tag", iconClass: "bg-pink-500" },
       {
+        id: "suprimir-canal",
+        label: "Cancelar inscrição (opt-out)",
+        iconKey: "lock",
+        iconClass: "bg-pink-500",
+      },
+      {
         id: "adicionar-base-legal",
         label: "Adicionar Base Legal",
         iconKey: "lock",

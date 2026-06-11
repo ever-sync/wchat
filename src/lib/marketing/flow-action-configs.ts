@@ -5,7 +5,11 @@
 // - ACTION_CONFIG_REGISTRY: mapeia actionId -> kind do config (varias actions
 //   compartilham o mesmo kind, ex.: 'adicionar-tags' e 'remover-tag' -> 'tag').
 
-import type { MarketingFlowStep } from "@/lib/marketing/flow-types";
+import {
+  MARKETING_FLOW_SUPPRESSION_CHANNELS,
+  type MarketingFlowStep,
+  type MarketingFlowSuppressionChannel,
+} from "@/lib/marketing/flow-types";
 import type { ValidationIssue } from "@/lib/marketing/flow-validation";
 
 // ---------------------------------------------------------------- Types
@@ -112,6 +116,12 @@ export type AddNoteConfig = { note: string };
 /** Estrelas de qualificação da negociação (0–5), espelha crm_negotiations.qualification. */
 export type SetQualificationConfig = { qualification: number };
 
+/** Opt-out: insere uma supressão de canal (whatsapp/email/sms/all) para o lead. */
+export type SuppressChannelConfig = {
+  channel: MarketingFlowSuppressionChannel;
+  reason?: string;
+};
+
 /** valueCents vazio => mantém o valor atual da negociação. */
 export type MarkSaleConfig = { valueCents: string };
 
@@ -138,6 +148,7 @@ export type ActionConfigByKind = {
   "update-deal-title": UpdateDealTitleConfig;
   "update-deal-status": UpdateDealStatusConfig;
   "set-qualification": SetQualificationConfig;
+  "suppress-channel": SuppressChannelConfig;
   "add-note": AddNoteConfig;
   "mark-sale": MarkSaleConfig;
   "ai-classify": AiClassifyConfig;
@@ -172,6 +183,7 @@ export const ACTION_CONFIG_REGISTRY: Record<string, ActionConfigKind> = {
   "atualizar-nome-negociacao": "update-deal-title",
   "atualizar-status": "update-deal-status",
   "definir-qualificacao": "set-qualification",
+  "suprimir-canal": "suppress-channel",
   "adicionar-anotacao": "add-note",
   "marcar-venda": "mark-sale",
   "classificar-ia": "ai-classify",
@@ -328,6 +340,13 @@ export function parseConfig<K extends ActionConfigKind>(
       const n = Number(r.qualification);
       const qualification = Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 0;
       return { qualification } as ActionConfigByKind[K];
+    }
+    case "suppress-channel": {
+      const ch = toString(r.channel);
+      const channel = (MARKETING_FLOW_SUPPRESSION_CHANNELS as readonly string[]).includes(ch)
+        ? (ch as MarketingFlowSuppressionChannel)
+        : "all";
+      return { channel, reason: toString(r.reason) || undefined } as ActionConfigByKind[K];
     }
     case "add-note":
       return { note: toString(r.note) } as ActionConfigByKind[K];
@@ -694,6 +713,19 @@ export function validateActionConfig(
       }
       return [];
     }
+    case "suppress-channel": {
+      const c = config as SuppressChannelConfig;
+      if (!(MARKETING_FLOW_SUPPRESSION_CHANNELS as readonly string[]).includes(c.channel)) {
+        return [
+          {
+            code: "SUPPRESS_CHANNEL_INVALID",
+            severity: "error",
+            message: `“${label}”: selecione o canal a suprimir.`,
+          },
+        ];
+      }
+      return [];
+    }
     case "add-note": {
       const c = config as AddNoteConfig;
       if (!c.note.trim()) {
@@ -862,6 +894,16 @@ export function summarizeConfig(
       const c = config as SetQualificationConfig;
       const n = Math.min(5, Math.max(0, Math.round(c.qualification || 0)));
       return n === 0 ? "Zerar estrelas" : `${"★".repeat(n)} (${n})`;
+    }
+    case "suppress-channel": {
+      const c = config as SuppressChannelConfig;
+      const labels: Record<MarketingFlowSuppressionChannel, string> = {
+        whatsapp: "WhatsApp",
+        email: "E-mail",
+        sms: "SMS",
+        all: "Todos os canais",
+      };
+      return `Opt-out: ${labels[c.channel] ?? c.channel}`;
     }
     case "add-note": {
       const c = config as AddNoteConfig;

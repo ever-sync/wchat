@@ -5,6 +5,7 @@
 
 import type { ComponentType } from "react";
 import { Star } from "lucide-react";
+import { MARKETING_FLOW_SUPPRESSION_CHANNELS } from "@/lib/marketing/flow-types";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ import {
   type MoveDealConfig,
   type RemoveFromFlowConfig,
   type SetQualificationConfig,
+  type SuppressChannelConfig,
   type SetVariableAssignment,
   type SetVariableConfig,
   type SmartMessageConfig,
@@ -1034,6 +1036,55 @@ export function SetQualificationActionConfig({
   );
 }
 
+const SUPPRESS_CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  email: "E-mail",
+  sms: "SMS",
+  all: "Todos os canais",
+};
+
+export function SuppressChannelActionConfig({
+  value,
+  onChange,
+}: ConfigProps<SuppressChannelConfig>) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">Canal a suprimir</Label>
+        <Select
+          value={value.channel}
+          onValueChange={(next) =>
+            onChange({ ...value, channel: next as SuppressChannelConfig["channel"] })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o canal" />
+          </SelectTrigger>
+          <SelectContent>
+            {MARKETING_FLOW_SUPPRESSION_CHANNELS.map((ch) => (
+              <SelectItem key={ch} value={ch}>
+                {SUPPRESS_CHANNEL_LABELS[ch] ?? ch}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">Motivo (opcional)</Label>
+        <Input
+          value={value.reason ?? ""}
+          onChange={(event) => onChange({ ...value, reason: event.target.value })}
+          placeholder="Pediu para não receber mais"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        O lead deixa de receber envios automáticos no canal escolhido. “Todos os canais” bloqueia
+        qualquer envio. Respeita a LGPD/opt-out.
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Add Note
 
 export function AddNoteActionConfig({ value, onChange }: ConfigProps<AddNoteConfig>) {
@@ -1211,6 +1262,7 @@ const COMPONENTS: { [K in ActionConfigKind]: ComponentType<ConfigProps<ActionCon
   "update-deal-title": UpdateDealTitleActionConfig,
   "update-deal-status": UpdateDealStatusActionConfig,
   "set-qualification": SetQualificationActionConfig,
+  "suppress-channel": SuppressChannelActionConfig,
   "add-note": AddNoteActionConfig,
   "mark-sale": MarkSaleActionConfig,
   "ai-classify": AiClassifyActionConfig,

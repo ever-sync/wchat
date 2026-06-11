@@ -101,6 +101,7 @@ export const MARKETING_FLOW_EXECUTABLE_ACTIONS = [
   "adicionar-anotacao",
   "marcar-venda",
   "classificar-ia",
+  "suprimir-canal",
 ] as const;
 export type MarketingFlowExecutableAction =
   (typeof MARKETING_FLOW_EXECUTABLE_ACTIONS)[number];
