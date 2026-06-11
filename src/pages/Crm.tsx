@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -11,7 +11,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlignJustify,
   ArrowDownUp,
@@ -207,7 +207,6 @@ import {
   appliedToOwnerDraft,
   type AppliedOwner,
   BASE_ATTENDANTS,
-  CARD_DENSITY_STORAGE_KEY,
   type CardDensity,
   compareNegotiations,
   type CreationDateRangeIso,
@@ -215,10 +214,8 @@ import {
   formatIsoDateToBr,
   matchesOwner,
   negotiationNextTaskDueMeta,
-  OWNER_MODE_IDS,
   type OwnerDraft,
   parseDateRangeIso,
-  readCardDensity,
   resolveCustomerIdForNegotiation,
   SAVED_VIEWS,
   type SavedViewId,
@@ -235,6 +232,7 @@ import {
   stageTitleForNegotiation,
 } from "./crm/board-helpers";
 import { CrmPoolBadge, KanbanColumn } from "./crm/board-cards";
+import { useCrmBoardFilters } from "./crm/useCrmBoardFilters";
 
 export default function Crm() {
   const navigate = useNavigate();
@@ -337,51 +335,35 @@ export default function Crm() {
     [tenantSettings?.staleNegotiationDays],
   );
 
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const [funnelId, setFunnelId] = useState<string>(
-    () => searchParams.get("funnel")?.trim() || DEFAULT_CRM_FUNNELS[0].id,
-  );
-  const [appliedOwner, setAppliedOwner] = useState<AppliedOwner>(() => {
-    const mode = searchParams.get("owner");
-    if (mode && OWNER_MODE_IDS.has(mode as AppliedOwner["mode"])) {
-      if (mode === "all") return { mode: "all" };
-      if (mode === "mine") return { mode: "mine" };
-      if (mode === "pool") return { mode: "pool" };
-      const ids = (searchParams.get("owners") ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return { mode: "custom", ids };
-    }
-    return { mode: "all" };
-  });
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]["id"]>(() => {
-    const v = searchParams.get("status");
-    return v && STATUS_FILTER_IDS.has(v) ? (v as (typeof STATUS_OPTIONS)[number]["id"]) : "all";
-  });
-  const [alertsFilter, setAlertsFilter] = useState<CrmAlertsFilterMode>(() => {
-    const v = searchParams.get("alerts");
-    return v && ALERTS_FILTER_IDS.has(v as CrmAlertsFilterMode) ? (v as CrmAlertsFilterMode) : "off";
-  });
+  const {
+    funnelId,
+    setFunnelId,
+    funnel,
+    appliedOwner,
+    setAppliedOwner,
+    statusFilter,
+    setStatusFilter,
+    alertsFilter,
+    setAlertsFilter,
+    scoreFilter,
+    setScoreFilter,
+    advancedFilter,
+    setAdvancedFilter,
+    creationDateFilter,
+    setCreationDateFilter,
+    searchTerm,
+    setSearchTerm,
+    deferredSearchTerm,
+    sortId,
+    setSortId,
+    view,
+    setView,
+    cardDensity,
+    setCardDensity,
+  } = useCrmBoardFilters(funnels);
   const [alertsFilterOpen, setAlertsFilterOpen] = useState(false);
-  const [scoreFilter, setScoreFilter] = useState<ScoreFilterMode>(() => {
-    const v = searchParams.get("score");
-    return v && SCORE_FILTER_IDS.has(v as ScoreFilterMode) ? (v as ScoreFilterMode) : "all";
-  });
   const [scoreFilterOpen, setScoreFilterOpen] = useState(false);
-  const [advancedFilter, setAdvancedFilter] = useState<AdvancedFilter | null>(
-    () => decodeAdvancedFilter(searchParams.get("adv")),
-  );
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
-  const [creationDateFilter, setCreationDateFilter] = useState<CreationDateRangeIso | null>(() => {
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
-    if (!from || !to) return null;
-    return { from, to };
-  });
-  const [searchTerm, setSearchTerm] = useState<string>(() => searchParams.get("q") ?? "");
-  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [savedViewsOpen, setSavedViewsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [savedViewDialog, setSavedViewDialog] = useState<
@@ -396,15 +378,6 @@ export default function Crm() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkAssignSearch, setBulkAssignSearch] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
-
-  useEffect(() => {
-    if (funnels.some((f) => f.id === funnelId)) {
-      return;
-    }
-    setFunnelId(funnels[0]?.id ?? DEFAULT_CRM_FUNNELS[0].id);
-  }, [funnelId, funnels]);
-
-  const funnel = funnels.find((f) => f.id === funnelId) ?? funnels[0] ?? DEFAULT_CRM_FUNNELS[0];
 
   const crmListFilters = useMemo((): ListCrmNegotiationsFilters => {
     const f: ListCrmNegotiationsFilters = { funnelId };
@@ -577,24 +550,6 @@ export default function Crm() {
     return attendants;
   }, [attendants, collaborators, isSupabaseConfigured]);
 
-  const [view, setView] = useState<"board" | "list">(() => {
-    const v = searchParams.get("view");
-    return v === "list" ? "list" : "board";
-  });
-  const [cardDensity, setCardDensity] = useState<CardDensity>(() => readCardDensity());
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(CARD_DENSITY_STORAGE_KEY, cardDensity);
-    } catch {
-      // ignora — funcionalidade não-crítica.
-    }
-  }, [cardDensity]);
-  const [sortId, setSortId] = useState<SortId>(() => {
-    const v = searchParams.get("sort");
-    return v && SORT_FILTER_IDS.has(v) ? (v as SortId) : "created_desc";
-  });
-
   const [funnelOpen, setFunnelOpen] = useState(false);
   const [filtersPopoverOpen, setFiltersPopoverOpen] = useState(false);
   const [ownerOpen, setOwnerOpen] = useState(false);
@@ -602,54 +557,6 @@ export default function Crm() {
   const [ownerSearch, setOwnerSearch] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
-
-  // Espelha o estado de filtros na URL — permite compartilhar visões filtradas
-  // e preserva o contexto após reload. Usa replace p/ não inflar o histórico.
-  useEffect(() => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        const apply = (key: string, value: string | null | undefined) => {
-          if (value === null || value === undefined || value === "") {
-            next.delete(key);
-          } else {
-            next.set(key, value);
-          }
-        };
-        apply("funnel", funnelId === DEFAULT_CRM_FUNNELS[0].id ? null : funnelId);
-        apply("q", searchTerm.trim() || null);
-        apply("owner", appliedOwner.mode === "all" ? null : appliedOwner.mode);
-        apply(
-          "owners",
-          appliedOwner.mode === "custom" && appliedOwner.ids.length > 0
-            ? appliedOwner.ids.join(",")
-            : null,
-        );
-        apply("status", statusFilter === "all" ? null : statusFilter);
-        apply("alerts", alertsFilter === "off" ? null : alertsFilter);
-        apply("score", scoreFilter === "all" ? null : scoreFilter);
-        apply("adv", encodeAdvancedFilter(advancedFilter));
-        apply("from", creationDateFilter?.from ?? null);
-        apply("to", creationDateFilter?.to ?? null);
-        apply("sort", sortId === "created_desc" ? null : sortId);
-        apply("view", view === "board" ? null : view);
-        return next;
-      },
-      { replace: true },
-    );
-  }, [
-    advancedFilter,
-    alertsFilter,
-    appliedOwner,
-    creationDateFilter,
-    funnelId,
-    scoreFilter,
-    searchTerm,
-    setSearchParams,
-    sortId,
-    statusFilter,
-    view,
-  ]);
 
   // Atalho "/" foca a busca quando o usuário não está digitando em outro input.
   useEffect(() => {
@@ -689,7 +596,16 @@ export default function Crm() {
     setSearchTerm("");
     setAdvancedFilter(null);
     toast({ title: "Filtros limpos", description: "Exibindo todas as negociações do funil." });
-  }, [toast]);
+  }, [
+    toast,
+    setAdvancedFilter,
+    setAlertsFilter,
+    setAppliedOwner,
+    setCreationDateFilter,
+    setScoreFilter,
+    setSearchTerm,
+    setStatusFilter,
+  ]);
 
   const applySavedView = useCallback(
     (viewId: SavedViewId) => {
@@ -720,7 +636,18 @@ export default function Crm() {
       const label = SAVED_VIEWS.find((v) => v.id === viewId)?.label ?? "Vista salva";
       toast({ title: `Vista aplicada: ${label}` });
     },
-    [profileId, toast],
+    [
+      profileId,
+      toast,
+      setAdvancedFilter,
+      setAlertsFilter,
+      setAppliedOwner,
+      setCreationDateFilter,
+      setScoreFilter,
+      setSearchTerm,
+      setSortId,
+      setStatusFilter,
+    ],
   );
 
   // Coleta o estado atual de filtros num objeto serializável (omitindo defaults).
@@ -796,7 +723,19 @@ export default function Crm() {
       setSavedViewsOpen(false);
       toast({ title: `Vista aplicada: ${saved.name}` });
     },
-    [toast],
+    [
+      toast,
+      setAdvancedFilter,
+      setAlertsFilter,
+      setAppliedOwner,
+      setCreationDateFilter,
+      setFunnelId,
+      setScoreFilter,
+      setSearchTerm,
+      setSortId,
+      setStatusFilter,
+      setView,
+    ],
   );
 
   const openCreateSavedViewDialog = useCallback(() => {
