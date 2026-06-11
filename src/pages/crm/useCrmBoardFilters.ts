@@ -3,7 +3,7 @@
 // restauro pos-reload), da densidade do card no localStorage e de manter o funil
 // selecionado valido. Devolve valores + setters para o componente consumir.
 
-import { useDeferredValue, useEffect, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DEFAULT_CRM_FUNNELS, type CrmFunnel } from "@/data/crm-funnels";
 import type { CrmNegotiationStatus } from "@/types/domain";
@@ -71,8 +71,9 @@ export function useCrmBoardFilters(funnels: CrmFunnel[]) {
     if (!from || !to) return null;
     return { from, to };
   });
-  const [searchTerm, setSearchTerm] = useState<string>(() => searchParams.get("q") ?? "");
-  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get("q") ?? "");
+  const [searchInputResetKey, setSearchInputResetKey] = useState(0);
+  const deferredSearchTerm = useDeferredValue(searchQuery);
   const [view, setView] = useState<"board" | "list">(() => {
     const v = searchParams.get("view");
     return v === "list" ? "list" : "board";
@@ -82,6 +83,11 @@ export function useCrmBoardFilters(funnels: CrmFunnel[]) {
     const v = searchParams.get("sort");
     return v && SORT_FILTER_IDS.has(v) ? (v as SortId) : "created_desc";
   });
+
+  const resetSearchInput = useCallback((value = "") => {
+    setSearchQuery(value);
+    setSearchInputResetKey((k) => k + 1);
+  }, []);
 
   // Densidade do card: persiste no localStorage (não-crítico).
   useEffect(() => {
@@ -117,7 +123,7 @@ export function useCrmBoardFilters(funnels: CrmFunnel[]) {
           }
         };
         apply("funnel", funnelId === DEFAULT_CRM_FUNNELS[0].id ? null : funnelId);
-        apply("q", searchTerm.trim() || null);
+        apply("q", searchQuery.trim() || null);
         apply("owner", appliedOwner.mode === "all" ? null : appliedOwner.mode);
         apply(
           "owners",
@@ -144,7 +150,7 @@ export function useCrmBoardFilters(funnels: CrmFunnel[]) {
     creationDateFilter,
     funnelId,
     scoreFilter,
-    searchTerm,
+    searchQuery,
     setSearchParams,
     sortId,
     statusFilter,
@@ -167,8 +173,10 @@ export function useCrmBoardFilters(funnels: CrmFunnel[]) {
     setAdvancedFilter,
     creationDateFilter,
     setCreationDateFilter,
-    searchTerm,
-    setSearchTerm,
+    searchQuery,
+    setSearchQuery,
+    searchInputResetKey,
+    resetSearchInput,
     deferredSearchTerm,
     sortId,
     setSortId,

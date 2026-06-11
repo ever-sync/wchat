@@ -10,6 +10,10 @@ verify_jwt = false
 [functions.uazapi-instance-create]
 verify_jwt = false
 
+# Garante conversa WhatsApp por telefone (CRM → inbox): JWT do tenant; gate atendimento.
+[functions.uazapi-ensure-chat]
+verify_jwt = false
+
 # n8n envia com HMAC ou N8N_SERVICE_KEY — sem JWT de usuario
 [functions.n8n-reply]
 verify_jwt = false

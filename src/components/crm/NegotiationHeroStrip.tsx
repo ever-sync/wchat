@@ -6,6 +6,7 @@ import {
   CalendarX2,
   Clock,
   Footprints,
+  Hand,
   MessageCircle,
   Pause,
   Play,
@@ -88,6 +89,9 @@ export function NegotiationHeroStrip({
   hasChat,
   onOpenChat,
   staleNegotiationDays,
+  showClaimNegotiation,
+  onClaimNegotiation,
+  claimNegotiationPending,
 }: {
   negotiation: CrmNegotiation;
   leadScore?: LeadScoreResult;
@@ -97,6 +101,9 @@ export function NegotiationHeroStrip({
   onOpenChat: () => void;
   /** Limite (dias) que define "parado" — vem de tenant_settings. */
   staleNegotiationDays?: number;
+  showClaimNegotiation?: boolean;
+  onClaimNegotiation?: () => void;
+  claimNegotiationPending?: boolean;
 }) {
   const navigate = useNavigate();
   const statusMeta = STATUS_META[negotiation.status] ?? STATUS_META.em_andamento;
@@ -286,6 +293,18 @@ export function NegotiationHeroStrip({
 
         {/* Quick actions — empurra pra direita em telas largas */}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {showClaimNegotiation && onClaimNegotiation ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-2 bg-primary font-semibold text-primary-foreground shadow-none hover:bg-primary/90"
+              disabled={claimNegotiationPending}
+              onClick={onClaimNegotiation}
+            >
+              <Hand className="h-4 w-4" aria-hidden />
+              {claimNegotiationPending ? "Assumindo…" : "Assumir negócio"}
+            </Button>
+          ) : null}
           <NegotiationAiSummaryButton negotiationId={negotiation.id} variant="outline" />
           <NegotiationSuggestMessageButton
             negotiationId={negotiation.id}

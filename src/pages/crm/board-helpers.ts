@@ -227,13 +227,20 @@ export function negotiationNextTaskDueMeta(
 
 export function resolveCustomerIdForNegotiation(
   card: CrmNegotiation,
-  _customers: Customer[],
+  customers: Customer[],
 ): string | null {
   const syntheticId = parseSyntheticCustomerCardId(card.id);
   if (syntheticId) {
     return syntheticId;
   }
-  return card.customerId?.trim() || null;
+  if (card.customerId?.trim()) {
+    return card.customerId.trim();
+  }
+  const title = card.title?.trim().toLowerCase();
+  if (!title) {
+    return null;
+  }
+  return customers.find((c) => c.nome?.trim().toLowerCase() === title)?.id ?? null;
 }
 
 export function appliedToOwnerDraft(applied: AppliedOwner): OwnerDraft {

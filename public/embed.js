@@ -45,7 +45,8 @@
     return src;
   }
 
-  function createIframe(targetFormId) {
+  function createIframe(targetFormId, options) {
+    var eager = options && options.eager;
     var iframe = document.createElement("iframe");
     iframe.src = buildIframeSrc(targetFormId);
     iframe.width = "100%";
@@ -53,7 +54,10 @@
     iframe.style.border = "0";
     iframe.style.borderRadius = "8px";
     iframe.style.background = "transparent";
-    iframe.loading = "lazy";
+    iframe.loading = eager ? "eager" : "lazy";
+    if (eager && "fetchPriority" in iframe) {
+      iframe.fetchPriority = "high";
+    }
     iframe.referrerPolicy = "strict-origin-when-cross-origin";
     return iframe;
   }
@@ -93,7 +97,7 @@
     var closeBtn = document.createElement("button");
     closeBtn.className = "wcf-close";
     closeBtn.innerHTML = "&times;";
-    var iframe = createIframe(targetFormId);
+    var iframe = createIframe(targetFormId, { eager: false });
     iframe.style.borderRadius = "0";
     iframe.height = "100%";
     modal.appendChild(closeBtn);
@@ -120,7 +124,7 @@
     var container = targetContainerId ? document.getElementById(targetContainerId) : null;
     if (!container) container = document.getElementById("wchat-form-" + targetFormId);
     if (!container) return;
-    var iframe = createIframe(targetFormId);
+    var iframe = createIframe(targetFormId, { eager: true });
     container.innerHTML = "";
     container.appendChild(iframe);
   }

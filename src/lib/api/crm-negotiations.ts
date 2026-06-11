@@ -585,6 +585,50 @@ export function useDeleteCrmNegotiation(
   });
 }
 
+
+const STAGE_DRAG_PATCH_KEYS = new Set<keyof CrmNegotiationPatch>([
+  "stageId",
+  "funnelId",
+  "status",
+  "lostReason",
+]);
+
+export function isStageDragPatch(patch: CrmNegotiationPatch): boolean {
+  const keys = (Object.keys(patch) as (keyof CrmNegotiationPatch)[]).filter(
+    (k) => patch[k] !== undefined,
+  );
+  return keys.length > 0 && keys.every((k) => STAGE_DRAG_PATCH_KEYS.has(k));
+}
+
+export function patchCrmNegotiationStageInCaches(
+  queryClient: QueryClient,
+  id: string,
+  patch: Pick<CrmNegotiationPatch, "stageId" | "funnelId" | "status" | "lostReason">,
+) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!prev) return prev;
+      return prev.map((row) => (row.id === id ? { ...row, ...patch } : row));
+    },
+  );
+  queryClient.setQueryData<CrmNegotiationRecord>(
+    ["crm-negotiations", id],
+    (prev) => (prev ? { ...prev, ...patch } : prev),
+  );
+}
+
+function mergeCrmNegotiationRecordInCaches(queryClient: QueryClient, data: CrmNegotiationRecord) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!prev) return prev;
+      return prev.map((row) => (row.id === data.id ? data : row));
+    },
+  );
+  queryClient.setQueryData(["crm-negotiations", data.id], data);
+}
+
 export function useUpdateCrmNegotiation(
   options?: UseMutationOptions<CrmNegotiationRecord, Error, { id: string; patch: CrmNegotiationPatch }>,
 ) {
@@ -592,14 +636,29 @@ export function useUpdateCrmNegotiation(
   return useMutation({
     mutationFn: ({ id, patch }) => updateCrmNegotiation(id, patch),
     ...options,
+    onMutate: async (vars) => {
+      const ctx = await options?.onMutate?.(vars);
+      if (vars.patch.stageId !== undefined || vars.patch.funnelId !== undefined) {
+        patchCrmNegotiationStageInCaches(queryClient, vars.id, vars.patch);
+      }
+      return ctx;
+    },
+    onError: (_err, vars, ctx) => {
+      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      options?.onError?.(_err, vars, ctx);
+    },
     onSuccess: async (data, vars, ctx) => {
       const prevCustomerId =
         vars.patch.customerId !== undefined
           ? previousNegotiationCustomerIdFromQueryCache(queryClient, vars.id)
           : null;
 
-      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations", vars.id] });
+      if (isStageDragPatch(vars.patch)) {
+        mergeCrmNegotiationRecordInCaches(queryClient, data);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+        await queryClient.invalidateQueries({ queryKey: ["crm-negotiations", vars.id] });
+      }
 
       if (vars.patch.customerId !== undefined) {
         const next =

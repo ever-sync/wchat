@@ -102,6 +102,23 @@ export function useUpsertCrmNegotiationStageOverride() {
 
   return useMutation({
     mutationFn: upsertCrmNegotiationStageOverride,
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["crm-negotiation-stages"] });
+      const previous = queryClient.getQueryData<LocalStore>(["crm-negotiation-stages"]);
+      queryClient.setQueryData<LocalStore>(["crm-negotiation-stages"], (prev) => ({
+        ...(prev ?? {}),
+        [input.negotiationId]: {
+          funnel_id: input.funnelId,
+          stage_id: input.stageId,
+        },
+      }));
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(["crm-negotiation-stages"], ctx.previous);
+      }
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["crm-negotiation-stages"] });
     },

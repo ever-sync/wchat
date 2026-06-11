@@ -37,7 +37,7 @@ describe("useCrmBoardFilters — leitura da URL", () => {
     expect(result.current.scoreFilter).toBe("hot");
     expect(result.current.sortId).toBe("value_desc");
     expect(result.current.view).toBe("list");
-    expect(result.current.searchTerm).toBe("acme");
+    expect(result.current.searchQuery).toBe("acme");
   });
 
   it("decodifica owner custom a partir de owner=custom&owners=", () => {

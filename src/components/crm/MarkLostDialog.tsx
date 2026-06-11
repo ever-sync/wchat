@@ -17,6 +17,16 @@ const PRESET_REASONS = [
   "Sem interesse",
   "Sem resposta",
   "Fora da rota / região",
+  "Não é aposentado / INSS",
+  "Sem margem / sem condições",
+  "Desistiu / desistência",
+  "Atendimento ruim",
+  "Lead duplicado",
+  "Dados incorretos",
+  "Não atende / telefone inválido",
+  "Optou por outro produto",
+  "Prazo / timing",
+  "Sem documentação",
 ];
 
 type MarkLostDialogProps = {
