@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Send,
   Shuffle,
+  Sparkles,
   Workflow,
 } from "lucide-react";
 import {
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketingAutomations } from "@/components/marketing/MarketingAutomations";
+import { MarketingAutomations2 } from "@/components/marketing/MarketingAutomations2";
 import { MarketingCampaigns } from "@/components/marketing/MarketingCampaigns";
 import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTab";
 import { PageShell } from "@/components/layout/PageShell";
@@ -35,6 +37,7 @@ const CONVERTER_SUB_TABS = [
 const TABS = [
   "campanhas",
   "automacoes",
+  "automacao-2",
   ...CONVERTER_SUB_TABS.map((t) => t.value),
 ] as const;
 type MarketingTab = (typeof TABS)[number];
@@ -154,6 +157,10 @@ export default function Marketing() {
             <Workflow className="h-4 w-4" aria-hidden />
             Automações
           </TabsTrigger>
+          <TabsTrigger value="automacao-2" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+            <Sparkles className="h-4 w-4" aria-hidden />
+            Automação 2.0
+          </TabsTrigger>
           <ConverterTabTrigger
             active={isConverterActive}
             activeSubLabel={activeSubLabel}
@@ -167,6 +174,10 @@ export default function Marketing() {
 
         <TabsContent value="automacoes" className="mt-0">
           <MarketingAutomations />
+        </TabsContent>
+
+        <TabsContent value="automacao-2" className="mt-0">
+          <MarketingAutomations2 />
         </TabsContent>
 
         {CONVERTER_SUB_TABS.map((item) => (
