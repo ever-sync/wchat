@@ -732,6 +732,8 @@ async function executeStep(
       return await runSetQualification(admin, step, participant);
     case "suprimir-canal":
       return await runSuppressChannel(admin, step, participant);
+    case "transferir-humano":
+      return await runHandoffToHuman(admin, participant);
     case "adicionar-anotacao":
       return await runAddNote(admin, step, participant);
     case "marcar-venda":
@@ -1470,6 +1472,45 @@ async function runSuppressChannel(
     );
   if (error) throw new Error(error.message);
   return { detail: { suppressed_channel: channel } };
+}
+
+/**
+ * Pausa a IA e entrega o chat ao time: seta ai_mode='handoff' no chat mais
+ * recente do cliente. O trigger de banco em whatsapp_chats emite o evento
+ * ai_paused (que pode inscrever o lead em outros fluxos).
+ */
+async function runHandoffToHuman(
+  admin: AdminClient,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.customer_id) {
+    throw new PermanentError("Participante sem cliente para transferir");
+  }
+
+  const { data: chat, error: findError } = await admin
+    .from("whatsapp_chats")
+    .select("id, ai_mode")
+    .eq("tenant_id", participant.tenant_id)
+    .eq("customer_id", participant.customer_id)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (findError) throw new Error(findError.message);
+  if (!chat) {
+    // Sem conversa ainda — nada a transferir; segue o fluxo sem falhar o lead.
+    return { detail: { skipped: true, reason: "cliente sem chat de WhatsApp" } };
+  }
+  if ((chat as { ai_mode?: string }).ai_mode === "handoff") {
+    return { detail: { skipped: true, reason: "chat ja em handoff" } };
+  }
+
+  const { error } = await admin
+    .from("whatsapp_chats")
+    .update({ ai_mode: "handoff" })
+    .eq("id", (chat as { id: string }).id)
+    .eq("tenant_id", participant.tenant_id);
+  if (error) throw new Error(error.message);
+  return { detail: { chat_id: (chat as { id: string }).id, ai_mode: "handoff" } };
 }
 
 async function runAddNote(

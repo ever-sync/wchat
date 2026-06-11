@@ -126,6 +126,14 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
         iconClass: "bg-fuchsia-600",
         badge: { kind: "conheca" },
       },
+      {
+        id: "transferir-humano",
+        label: "Transferir para humano",
+        iconKey: "user",
+        iconClass: "bg-fuchsia-600",
+        badge: { kind: "novo" },
+        defaultSubtitle: "Pausa a IA e entrega o chat ao time",
+      },
     ],
   },
   {
