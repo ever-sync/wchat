@@ -24,13 +24,64 @@ describe("Fase 4 — ações de negociação (registry + executável)", () => {
     "atualizar-status",
     "adicionar-anotacao",
     "marcar-venda",
+    "definir-qualificacao",
+    "suprimir-canal",
+    "transferir-humano",
   ];
 
   it("todas têm config kind e são executáveis", () => {
     for (const a of actions) {
-      expect(getConfigKind(a)).not.toBeNull();
       expect(isExecutableMarketingFlowAction(a)).toBe(true);
+      // transferir-humano não tem config estruturado (sem campos) — kind opcional.
+      if (a !== "transferir-humano") {
+        expect(getConfigKind(a)).not.toBeNull();
+      }
     }
+  });
+});
+
+describe("set-qualification (estrelas)", () => {
+  it("parse limita a 0–5 e arredonda", () => {
+    expect(parseConfig("set-qualification", { qualification: 9 }).qualification).toBe(5);
+    expect(parseConfig("set-qualification", { qualification: -2 }).qualification).toBe(0);
+    expect(parseConfig("set-qualification", { qualification: 3.6 }).qualification).toBe(4);
+    expect(parseConfig("set-qualification", { qualification: "x" }).qualification).toBe(0);
+  });
+
+  it("valida (após parse normalizar, fica sempre na faixa)", () => {
+    expect(
+      validateActionConfig(step("definir-qualificacao", { qualification: 4 }), "set-qualification"),
+    ).toHaveLength(0);
+    // parse já limita: 7 vira 5, então valida sem erro.
+    expect(
+      validateActionConfig(step("definir-qualificacao", { qualification: 7 }), "set-qualification"),
+    ).toHaveLength(0);
+  });
+
+  it("summarize mostra as estrelas", () => {
+    expect(summarizeConfig("set-qualification", { qualification: 0 })).toBe("Zerar estrelas");
+    expect(summarizeConfig("set-qualification", { qualification: 3 })).toContain("★★★");
+  });
+});
+
+describe("suppress-channel (opt-out)", () => {
+  it("parse normaliza canal inválido para 'all'", () => {
+    expect(parseConfig("suppress-channel", { channel: "xpto" }).channel).toBe("all");
+    expect(parseConfig("suppress-channel", { channel: "whatsapp" }).channel).toBe("whatsapp");
+  });
+
+  it("valida (parse normaliza canal inválido, então passa)", () => {
+    expect(
+      validateActionConfig(step("suprimir-canal", { channel: "email" }), "suppress-channel"),
+    ).toHaveLength(0);
+    expect(
+      validateActionConfig(step("suprimir-canal", { channel: "zzz" }), "suppress-channel"),
+    ).toHaveLength(0);
+  });
+
+  it("summarize descreve o opt-out", () => {
+    expect(summarizeConfig("suppress-channel", { channel: "whatsapp" })).toBe("Opt-out: WhatsApp");
+    expect(summarizeConfig("suppress-channel", { channel: "all" })).toBe("Opt-out: Todos os canais");
   });
 });
 
