@@ -451,6 +451,43 @@ export async function claimCrmNegotiation(negotiationId: string): Promise<void> 
   }
 }
 
+/** Atualiza listagens (array) e detalhe sem tocar em outras chaves do mesmo prefixo. */
+function patchCrmNegotiationRecordInCaches(
+  queryClient: QueryClient,
+  id: string,
+  patch: Partial<CrmNegotiationRecord>,
+) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!Array.isArray(prev)) {
+        return prev;
+      }
+      return prev.map((row) => (row.id === id ? { ...row, ...patch } : row));
+    },
+  );
+  queryClient.setQueryData<CrmNegotiationRecord>(
+    ["crm-negotiations", id],
+    (prev) => (prev ? { ...prev, ...patch } : prev),
+  );
+}
+
+export function patchCrmNegotiationAssigneeInCaches(
+  queryClient: QueryClient,
+  id: string,
+  assigneeId: string | null,
+) {
+  patchCrmNegotiationRecordInCaches(queryClient, id, { assigneeId });
+}
+
+async function resolveCurrentUserIdForClaim(): Promise<string | null> {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+  const { data } = await requireSupabase().auth.getSession();
+  return data.session?.user?.id ?? null;
+}
+
 export function useClaimCrmNegotiation(
   options?: UseMutationOptions<void, Error, string>,
 ) {
@@ -458,9 +495,21 @@ export function useClaimCrmNegotiation(
   return useMutation({
     mutationFn: claimCrmNegotiation,
     ...options,
-    onSuccess: async (data, negotiationId, ctx) => {
-      await invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
-      await options?.onSuccess?.(data, negotiationId, ctx);
+    onMutate: async (negotiationId) => {
+      const parentCtx = await options?.onMutate?.(negotiationId);
+      const userId = await resolveCurrentUserIdForClaim();
+      if (userId) {
+        patchCrmNegotiationAssigneeInCaches(queryClient, negotiationId, userId);
+      }
+      return parentCtx;
+    },
+    onError: (error, negotiationId, ctx) => {
+      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      options?.onError?.(error, negotiationId, ctx);
+    },
+    onSuccess: (data, negotiationId, ctx) => {
+      invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
+      void options?.onSuccess?.(data, negotiationId, ctx);
     },
   });
 }
@@ -526,14 +575,15 @@ export async function releaseCrmNegotiationToPool(negotiationId: string): Promis
   }
 }
 
-async function invalidateCrmNegotiationAssigneeQueries(
+/** Revalida em background — não bloqueia a UI após assumir/devolver. */
+function invalidateCrmNegotiationAssigneeQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   negotiationId: string,
 ) {
-  await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-  await queryClient.invalidateQueries({ queryKey: ["crm-negotiations", negotiationId] });
-  await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
-  await queryClient.invalidateQueries({ queryKey: ["chat-negotiation"] });
+  void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+  void queryClient.invalidateQueries({ queryKey: ["crm-negotiations", negotiationId] });
+  void queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+  void queryClient.invalidateQueries({ queryKey: ["chat-negotiation"] });
 }
 
 export function useReleaseCrmNegotiationToPool(
@@ -543,10 +593,19 @@ export function useReleaseCrmNegotiationToPool(
   return useMutation({
     mutationFn: releaseCrmNegotiationToPool,
     ...options,
-    onSuccess: async (data, negotiationId, ctx) => {
+    onMutate: async (negotiationId) => {
+      const parentCtx = await options?.onMutate?.(negotiationId);
+      patchCrmNegotiationAssigneeInCaches(queryClient, negotiationId, null);
+      return parentCtx;
+    },
+    onError: (error, negotiationId, ctx) => {
+      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      options?.onError?.(error, negotiationId, ctx);
+    },
+    onSuccess: (data, negotiationId, ctx) => {
       markCrmPoolNotificationSuppressed(negotiationId);
-      await invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
-      await options?.onSuccess?.(data, negotiationId, ctx);
+      invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
+      void options?.onSuccess?.(data, negotiationId, ctx);
     },
   });
 }
@@ -605,27 +664,11 @@ export function patchCrmNegotiationStageInCaches(
   id: string,
   patch: Pick<CrmNegotiationPatch, "stageId" | "funnelId" | "status" | "lostReason">,
 ) {
-  queryClient.setQueriesData<CrmNegotiationRecord[]>(
-    { queryKey: ["crm-negotiations"] },
-    (prev) => {
-      if (!prev) return prev;
-      return prev.map((row) => (row.id === id ? { ...row, ...patch } : row));
-    },
-  );
-  queryClient.setQueryData<CrmNegotiationRecord>(
-    ["crm-negotiations", id],
-    (prev) => (prev ? { ...prev, ...patch } : prev),
-  );
+  patchCrmNegotiationRecordInCaches(queryClient, id, patch);
 }
 
 function mergeCrmNegotiationRecordInCaches(queryClient: QueryClient, data: CrmNegotiationRecord) {
-  queryClient.setQueriesData<CrmNegotiationRecord[]>(
-    { queryKey: ["crm-negotiations"] },
-    (prev) => {
-      if (!prev) return prev;
-      return prev.map((row) => (row.id === data.id ? data : row));
-    },
-  );
+  patchCrmNegotiationRecordInCaches(queryClient, data.id, data);
   queryClient.setQueryData(["crm-negotiations", data.id], data);
 }
 
@@ -638,7 +681,7 @@ export function useUpdateCrmNegotiation(
     ...options,
     onMutate: async (vars) => {
       const ctx = await options?.onMutate?.(vars);
-      if (vars.patch.stageId !== undefined || vars.patch.funnelId !== undefined) {
+      if (isStageDragPatch(vars.patch)) {
         patchCrmNegotiationStageInCaches(queryClient, vars.id, vars.patch);
       }
       return ctx;

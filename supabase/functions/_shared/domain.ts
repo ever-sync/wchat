@@ -969,7 +969,30 @@ async function findCustomerByRemoteJid(admin: AdminClient, tenantId: string, rem
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  return data?.[0] ?? null;
+  if (data?.[0]) {
+    return data[0];
+  }
+
+  // Leads de formulário gravam `telefone` sem `phone_digits` — casa pelo RPC compartilhado.
+  const { data: customerId, error: rpcError } = await admin.rpc("find_customer_id_by_phone", {
+    p_tenant_id: tenantId,
+    p_phone_digits: normalized.digits,
+  });
+  if (rpcError) {
+    console.error("find_customer_id_by_phone:", rpcError.message);
+    return null;
+  }
+  if (!customerId) {
+    return null;
+  }
+
+  const { data: byId } = await admin
+    .from("customers")
+    .select("id, nome, source_columns")
+    .eq("id", customerId as string)
+    .maybeSingle();
+
+  return byId ?? null;
 }
 
 async function createCustomerFromRemoteJid(
