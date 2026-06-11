@@ -114,6 +114,8 @@ type FlowTemplateStep = {
   iconClass: string;
   subtitle?: string;
   subtitleVariant?: "plain" | "primary" | "chip" | "multiline";
+  /** Config estruturada pré-preenchida (mesmo shape de MarketingFlowStep.config). */
+  config?: Record<string, unknown>;
 };
 
 type FlowTemplate = {
@@ -160,17 +162,53 @@ function TemplateStepsPreview({ steps }: { steps: FlowTemplateStep[] }) {
 
 const FLOW_TEMPLATES: FlowTemplate[] = [
   {
-    id: "boas-vindas-whatsapp",
-    name: "Boas-vindas no WhatsApp",
-    description: "Marca o lead como oportunidade e dispara uma mensagem de WhatsApp.",
+    id: "form-qualificado-crm-whatsapp",
+    name: "Formulário qualificado → CRM + WhatsApp",
+    description:
+      "Lead que bate os critérios do formulário entra no CRM, ganha estrelas e recebe WhatsApp. Quem não bate, nem entra.",
     category: "Vendas",
     trigger: "form_submitted",
     steps: [
       {
-        actionId: "marcar-oportunidade",
-        label: "Marcar Oportunidade",
+        actionId: "criar-negociacao",
+        label: "Criar Negociação no CRM",
         iconKey: "star",
+        iconClass: "bg-sky-500",
+      },
+      {
+        actionId: "definir-qualificacao",
+        label: "Definir qualificação (estrelas)",
+        iconKey: "star",
+        iconClass: "bg-sky-500",
+        subtitle: "★★★★ (4)",
+        subtitleVariant: "plain",
+        config: { qualification: 4 },
+      },
+      {
+        actionId: "whatsapp",
+        label: "Enviar WhatsApp",
+        iconKey: "message-circle",
+        iconClass: "bg-violet-600",
+        subtitle: "Boas-vindas ao lead qualificado",
+        subtitleVariant: "primary",
+      },
+    ],
+  },
+  {
+    id: "boas-vindas-whatsapp",
+    name: "Boas-vindas no WhatsApp",
+    description: "Etiqueta o lead como oportunidade e dispara uma mensagem de WhatsApp.",
+    category: "Vendas",
+    trigger: "form_submitted",
+    steps: [
+      {
+        actionId: "adicionar-tags",
+        label: "Adicionar Tags",
+        iconKey: "tag",
         iconClass: "bg-pink-500",
+        subtitle: "oportunidade",
+        subtitleVariant: "chip",
+        config: { tag: "oportunidade" },
       },
       {
         actionId: "whatsapp",
@@ -264,7 +302,7 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
   {
     id: "qualificacao-whatsapp",
     name: "Qualificação no WhatsApp",
-    description: "Responde quem mandou mensagem e marca como oportunidade.",
+    description: "Responde quem mandou mensagem e etiqueta como oportunidade.",
     category: "Vendas",
     trigger: "whatsapp_message_received",
     steps: [
@@ -277,10 +315,13 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
         subtitleVariant: "primary",
       },
       {
-        actionId: "marcar-oportunidade",
-        label: "Marcar Oportunidade",
-        iconKey: "star",
+        actionId: "adicionar-tags",
+        label: "Adicionar Tags",
+        iconKey: "tag",
         iconClass: "bg-pink-500",
+        subtitle: "oportunidade",
+        subtitleVariant: "chip",
+        config: { tag: "oportunidade" },
       },
     ],
   },
