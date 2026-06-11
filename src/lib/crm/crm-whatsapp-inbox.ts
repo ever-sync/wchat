@@ -1,3 +1,4 @@
+import { ensureWhatsappChatByPhone } from "@/lib/api/whatsapp";
 import { normalizePhone } from "@/lib/phone";
 import type { NavigateFunction } from "react-router-dom";
 import type { CrmNegotiation, Customer, InboxChat } from "@/types/domain";
@@ -156,21 +157,29 @@ export function resolveCrmWhatsappOpenAction(params: {
   };
 }
 
-export function openCrmWhatsappInbox(params: {
+export async function openCrmWhatsappInbox(params: {
   navigate: NavigateFunction;
   chats: InboxChat[] | undefined;
   card: CrmNegotiation;
   customer: Customer | null;
   phone: string;
-}): void {
+}): Promise<void> {
   const linkedChatId = params.card.sourceChatId?.trim() || null;
   const chat =
     (linkedChatId ? params.chats?.find((c) => c.id === linkedChatId) : null) ??
     findInboxChatByPhone(params.chats, params.phone, params.customer?.id);
 
+  let chatId = chat?.id ?? linkedChatId;
+  if (!chatId) {
+    chatId = await ensureWhatsappChatByPhone({
+      phone: params.phone,
+      displayName: params.customer?.nome ?? params.card.title,
+    });
+  }
+
   params.navigate(
     buildInboxUrlForWhatsapp({
-      chatId: chat?.id ?? linkedChatId,
+      chatId,
       customerId: params.customer?.id ?? params.card.customerId ?? null,
       phone: params.phone,
     }),

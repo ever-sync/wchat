@@ -686,7 +686,52 @@ export function FormWidget() {
     );
   }
   if (!form) {
-    return <div style={{ ...wrapStyle, textAlign: "center", opacity: 0.6 }}>Carregando…</div>;
+    return (
+      <div style={wrapStyle}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "8px 0" }}>
+          <div
+            style={{
+              height: 14,
+              width: "42%",
+              borderRadius: 6,
+              background: "linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.06) 75%)",
+              backgroundSize: "200% 100%",
+              animation: "wchat-form-shimmer 1.2s ease-in-out infinite",
+            }}
+          />
+          <div
+            style={{
+              height: 40,
+              borderRadius: 8,
+              background: "linear-gradient(90deg, rgba(0,0,0,0.05) 25%, rgba(0,0,0,0.09) 50%, rgba(0,0,0,0.05) 75%)",
+              backgroundSize: "200% 100%",
+              animation: "wchat-form-shimmer 1.2s ease-in-out infinite",
+            }}
+          />
+          <div
+            style={{
+              height: 40,
+              borderRadius: 8,
+              background: "linear-gradient(90deg, rgba(0,0,0,0.05) 25%, rgba(0,0,0,0.09) 50%, rgba(0,0,0,0.05) 75%)",
+              backgroundSize: "200% 100%",
+              animation: "wchat-form-shimmer 1.2s ease-in-out infinite",
+            }}
+          />
+          <div
+            style={{
+              height: 44,
+              width: "36%",
+              marginTop: 4,
+              borderRadius: 8,
+              background: "linear-gradient(90deg, rgba(109,40,217,0.15) 25%, rgba(109,40,217,0.28) 50%, rgba(109,40,217,0.15) 75%)",
+              backgroundSize: "200% 100%",
+              animation: "wchat-form-shimmer 1.2s ease-in-out infinite",
+            }}
+          />
+        </div>
+        <style>{`@keyframes wchat-form-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+      </div>
+    );
   }
   if (done) {
     return (

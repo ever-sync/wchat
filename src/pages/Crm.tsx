@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -18,6 +18,7 @@ import {
   BarChart3,
   Calendar,
   ChevronDown,
+  ExternalLink,
   ClipboardCheck,
   ClipboardList,
   Footprints,
@@ -81,7 +82,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { formatBRL } from "@/lib/format";
-import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
+import { CrmSearchInput } from "@/components/crm/CrmSearchInput";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { MarkLostDialog } from "@/components/crm/MarkLostDialog";
 import { MarkWinDialog, type MarkWinConfirm } from "@/components/crm/MarkWinDialog";
@@ -144,6 +145,13 @@ import {
   useUpdateCustomer,
 } from "@/lib/api/customers";
 import { useCrmNegotiationStageOverrides, useUpsertCrmNegotiationStageOverride } from "@/lib/api/crm-kanban";
+import { useKanbanTaskPreviews } from "@/lib/api/crm-kanban-tasks";
+import {
+  buildCustomerPhoneIndex,
+  orderFunnelStages,
+  readFunnelStageOrder,
+  writeFunnelStageOrder,
+} from "@/lib/crm/crm-kanban-card-accent";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import {
   buildSyntheticCustomerNegotiationCards,
@@ -271,42 +279,50 @@ export default function Crm() {
 
   const openWhatsappFromCard = useCallback(
     (card: CrmNegotiation, phone?: string) => {
-      const customer = resolveCustomerForNegotiation(card, customers);
+      void (async () => {
+        const customer = resolveCustomerForNegotiation(card, customers);
 
-      if (phone) {
-        openCrmWhatsappInbox({
-          navigate,
-          chats: inboxChats,
-          card,
-          customer,
-          phone,
-        });
-        return;
-      }
+        if (phone) {
+          await openCrmWhatsappInbox({
+            navigate,
+            chats: inboxChats,
+            card,
+            customer,
+            phone,
+          });
+          return;
+        }
 
-      const action = resolveCrmWhatsappOpenAction({ card, customer });
-      if (action.kind === "pick") {
-        setWhatsappPhonePick({ card, options: action.options });
-        return;
-      }
-      if (action.kind === "open") {
-        openCrmWhatsappInbox({
-          navigate,
-          chats: inboxChats,
-          card,
-          customer,
-          phone: action.phone,
+        const action = resolveCrmWhatsappOpenAction({ card, customer });
+        if (action.kind === "pick") {
+          setWhatsappPhonePick({ card, options: action.options });
+          return;
+        }
+        if (action.kind === "open") {
+          await openCrmWhatsappInbox({
+            navigate,
+            chats: inboxChats,
+            card,
+            customer,
+            phone: action.phone,
+          });
+          return;
+        }
+        if (action.kind === "open_chat") {
+          navigate(buildInboxUrlForWhatsapp({ chatId: action.chatId }));
+          return;
+        }
+        toast({
+          title: "WhatsApp indisponível",
+          description: action.message,
+          variant: "destructive",
         });
-        return;
-      }
-      if (action.kind === "open_chat") {
-        navigate(buildInboxUrlForWhatsapp({ chatId: action.chatId }));
-        return;
-      }
-      toast({
-        title: "WhatsApp indisponível",
-        description: action.message,
-        variant: "destructive",
+      })().catch((err) => {
+        toast({
+          title: "WhatsApp indisponível",
+          description: err instanceof Error ? err.message : "Tente novamente.",
+          variant: "destructive",
+        });
       });
     },
     [customers, inboxChats, navigate, toast],
@@ -351,8 +367,10 @@ export default function Crm() {
     setAdvancedFilter,
     creationDateFilter,
     setCreationDateFilter,
-    searchTerm,
-    setSearchTerm,
+    searchQuery,
+    setSearchQuery,
+    searchInputResetKey,
+    resetSearchInput,
     deferredSearchTerm,
     sortId,
     setSortId,
@@ -361,6 +379,20 @@ export default function Crm() {
     cardDensity,
     setCardDensity,
   } = useCrmBoardFilters(funnels);
+  const handleSearchSubmit = useCallback((value: string) => {
+    startTransition(() => setSearchQuery(value));
+  }, [setSearchQuery]);
+  const [cardContextMenu, setCardContextMenu] = useState<{
+    card: CrmNegotiation;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [stageOrder, setStageOrder] = useState<string[] | null>(() =>
+    readFunnelStageOrder(funnelId),
+  );
+  useEffect(() => {
+    setStageOrder(readFunnelStageOrder(funnelId));
+  }, [funnelId]);
   const [alertsFilterOpen, setAlertsFilterOpen] = useState(false);
   const [scoreFilterOpen, setScoreFilterOpen] = useState(false);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
@@ -606,7 +638,7 @@ export default function Crm() {
     setStatusFilter("all");
     setAlertsFilter("off");
     setScoreFilter("all");
-    setSearchTerm("");
+    resetSearchInput("");
     setAdvancedFilter(null);
     toast({ title: "Filtros limpos", description: "Exibindo todas as negociações do funil." });
   }, [
@@ -616,7 +648,7 @@ export default function Crm() {
     setAppliedOwner,
     setCreationDateFilter,
     setScoreFilter,
-    setSearchTerm,
+    resetSearchInput,
     setStatusFilter,
   ]);
 
@@ -642,7 +674,7 @@ export default function Crm() {
         setSortId("contact_oldest");
       }
       setCreationDateFilter(null);
-      setSearchTerm("");
+      resetSearchInput("");
       setScoreFilter("all");
       setAdvancedFilter(null);
       setSavedViewsOpen(false);
@@ -657,7 +689,7 @@ export default function Crm() {
       setAppliedOwner,
       setCreationDateFilter,
       setScoreFilter,
-      setSearchTerm,
+      resetSearchInput,
       setSortId,
       setStatusFilter,
     ],
@@ -667,7 +699,7 @@ export default function Crm() {
   const getCurrentSavedFilters = useCallback((): CrmSavedViewFilters => {
     const f: CrmSavedViewFilters = {};
     if (funnelId !== DEFAULT_CRM_FUNNELS[0].id) f.funnel = funnelId;
-    if (searchTerm.trim()) f.q = searchTerm.trim();
+    if (searchQuery.trim()) f.q = searchQuery.trim();
     if (appliedOwner.mode !== "all") f.owner = appliedOwner.mode;
     if (appliedOwner.mode === "custom" && appliedOwner.ids.length > 0) {
       f.owners = appliedOwner.ids;
@@ -693,7 +725,7 @@ export default function Crm() {
     creationDateFilter,
     funnelId,
     scoreFilter,
-    searchTerm,
+    searchQuery,
     sortId,
     statusFilter,
     view,
@@ -704,7 +736,7 @@ export default function Crm() {
     (saved: CrmSavedView) => {
       const f = saved.filters ?? {};
       setFunnelId(f.funnel || DEFAULT_CRM_FUNNELS[0].id);
-      setSearchTerm(f.q ?? "");
+      resetSearchInput(f.q ?? "");
       if (f.owner === "mine") setAppliedOwner({ mode: "mine" });
       else if (f.owner === "pool") setAppliedOwner({ mode: "pool" });
       else if (f.owner === "custom" && f.owners && f.owners.length > 0)
@@ -744,7 +776,7 @@ export default function Crm() {
       setCreationDateFilter,
       setFunnelId,
       setScoreFilter,
-      setSearchTerm,
+      resetSearchInput,
       setSortId,
       setStatusFilter,
       setView,
@@ -964,9 +996,39 @@ export default function Crm() {
     return { any, stale, noFutureTask };
   }, [negotiationsBeforeAlertsFilter, staleNegotiationDays]);
 
+  const phoneIndex = useMemo(() => buildCustomerPhoneIndex(customers), [customers]);
+
+  const persistedNegIds = useMemo(
+    () => filteredNegotiations.filter((n) => isPersistedCrmNegotiationId(n.id)).map((n) => n.id),
+    [filteredNegotiations],
+  );
+  const { data: kanbanTaskPreviews = new Map() } = useKanbanTaskPreviews(persistedNegIds, {
+    enabled: view === "board",
+  });
+
+  const orderedStages = useMemo(
+    () => orderFunnelStages(funnel, stageOrder),
+    [funnel, stageOrder],
+  );
+
+  const moveStageOrder = useCallback(
+    (stageId: string, direction: "left" | "right") => {
+      const base = orderFunnelStages(funnel, stageOrder).map((s) => s.id);
+      const idx = base.indexOf(stageId);
+      if (idx < 0) return;
+      const swapWith = direction === "left" ? idx - 1 : idx + 1;
+      if (swapWith < 0 || swapWith >= base.length) return;
+      const next = [...base];
+      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
+      setStageOrder(next);
+      writeFunnelStageOrder(funnelId, next);
+    },
+    [funnel, funnelId, stageOrder],
+  );
+
   const stagesWithCards = useMemo(() => {
     const byStage = new Map<string, CrmNegotiation[]>();
-    for (const s of funnel.stages) {
+    for (const s of orderedStages) {
       byStage.set(s.id, []);
     }
     for (const n of filteredNegotiations) {
@@ -975,11 +1037,11 @@ export default function Crm() {
         bucket.push(n);
       }
     }
-    return funnel.stages.map((s) => ({
+    return orderedStages.map((s) => ({
       ...s,
       cards: byStage.get(s.id) ?? [],
     }));
-  }, [filteredNegotiations, funnel.stages]);
+  }, [filteredNegotiations, orderedStages]);
 
   const totalNegotiations = filteredNegotiations.length;
 
@@ -1034,7 +1096,7 @@ export default function Crm() {
     (statusFilter !== "all" ? 1 : 0) +
     (alertsFilter !== "off" ? 1 : 0) +
     (scoreFilter !== "all" ? 1 : 0) +
-    (searchTerm.trim() ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0) +
     (isAdvancedFilterActive(advancedFilter) ? 1 : 0);
 
   const filteredAttendants = useMemo(() => {
@@ -1044,6 +1106,25 @@ export default function Crm() {
     }
     return attendants.filter((a) => a.name.toLowerCase().includes(q));
   }, [attendants, ownerSearch]);
+
+  const openNegotiationUrl = useCallback(
+    (card: CrmNegotiation) => {
+      if (isPersistedCrmNegotiationId(card.id)) {
+        return `/crm/negociacao/${encodeURIComponent(card.id)}`;
+      }
+      const cid = resolveCustomerIdForNegotiation(card, customers);
+      if (cid) return `/clientes/${cid}`;
+      return `/crm/negociacao/${encodeURIComponent(card.id)}`;
+    },
+    [customers],
+  );
+
+  const openNegotiationInNewTab = useCallback(
+    (card: CrmNegotiation) => {
+      window.open(openNegotiationUrl(card), "_blank", "noopener,noreferrer");
+    },
+    [openNegotiationUrl],
+  );
 
   const openNegotiationCard = useCallback(
     (card: CrmNegotiation) => {
@@ -2439,31 +2520,12 @@ export default function Crm() {
           </PopoverContent>
         </Popover>
 
-        <div className="relative ml-auto flex min-w-[180px] max-w-[280px] flex-1 items-center">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--crm-ink-3)]"
-            aria-hidden
-          />
-          <Input
-            ref={searchInputRef}
-            type="search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar negócio, cliente ou telefone   ( / )"
-            aria-label="Buscar negociações"
-            className="h-9 border-[var(--crm-border-2)] bg-card pl-9 pr-8 text-sm"
-          />
-          {searchTerm ? (
-            <button
-              type="button"
-              onClick={() => setSearchTerm("")}
-              aria-label="Limpar busca"
-              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[var(--crm-ink-3)] hover:bg-[var(--crm-surface-2)] hover:text-[var(--crm-ink)]"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          ) : null}
-        </div>
+        <CrmSearchInput
+          inputRef={searchInputRef}
+          initialValue={searchQuery}
+          resetKey={searchInputResetKey}
+          onSearch={handleSearchSubmit}
+        />
 
         <Popover open={savedViewsOpen} onOpenChange={setSavedViewsOpen}>
           <PopoverTrigger asChild>
@@ -3050,6 +3112,21 @@ export default function Crm() {
                   <KanbanColumn
                   key={stage.id}
                   stage={stage}
+                  phoneIndex={phoneIndex}
+                  customers={customers}
+                  kanbanTaskPreviews={kanbanTaskPreviews}
+                  onCardContextMenu={(card, event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setCardContextMenu({ card, x: event.clientX, y: event.clientY });
+                  }}
+                  onMoveStageLeft={() => moveStageOrder(stage.id, "left")}
+                  onMoveStageRight={() => moveStageOrder(stage.id, "right")}
+                  canMoveStageLeft={stagesWithCards.findIndex((s) => s.id === stage.id) > 0}
+                  canMoveStageRight={
+                    stagesWithCards.findIndex((s) => s.id === stage.id) <
+                    stagesWithCards.length - 1
+                  }
                   staleNegotiationDays={staleNegotiationDays}
                   canClaim={canClaimNegotiations}
                   isClaimPending={claimCrmNegotiation.isPending}
@@ -3128,6 +3205,50 @@ export default function Crm() {
           handleBulkExport={handleBulkExport}
         />
       )}
+
+      {cardContextMenu ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[200]"
+            aria-label="Fechar menu"
+            onClick={() => setCardContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCardContextMenu(null);
+            }}
+          />
+          <div
+            className="fixed z-[201] min-w-[180px] rounded-md border border-[var(--crm-border)] bg-card py-1 shadow-lg"
+            style={{ left: cardContextMenu.x, top: cardContextMenu.y }}
+            role="menu"
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--crm-surface)]"
+              role="menuitem"
+              onClick={() => {
+                openNegotiationCard(cardContextMenu.card);
+                setCardContextMenu(null);
+              }}
+            >
+              Abrir negócio
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--crm-surface)]"
+              role="menuitem"
+              onClick={() => {
+                openNegotiationInNewTab(cardContextMenu.card);
+                setCardContextMenu(null);
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              Abrir em nova aba
+            </button>
+          </div>
+        </>
+      ) : null}
 
       <MarkLostDialog
         open={lostDialogOpen}

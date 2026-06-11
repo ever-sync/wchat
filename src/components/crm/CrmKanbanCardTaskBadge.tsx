@@ -3,6 +3,7 @@ import {
   useCrmTasksForCustomer,
   useCrmTasksForNegotiation,
 } from "@/lib/api/crm-tasks";
+import type { KanbanTaskPreview } from "@/lib/api/crm-kanban-tasks";
 import {
   countOpenCrmTasksByDue,
   mergeOpenCrmTasksForNegotiationView,
@@ -14,23 +15,49 @@ import type { CrmNegotiation } from "@/types/domain";
 
 type CrmKanbanCardTaskBadgeProps = {
   card: CrmNegotiation;
+  taskPreview?: KanbanTaskPreview;
 };
 
-export function CrmKanbanCardTaskBadge({ card }: CrmKanbanCardTaskBadgeProps) {
+export function CrmKanbanCardTaskBadge({ card, taskPreview }: CrmKanbanCardTaskBadgeProps) {
   const persisted = isPersistedCrmNegotiationId(card.id);
+  const useBatchPreview = Boolean(taskPreview);
 
   const { data: byNegotiation = [], isLoading } = useCrmTasksForNegotiation(card.id, {
-    enabled: persisted && isSupabaseConfigured,
+    enabled: persisted && isSupabaseConfigured && !useBatchPreview,
   });
   const { data: customerUnlinked = [] } = useCrmTasksForCustomer(card.customerId, {
-    enabled: persisted && isSupabaseConfigured && Boolean(card.customerId),
+    enabled:
+      persisted && isSupabaseConfigured && Boolean(card.customerId) && !useBatchPreview,
     negotiationUnlinkedOnly: true,
   });
 
   const counts = useMemo(() => {
+    if (useBatchPreview) {
+      return { pending: 0, overdue: 0 };
+    }
     const open = mergeOpenCrmTasksForNegotiationView(byNegotiation, customerUnlinked);
     return countOpenCrmTasksByDue(open);
-  }, [byNegotiation, customerUnlinked]);
+  }, [byNegotiation, customerUnlinked, useBatchPreview]);
+
+  if (useBatchPreview && taskPreview) {
+    if (taskPreview.openCount === 0) return null;
+    return (
+      <span
+        className="mt-1 block max-w-full truncate text-[10px] text-[var(--crm-ink-2)]"
+        title={taskPreview.title}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <span
+          className={
+            taskPreview.overdue ? "font-semibold text-[var(--crm-danger)]" : "font-medium"
+          }
+        >
+          {taskPreview.overdue ? "⚠ " : ""}
+          {taskPreview.title}
+        </span>
+      </span>
+    );
+  }
 
   if (!persisted || !isSupabaseConfigured || isLoading) {
     return null;

@@ -2189,3 +2189,26 @@ export function useMarkChatAsRead(
     },
   });
 }
+
+export async function ensureWhatsappChatByPhone(input: {
+  phone: string;
+  displayName?: string;
+}): Promise<string | null> {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+  const phone = input.phone?.trim();
+  if (!phone) {
+    return null;
+  }
+  const data = await invokeAuthedFunction<{ chat_id?: string; ok?: boolean }>(
+    "uazapi-ensure-chat",
+    {
+      phone,
+      display_name: input.displayName?.trim() || "Cliente",
+    },
+  );
+  const chatId = data?.chat_id?.trim();
+  return chatId || null;
+}
+

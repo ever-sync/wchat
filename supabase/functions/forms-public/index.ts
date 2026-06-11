@@ -339,18 +339,28 @@ Deno.serve(async (request) => {
 
     admin.rpc("increment_marketing_form_views", { p_form_id: formId }).then(() => {}, () => {});
 
-    return jsonResponse({
-      form: {
-        id: data.id,
-        name: data.name,
-        fields,
-        settings: data.settings ?? {},
-        theme,
-        submitMessage: data.submit_message ?? "Obrigado!",
-        submitRedirectUrl: data.submit_redirect_url ?? null,
-        variantId,
+    return new Response(
+      JSON.stringify({
+        form: {
+          id: data.id,
+          name: data.name,
+          fields,
+          settings: data.settings ?? {},
+          theme,
+          submitMessage: data.submit_message ?? "Obrigado!",
+          submitRedirectUrl: data.submit_redirect_url ?? null,
+          variantId,
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+          ...corsHeaders,
+        },
       },
-    });
+    );
   }
 
   // ---------------------------------------------------------------- POST: submit

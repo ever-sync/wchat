@@ -60,7 +60,7 @@ export function CrmNegotiationDocumentsSection({
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState("");
-  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<CrmNegotiationDocument | null>(null);
 
   const { data: docs = [], isLoading } = useCrmNegotiationDocuments(negotiationId, { enabled });
@@ -73,59 +73,74 @@ export function CrmNegotiationDocumentsSection({
   const onPickFile = () => fileRef.current?.click();
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
+    const list = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
-    if (!file) {
-      setPickedFile(null);
+    if (list.length === 0) {
+      setPickedFiles([]);
       return;
     }
-    if (file.size > CRM_NEGOTIATION_DOC_MAX_BYTES) {
-      toast({
-        title: "Arquivo grande",
-        description: `Tamanho máximo: ${CRM_NEGOTIATION_DOC_MAX_BYTES / (1024 * 1024)} MB.`,
-        variant: "destructive",
-      });
-      setPickedFile(null);
-      return;
-    }
-    setPickedFile(file);
-    setDisplayName((prev) => {
-      if (prev.trim()) {
-        return prev;
+    const valid: File[] = [];
+    for (const file of list) {
+      if (file.size > CRM_NEGOTIATION_DOC_MAX_BYTES) {
+        toast({
+          title: "Arquivo grande",
+          description: `${file.name}: máximo ${CRM_NEGOTIATION_DOC_MAX_BYTES / (1024 * 1024)} MB.`,
+          variant: "destructive",
+        });
+        continue;
       }
-      return file.name.replace(/\.[^.]+$/, "") || file.name;
-    });
+      valid.push(file);
+    }
+    setPickedFiles(valid);
+    if (valid.length === 1) {
+      setDisplayName((prev) => {
+        if (prev.trim()) return prev;
+        return valid[0].name.replace(/\.[^.]+$/, "") || valid[0].name;
+      });
+    }
   };
 
   const handleAttach = () => {
-    if (!pickedFile) {
+    if (pickedFiles.length === 0) {
       toast({
         title: "Selecione um arquivo",
-        description: "Escolha o documento antes de anexar.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const name = displayName.trim();
-    if (!name) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Informe como este documento deve aparecer.",
+        description: "Escolha ao menos um documento antes de anexar.",
         variant: "destructive",
       });
       return;
     }
 
     void (async () => {
+      const batch = [...pickedFiles];
       try {
-        await createDoc.mutateAsync({
-          negotiationId,
-          displayName: name,
-          file: pickedFile,
-        });
+        for (const file of batch) {
+          const name =
+            batch.length === 1
+              ? displayName.trim() || file.name.replace(/\.[^.]+$/, "") || file.name
+              : file.name.replace(/\.[^.]+$/, "") || file.name;
+          if (!name.trim()) {
+            toast({
+              title: "Nome obrigatório",
+              description: "Informe como o documento deve aparecer.",
+              variant: "destructive",
+            });
+            return;
+          }
+          await createDoc.mutateAsync({
+            negotiationId,
+            displayName: name,
+            file,
+          });
+        }
         setDisplayName("");
-        setPickedFile(null);
-        toast({ title: "Documento anexado", description: "O arquivo foi salvo neste lead." });
+        setPickedFiles([]);
+        toast({
+          title: batch.length > 1 ? "Documentos anexados" : "Documento anexado",
+          description:
+            batch.length > 1
+              ? `${batch.length} arquivos salvos neste lead.`
+              : "O arquivo foi salvo neste lead.",
+        });
       } catch (err) {
         toast({
           title: "Não foi possível anexar",
@@ -189,6 +204,7 @@ export function CrmNegotiationDocumentsSection({
             <input
               ref={fileRef}
               type="file"
+              multiple
               className="hidden"
               onChange={onFileChange}
               disabled={!enabled || busy}
@@ -202,13 +218,22 @@ export function CrmNegotiationDocumentsSection({
               onClick={onPickFile}
             >
               <Paperclip className="mr-2 h-4 w-4" />
-              Selecionar arquivo
+              Selecionar arquivo(s)
             </Button>
           </div>
         </div>
-        {pickedFile ? (
+        {pickedFiles.length ? (
           <p className="text-xs text-[var(--crm-ink-2)]">
-            Arquivo: <span className="break-all font-medium">{pickedFile.name}</span>
+            {pickedFiles.length === 1 ? (
+              <>
+                Arquivo:{" "}
+                <span className="break-all font-medium">{pickedFiles[0].name}</span>
+              </>
+            ) : (
+              <span className="break-all font-medium">
+                {pickedFiles.length} arquivos selecionados
+              </span>
+            )}
           </p>
         ) : null}
         <div className="flex justify-end">

@@ -585,6 +585,25 @@ export function useDeleteCrmNegotiation(
   });
 }
 
+
+function patchCrmNegotiationStageInCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+  patch: Pick<CrmNegotiationPatch, "stageId" | "funnelId" | "status" | "lostReason">,
+) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!prev) return prev;
+      return prev.map((row) => (row.id === id ? { ...row, ...patch } : row));
+    },
+  );
+  queryClient.setQueryData<CrmNegotiationRecord>(
+    ["crm-negotiations", id],
+    (prev) => (prev ? { ...prev, ...patch } : prev),
+  );
+}
+
 export function useUpdateCrmNegotiation(
   options?: UseMutationOptions<CrmNegotiationRecord, Error, { id: string; patch: CrmNegotiationPatch }>,
 ) {
@@ -592,6 +611,17 @@ export function useUpdateCrmNegotiation(
   return useMutation({
     mutationFn: ({ id, patch }) => updateCrmNegotiation(id, patch),
     ...options,
+    onMutate: async (vars) => {
+      const ctx = await options?.onMutate?.(vars);
+      if (vars.patch.stageId !== undefined || vars.patch.funnelId !== undefined) {
+        patchCrmNegotiationStageInCaches(queryClient, vars.id, vars.patch);
+      }
+      return ctx;
+    },
+    onError: (_err, vars, ctx) => {
+      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      options?.onError?.(_err, vars, ctx);
+    },
     onSuccess: async (data, vars, ctx) => {
       const prevCustomerId =
         vars.patch.customerId !== undefined

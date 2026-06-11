@@ -4,6 +4,8 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ChevronLeft,
+  ChevronRight,
   Hand,
   Info,
   MessageCircle,
@@ -14,6 +16,8 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import type { KanbanTaskPreview } from "@/lib/api/crm-kanban-tasks";
+import { resolveCrmKanbanCardAccent } from "@/lib/crm/crm-kanban-card-accent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,7 +39,7 @@ import {
 } from "@/lib/crm/negotiation-alerts";
 import { canAtendimentoModifyNegotiation } from "@/lib/crm/negotiation-assignee";
 import type { CrmStageDef } from "@/data/crm-funnels";
-import type { CrmNegotiation } from "@/types/domain";
+import type { CrmNegotiation, Customer } from "@/types/domain";
 import { type CardDensity, statusLabel } from "./board-helpers";
 
 export function CrmPoolBadge({ className }: { className?: string }) {
@@ -194,6 +198,11 @@ function InlineValueEditor({
 
 const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   card,
+  stage,
+  customer,
+  phoneIndex,
+  taskPreview,
+  onContextMenu,
   staleNegotiationDays,
   canClaim,
   isClaimPending,
@@ -214,6 +223,11 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   leadScore,
 }: {
   card: CrmNegotiation;
+  stage?: CrmStageDef;
+  customer?: Customer | null;
+  phoneIndex?: Map<string, Set<string>>;
+  taskPreview?: KanbanTaskPreview;
+  onContextMenu?: (card: CrmNegotiation, event: React.MouseEvent) => void;
   staleNegotiationDays: number;
   canClaim: boolean;
   isClaimPending: boolean;
@@ -275,6 +289,18 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
   const showWhatsappAction = Boolean(onOpenWhatsapp);
   const showDelete = canDelete && isPersistedCrmNegotiationId(card.id);
   const assigneeBusy = isClaimPending || isReleasePending;
+  const cardAccent = useMemo(
+    () =>
+      phoneIndex
+        ? resolveCrmKanbanCardAccent({
+            card,
+            customer: customer ?? null,
+            stage,
+            phoneIndex,
+          })
+        : { accents: [] as const },
+    [card, customer, phoneIndex, stage],
+  );
 
   const style = transform
     ? {
@@ -289,12 +315,19 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       data-testid={`crm-card-${card.id}`}
       style={style}
       className={cn(
-        "cursor-grab rounded-lg border border-[var(--crm-surface-2)] bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
+        "cursor-grab rounded-lg border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow active:cursor-grabbing",
+        cardAccent.className ?? "border-[var(--crm-surface-2)]",
         isCompact ? "p-2" : isExpanded ? "p-4" : "p-3",
         isDragging ? "opacity-90 shadow-lg ring-2 ring-[var(--crm-brand-2)]/40" : "hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]",
       )}
       {...listeners}
       {...attributes}
+      title={cardAccent.title}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu?.(card, event);
+      }}
       onClick={() => onOpenNegotiation(card)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -522,7 +555,7 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
                   {card.starCount}
                 </span>
               ) : null}
-              <CrmKanbanCardTaskBadge card={card} />
+              <CrmKanbanCardTaskBadge card={card} taskPreview={taskPreview} />
             </span>
           </div>
         </div>
@@ -650,6 +683,14 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
 
 export function KanbanColumn({
   stage,
+  phoneIndex,
+  customers,
+  kanbanTaskPreviews,
+  onCardContextMenu,
+  onMoveStageLeft,
+  onMoveStageRight,
+  canMoveStageLeft,
+  canMoveStageRight,
   staleNegotiationDays,
   canClaim,
   isClaimPending,
@@ -672,6 +713,14 @@ export function KanbanColumn({
   scoresByNegId,
 }: {
   stage: CrmStageDef & { cards: CrmNegotiation[] };
+  phoneIndex: Map<string, Set<string>>;
+  customers: Customer[];
+  kanbanTaskPreviews: Map<string, KanbanTaskPreview>;
+  onCardContextMenu?: (card: CrmNegotiation, event: React.MouseEvent) => void;
+  onMoveStageLeft?: () => void;
+  onMoveStageRight?: () => void;
+  canMoveStageLeft?: boolean;
+  canMoveStageRight?: boolean;
   staleNegotiationDays: number;
   canClaim: boolean;
   isClaimPending: boolean;
@@ -735,7 +784,27 @@ export function KanbanColumn({
             <span className="font-semibold text-[var(--crm-ink-3)]">({count})</span>
           </h3>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-0.5">
+          {canMoveStageLeft ? (
+            <button
+              type="button"
+              className="rounded p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-[var(--crm-border)]/80"
+              aria-label="Mover coluna para esquerda"
+              onClick={() => onMoveStageLeft?.()}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          {canMoveStageRight ? (
+            <button
+              type="button"
+              className="rounded p-1 text-[var(--crm-ink-3)] transition-colors hover:bg-[var(--crm-border)]/80"
+              aria-label="Mover coluna para direita"
+              onClick={() => onMoveStageRight?.()}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <span className="rounded bg-[var(--crm-border)] px-2 py-0.5 text-[11px] font-semibold text-[var(--crm-ink-2)]">{displayValue}</span>
           <button
             type="button"
@@ -778,6 +847,18 @@ export function KanbanColumn({
               >
                 <DraggableNegotiationCard
                   card={card}
+                  stage={stage}
+                  customer={
+                    customers.find((c) => c.id === card.customerId) ??
+                    customers.find(
+                      (c) =>
+                        c.nome.trim().toLowerCase() === card.title.trim().toLowerCase(),
+                    ) ??
+                    null
+                  }
+                  phoneIndex={phoneIndex}
+                  taskPreview={kanbanTaskPreviews.get(card.id)}
+                  onContextMenu={onCardContextMenu}
                   staleNegotiationDays={staleNegotiationDays}
                   canClaim={canClaim}
                   isClaimPending={isClaimPending}

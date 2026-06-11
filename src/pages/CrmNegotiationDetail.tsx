@@ -655,6 +655,9 @@ function CrmNegotiationDetailContent({
           hasChat={Boolean(sourceChatId)}
           onOpenChat={openCustomerInbox}
           staleNegotiationDays={heroStaleDays}
+          showClaimNegotiation={showClaimNegotiation}
+          onClaimNegotiation={() => void handleClaimNegotiation()}
+          claimNegotiationPending={claimCrmNegotiation.isPending}
         />
       ) : null}
       <ClienteRdPerfilView
