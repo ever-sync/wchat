@@ -30,27 +30,32 @@ export function ChatCrmHeader({ chat }: ChatCrmHeaderProps) {
   }
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-2" role="group" aria-label="CRM e resolução">
+    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="CRM e resolução">
       {negotiation ? (
         <>
-          <Badge variant="secondary" className="text-xs font-medium">
-            {funnel?.listName ?? negotiation.funnelId} · {stageTitle ?? negotiation.stageId}
+          <Badge
+            variant="secondary"
+            className="max-w-[min(240px,40vw)] truncate text-xs font-medium"
+            title={`${funnel?.listName ?? negotiation.funnelId} · ${stageTitle ?? negotiation.stageId}`}
+          >
+            {stageTitle ?? negotiation.stageId}
           </Badge>
           {negotiation.status === "vendido" && (
-            <Badge className="bg-emerald-600 text-xs text-white hover:bg-emerald-600">Vendido</Badge>
+            <Badge className="shrink-0 bg-emerald-600 text-xs text-white hover:bg-emerald-600">Vendido</Badge>
           )}
           {negotiation.status === "perdido" && (
-            <Badge variant="outline" className="text-xs text-destructive">
+            <Badge variant="outline" className="shrink-0 text-xs text-destructive">
               Perdido
             </Badge>
           )}
           <Link
             to={`/crm/negociacao/${negotiation.id}`}
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-wchat-100 hover:underline"
+            title="Abrir negócio no CRM"
           >
-            <Briefcase className="h-3 w-3" />
-            CRM
-            <ExternalLink className="h-3 w-3" />
+            <Briefcase className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only">CRM</span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
           </Link>
         </>
       ) : null}

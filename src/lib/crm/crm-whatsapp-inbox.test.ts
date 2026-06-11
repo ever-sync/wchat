@@ -85,4 +85,12 @@ describe("resolveCrmWhatsappOpenAction", () => {
     });
     expect(action).toEqual({ kind: "open_chat", chatId: "chat-1" });
   });
+
+  it("prefers source chat over customer phones", () => {
+    const action = resolveCrmWhatsappOpenAction({
+      card: makeCard({ sourceChatId: "chat-linked" }),
+      customer: makeCustomer(),
+    });
+    expect(action).toEqual({ kind: "open_chat", chatId: "chat-linked" });
+  });
 });

@@ -1,5 +1,16 @@
+import {
+  resolveConfiguredLostStageId,
+  resolveConfiguredSaleStageId,
+  type CrmFunnel,
+} from "@/data/crm-funnels";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
-import type { CrmNegotiation, CrmNegotiationRecord, CrmNegotiationStatus, Customer } from "@/types/domain";
+import type {
+  CrmNegotiation,
+  CrmNegotiationRecord,
+  CrmNegotiationStatus,
+  Customer,
+  CustomerStatus,
+} from "@/types/domain";
 
 const CRM_NEGOTIATION_STATUSES = [
   "em_andamento",
@@ -11,6 +22,10 @@ const CRM_NEGOTIATION_STATUSES = [
 
 export function parseCrmNegotiationStatus(raw: unknown): CrmNegotiationStatus {
   if (typeof raw === "string" && (CRM_NEGOTIATION_STATUSES as readonly string[]).includes(raw)) {
+    // Legado: tratado como em_andamento na UX (migration 20260629150000).
+    if (raw === "nao_pausado") {
+      return "em_andamento";
+    }
     return raw as CrmNegotiationStatus;
   }
   return "em_andamento";
@@ -71,6 +86,97 @@ export function parseSyntheticCustomerCardId(cardId: string): string | null {
   }
   const rest = cardId.slice("customer:".length);
   return rest || null;
+}
+
+export function isSyntheticCustomerCardId(cardId: string): boolean {
+  return parseSyntheticCustomerCardId(cardId) != null;
+}
+
+/** Status inferido do cadastro quando ainda não há linha em `crm_negotiations`. */
+export function customerStatusToSyntheticNegotiationStatus(
+  status: CustomerStatus,
+): CrmNegotiationStatus {
+  if (status === "inativo") {
+    return "pausado";
+  }
+  if (status === "bloqueado") {
+    return "perdido";
+  }
+  return "em_andamento";
+}
+
+/**
+ * Clientes com etapa em `source_columns` mas sem negociação no funil atual.
+ * Id estável: `customer:{uuid}` — materializa ao arrastar ou marcar perda/venda.
+ */
+export function buildSyntheticCustomerNegotiationCards(params: {
+  customers: Customer[];
+  funnelId: string;
+  funnels: CrmFunnel[];
+  linkedCustomerIds: Set<string>;
+}): CrmNegotiation[] {
+  const { customers, funnelId, funnels, linkedCustomerIds } = params;
+  const funnelDef = funnels.find((f) => f.id === funnelId);
+  if (!funnelDef?.stages.length) {
+    return [];
+  }
+
+  const validStageIds = new Set(funnelDef.stages.map((s) => s.id));
+  const terminalStages: KanbanTerminalStages = {
+    lostStageId: resolveConfiguredLostStageId(funnels, funnelId),
+    saleStageId: resolveConfiguredSaleStageId(funnels, funnelId),
+  };
+
+  const cards: CrmNegotiation[] = [];
+  for (const customer of customers) {
+    if (linkedCustomerIds.has(customer.id)) {
+      continue;
+    }
+    if (!customerMatchesCrmFunnel(customer, funnelId)) {
+      continue;
+    }
+
+    const status = customerStatusToSyntheticNegotiationStatus(customer.status);
+    let stageId = customerStageForFunnel(customer, funnelId, validStageIds);
+    if (!stageId && customer.status === "bloqueado") {
+      const lostId = terminalStages.lostStageId;
+      if (lostId && validStageIds.has(lostId)) {
+        stageId = lostId;
+      }
+    }
+    if (!stageId) {
+      continue;
+    }
+
+    const base: CrmNegotiation = {
+      id: syntheticCustomerCardId(customer.id),
+      funnelId,
+      stageId,
+      status,
+      assigneeId: "",
+      title: customer.nome?.trim() || "Cliente",
+      starCount: 0,
+      createdAt: customer.cadastradoEm ?? new Date().toISOString(),
+      qualification: 0,
+      totalValue: 0,
+      customerId: customer.id,
+    };
+
+    cards.push({
+      ...base,
+      stageId: resolveKanbanStageId({
+        base,
+        funnelId,
+        validStageIds,
+        customer,
+        stageOverride: undefined,
+        persisted: null,
+        terminalStages,
+      }),
+    });
+  }
+
+  return cards;
 }
 
 export type KanbanTerminalStages = { lostStageId: string; saleStageId: string };

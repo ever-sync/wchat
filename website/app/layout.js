@@ -3,6 +3,7 @@ import "app/favicon.ico"
 import { barlow, firaSans } from '@/lib/font'
 import Script from 'next/script'
 export const metadata = {
+    metadataBase: new URL('https://wchat.com.br'),
     title: 'wChat | Venda mais pelo WhatsApp',
     description: 'CRM, inbox compartilhada, Agente IA e automações de marketing em uma só plataforma — para o seu time vender e atender melhor.',
     openGraph: {
@@ -35,8 +36,9 @@ export default function RootLayout({ children }) {
                 <link rel="stylesheet" href="/assets/css/magnific-popup.min.css" />
                 <link rel="stylesheet" href="/assets/css/swiper-bundle.min.css" />
                 <link rel="stylesheet" href="/assets/css/style.css" />
+                <link rel="stylesheet" href="/assets/css/wchat-theme.css" />
             </head>
-            <body className="antialiased min-h-screen theme7">
+            <body className="antialiased min-h-screen wchat-theme">
                 {/* Custom Cursor */}
                 <div className="mouseCursor cursor-outer"></div>
                 <div className="mouseCursor cursor-inner"></div>

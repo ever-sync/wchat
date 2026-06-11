@@ -1,4 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
+import { getCurrentTenantId } from "@/lib/api/tenant";
+import { isE2eMockAuth } from "@/lib/e2e";
+import { setE2ePinnedChat } from "@/lib/inbox-e2e";
 import { requireSupabase } from "@/lib/supabase";
 import type { AtendimentoUser, ChatTag, ChatTagScope } from "@/types/domain";
 
@@ -392,12 +395,55 @@ export function useClearChatSnooze(
 }
 
 async function setPinChat(chatId: string, isPinned: boolean): Promise<void> {
+  if (isE2eMockAuth) {
+    setE2ePinnedChat(chatId, isPinned);
+    return;
+  }
+
   const supabase = requireSupabase();
+  const tenantId = await getCurrentTenantId();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    throw new Error(authError.message);
+  }
+  const profileId = authData.user?.id?.trim();
+  if (!profileId) {
+    throw new Error("Não autenticado.");
+  }
+
+  if (isPinned) {
+    const { error } = await supabase.from("whatsapp_chat_pins").upsert(
+      {
+        tenant_id: tenantId,
+        profile_id: profileId,
+        chat_id: chatId,
+        pinned_at: new Date().toISOString(),
+      },
+      { onConflict: "profile_id,chat_id" },
+    );
+    if (error) {
+      throw new Error(
+        error.message.includes("whatsapp_chat_pins")
+          ? "Fixar conversa indisponível: aplique a migration whatsapp_chat_pins no Supabase."
+          : error.message,
+      );
+    }
+    return;
+  }
+
   const { error } = await supabase
-    .from("whatsapp_chats")
-    .update({ is_pinned: isPinned })
-    .eq("id", chatId);
-  if (error) throw new Error(error.message);
+    .from("whatsapp_chat_pins")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("profile_id", profileId)
+    .eq("chat_id", chatId);
+  if (error) {
+    throw new Error(
+      error.message.includes("whatsapp_chat_pins")
+        ? "Desafixar conversa indisponível: aplique a migration whatsapp_chat_pins no Supabase."
+        : error.message,
+    );
+  }
 }
 
 export function usePinChat(
@@ -409,6 +455,7 @@ export function usePinChat(
     ...options,
     onSuccess: async (data, variables, context) => {
       await queryClient.invalidateQueries({ queryKey: ["inbox-chats"] });
+      await queryClient.invalidateQueries({ queryKey: ["inbox-chat", variables.chatId] });
       await options?.onSuccess?.(data, variables, context);
     },
   });

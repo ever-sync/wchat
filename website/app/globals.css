@@ -4,6 +4,6 @@
 
 @layer base {
   body {
-    @apply text-octa-textMain bg-white font-sans;
+    @apply bg-white font-sans text-[#1e2d3d];
   }
 }

@@ -25,7 +25,10 @@ import { NegotiationScoreCard } from "@/components/crm/NegotiationScoreCard";
 import { CrmKanbanCardTaskBadge } from "@/components/crm/CrmKanbanCardTaskBadge";
 import { CrmNegotiationAlertBadges } from "@/components/crm/CrmNegotiationAlertBadges";
 import { type LeadScoreResult } from "@/lib/crm/lead-score";
-import { isPersistedCrmNegotiationId } from "@/lib/crm/negotiation-model";
+import {
+  isPersistedCrmNegotiationId,
+  isSyntheticCustomerCardId,
+} from "@/lib/crm/negotiation-model";
 import {
   getNegotiationAlerts,
   isNegotiationUnassigned,
@@ -235,7 +238,9 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
 }) {
   const { profile } = useAuth();
   const profileId = profile?.id;
-  const canDrag = canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
+  const canDrag =
+    isSyntheticCustomerCardId(card.id) ||
+    canAtendimentoModifyNegotiation(profile?.role, card.assigneeId, profileId);
   const densityMode: CardDensity = density ?? "cozy";
   const isCompact = densityMode === "compact";
   const isExpanded = densityMode === "expanded";
@@ -302,6 +307,14 @@ const DraggableNegotiationCard = memo(function DraggableNegotiationCard({
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--crm-ink-2)]">
         <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--crm-brand-2)]" aria-hidden />
         <span className="font-medium">{statusLabel(card.status)}</span>
+        {isSyntheticCustomerCardId(card.id) ? (
+          <span
+            className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+            title="Lead só no cadastro — arraste para criar a negociação no CRM"
+          >
+            Cadastro
+          </span>
+        ) : null}
         {isInPool ? (
           canReassignChip ? (
             <Popover open={reassignOpen} onOpenChange={setReassignOpen}>

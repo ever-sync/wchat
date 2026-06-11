@@ -92,6 +92,11 @@ import {
   canReleaseCrmNegotiationToPool,
   negotiationAssigneeBlockedMessage,
 } from "@/lib/crm/negotiation-assignee";
+import {
+  customerStatusForNegotiationPause,
+  negotiationCanPause,
+  negotiationCanResume,
+} from "@/lib/crm/negotiation-status";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAppStore } from "@/store/useAppStore";
 import type {
@@ -114,21 +119,6 @@ function toDateTimeLocalValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}`;
-}
-
-const STAGE_TO_PIPELINE: Record<string, number> = {
-  lead: 0,
-  contato: 1,
-  andamento: 2,
-  contrato: 3,
-  venda: 4,
-};
-
-function pipelineIndexForNegotiation(n: CrmNegotiation): number {
-  if (n.status === "perdido") {
-    return 5;
-  }
-  return STAGE_TO_PIPELINE[n.stageId] ?? 2;
 }
 
 function daysSinceCreated(iso: string): number {
@@ -299,7 +289,7 @@ function CrmNegotiationDetailContent({
   const resolvedPipelineIndex = useMemo(() => {
     const stages = negotiationFunnel?.stages ?? [];
     if (!stages.length) {
-      return pipelineIndexForNegotiation(negotiation);
+      return 0;
     }
     const idx = stages.findIndex((s) => s.id === negotiation.stageId);
     if (idx >= 0) {
@@ -562,6 +552,59 @@ function CrmNegotiationDetailContent({
     navigate({ pathname: "/inbox", search: params.toString() });
   };
 
+  const handleTogglePauseNegotiation = async () => {
+    if (!canManageCrm) {
+      toast({
+        title: "Assuma o negócio",
+        description: negotiationAssigneeBlockedMessage(),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isPersistedRow && !isE2eMockAuth) {
+      toast({
+        title: "Pausar negócio",
+        description: "Vincule a um cliente na base para persistir no CRM.",
+      });
+      return;
+    }
+    const nextStatus =
+      negotiationCanResume(negotiation.status) ? "em_andamento" : "pausado";
+    if (!negotiationCanPause(negotiation.status) && !negotiationCanResume(negotiation.status)) {
+      return;
+    }
+    try {
+      await updateNegotiation.mutateAsync({
+        id: negotiation.id,
+        patch: { status: nextStatus },
+      });
+      if (linkedCustomer) {
+        const customerStatus = customerStatusForNegotiationPause(
+          nextStatus,
+          linkedCustomer.status,
+        );
+        await syncLinkedCustomer(linkedCustomer, {
+          ...(customerStatus !== undefined ? { status: customerStatus } : {}),
+          stageKey: negotiation.stageId,
+          funnelId: negotiation.funnelId,
+        });
+      }
+      toast({
+        title: nextStatus === "pausado" ? "Negócio pausado" : "Negócio retomado",
+        description:
+          nextStatus === "pausado"
+            ? "Alertas de follow-up ficam suspensos até retomar."
+            : "O negócio voltou para em andamento.",
+      });
+    } catch (e) {
+      toast({
+        title: "Não foi possível salvar",
+        description: e instanceof Error ? e.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const syncLinkedCustomer = async (
     customer: Customer,
     next: { status?: CustomerStatus; stageKey: string; funnelId: string },
@@ -620,6 +663,11 @@ function CrmNegotiationDetailContent({
         pipelineActiveIndex={pipelineActiveIndex}
         pipelineStages={pipelineStages.length ? pipelineStages : undefined}
         funnelLabel={negotiationFunnel?.listName}
+        negotiationStatus={isPersistedRow ? negotiation.status : undefined}
+        onTogglePauseNegotiation={
+          isPersistedRow || isE2eMockAuth ? () => void handleTogglePauseNegotiation() : undefined
+        }
+        pauseTogglePending={updateNegotiation.isPending || updateCustomer.isPending}
         qualificationStars={qualificationStars}
         negotiationPanelSnapshot={
           taskIntegration && isPersistedCrmNegotiationId(negotiation.id)
@@ -1088,6 +1136,8 @@ function CrmNegotiationDetailContent({
                 if (negotiation.status === "perdido") {
                   patch.status = "em_andamento";
                   patch.lostReason = null;
+                } else if (negotiation.status === "pausado") {
+                  patch.status = "em_andamento";
                 }
 
                 // Tarefa pronta vinculada à etapa de destino (não duplica se já houver aberta do mesmo modelo).

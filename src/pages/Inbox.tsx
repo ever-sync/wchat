@@ -41,6 +41,7 @@ import {
   fetchInboxMessagesPage,
   getNextInboxMessagesPageParam,
   type InboxMessagesPageCursor,
+  useInboxChatById,
   useInboxChats,
   useInboxChatsRealtime,
   useInboxMessages,
@@ -119,6 +120,8 @@ export default function Inbox() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogChatId, setAssignDialogChatId] = useState<string | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(() => searchParams.get("chatId"));
+  /** Mantém metadados do chat aberto quando ele sai do filtro (ex.: "Não lidas" após marcar como lido). */
+  const [activeChatSnapshot, setActiveChatSnapshot] = useState<InboxChat | null>(null);
   const notificationSettings = useInboxNotificationSettings();
   // Notifica novas mensagens inbound em chats nao ativos / aba em background.
   useInboxInboundNotifications(activeChatId, notificationSettings.enabled);
@@ -246,12 +249,43 @@ export default function Inbox() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
+
+  const requestedChatInList = useMemo(
+    () => Boolean(requestedChatId && chats.some((chat) => chat.id === requestedChatId)),
+    [requestedChatId, chats],
+  );
+
+  const {
+    data: deepLinkedChat = null,
+    isLoading: deepLinkChatLoading,
+    isFetched: deepLinkChatFetched,
+  } = useInboxChatById(requestedChatId, {
+    enabled: Boolean(requestedChatId?.trim() && !requestedChatInList && isSupabaseConfigured),
+  });
+
   const activeChat = useMemo(() => {
     if (!activeChatId) {
       return null;
     }
-    return chats.find((chat) => chat.id === activeChatId) ?? null;
-  }, [activeChatId, chats]);
+    return (
+      chats.find((chat) => chat.id === activeChatId) ??
+      (deepLinkedChat?.id === activeChatId ? deepLinkedChat : null) ??
+      activeChatSnapshot
+    );
+  }, [activeChatId, chats, deepLinkedChat, activeChatSnapshot]);
+
+  useEffect(() => {
+    if (!activeChatId) {
+      setActiveChatSnapshot(null);
+      return;
+    }
+    const found =
+      chats.find((chat) => chat.id === activeChatId) ??
+      (deepLinkedChat?.id === activeChatId ? deepLinkedChat : null);
+    if (found) {
+      setActiveChatSnapshot(found);
+    }
+  }, [activeChatId, chats, deepLinkedChat]);
 
   // O botão de pausar/retomar IA só faz sentido se o canal do chat tem IA ligada.
   const activeChannelAiEnabled = useMemo(
@@ -267,14 +301,23 @@ export default function Inbox() {
   }, [assignDialogChatId, chats]);
 
   const blockedRequestedChatId = useMemo(() => {
-    if (!requestedChatId?.trim() || chatsLoading) {
+    if (!requestedChatId?.trim()) {
       return null;
     }
-    if (chats.some((chat) => chat.id === requestedChatId)) {
+    if (requestedChatInList || deepLinkedChat?.id === requestedChatId) {
+      return null;
+    }
+    if (deepLinkChatLoading || !deepLinkChatFetched) {
       return null;
     }
     return requestedChatId;
-  }, [requestedChatId, chats, chatsLoading]);
+  }, [
+    requestedChatId,
+    requestedChatInList,
+    deepLinkedChat?.id,
+    deepLinkChatLoading,
+    deepLinkChatFetched,
+  ]);
 
   const isManagerInbox = profile?.role === "admin" || profile?.role === "operacao";
   const canManageChatPool =
@@ -342,8 +385,16 @@ export default function Inbox() {
           (c.primaryNegotiationId && negotiationIds.has(c.primaryNegotiationId)),
       );
     }
+    if (
+      quickFilter === "unread" &&
+      activeChatId &&
+      activeChatSnapshot &&
+      !chats.some((c) => c.id === activeChatId)
+    ) {
+      return [{ ...activeChatSnapshot, unreadCount: 0 }, ...chats];
+    }
     return chats;
-  }, [chats, quickFilter, followupsIndex]);
+  }, [chats, quickFilter, followupsIndex, activeChatId, activeChatSnapshot]);
   // Badge "(N) Distribui Bot" no titulo da aba enquanto em background.
   const totalUnread = useMemo(
     () => chats.reduce((acc, chat) => acc + (chat.unreadCount ?? 0), 0),
@@ -405,11 +456,17 @@ export default function Inbox() {
 
     setActiveChatId((current) => {
       if (requestedChatId) {
-        if (chats.some((chat) => chat.id === requestedChatId)) {
+        if (
+          chats.some((chat) => chat.id === requestedChatId) ||
+          deepLinkedChat?.id === requestedChatId
+        ) {
           return requestedChatId;
         }
-        // Deep link para conversa inacessível (outro atendente / RLS): não faz fallback na lista.
-        return null;
+        if (!deepLinkChatLoading && deepLinkChatFetched) {
+          // Deep link inacessível (RLS / outro atendente): não faz fallback na lista.
+          return null;
+        }
+        return requestedChatId;
       }
 
       if (requestedCustomerId) {
@@ -423,8 +480,10 @@ export default function Inbox() {
         return current;
       }
 
+      // No filtro "Não lidas", mantém o chat aberto mesmo após marcar como lido
+      // (ele some da query filtrada, mas o painel lateral continua exibindo a conversa).
       if (current && quickFilter === "unread") {
-        return null;
+        return current;
       }
 
       if (quickFilter === "unread") {
@@ -433,7 +492,15 @@ export default function Inbox() {
 
       return chats[0].id;
     });
-  }, [chats, requestedChatId, requestedCustomerId, quickFilter]);
+  }, [
+    chats,
+    requestedChatId,
+    requestedCustomerId,
+    quickFilter,
+    deepLinkedChat?.id,
+    deepLinkChatLoading,
+    deepLinkChatFetched,
+  ]);
 
   useEffect(() => {
     if (quickFilter === "unread") {
@@ -693,11 +760,14 @@ export default function Inbox() {
   }
 
   function handleSelectChat(chatId: string) {
+    const chat = chats.find((c) => c.id === chatId);
+    if (chat) {
+      setActiveChatSnapshot(chat);
+    }
     setActiveChatId(chatId);
     forceScrollToLatestMessage();
 
     if (quickFilter === "unread") {
-      const chat = chats.find((c) => c.id === chatId);
       if (chat?.unreadCount) {
         lastMarkReadAttemptRef.current[chatId] = chat.unreadCount;
         void markChatAsRead.mutateAsync(chatId).catch(() => undefined);
@@ -979,36 +1049,38 @@ export default function Inbox() {
             </div>
           ) : (
             <>
-          <div className="relative z-10 flex min-h-[59px] shrink-0 items-center justify-between border-b border-border bg-wchat-50 px-4 py-2 md:px-5">
+          <div className="relative z-10 flex min-h-[59px] shrink-0 items-center justify-between gap-2 border-b border-border bg-wchat-50 px-4 py-2 md:px-5">
             {activeChat ? (
               <>
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <ConversationAvatar name={activeChat.displayName} avatarUrl={activeChat.avatarUrl} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
                       <p className="min-w-0 truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
                       <CustomerLocalTime
                         phone={activeChat.remotePhoneE164 ?? activeChat.remotePhoneDigits ?? null}
-                      />
-                      <ChatFollowupBadge
-                        followups={chatFollowups}
-                        onClick={() => setFollowUpDialogOpen(true)}
                       />
                       {activeChat.customerId && !linkedNegotiation && !linkedNegotiationLoading ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-7 shrink-0 rounded-full text-xs"
+                          className="hidden h-7 shrink-0 rounded-full text-xs sm:inline-flex"
                           disabled={!canEditCrm}
                           onClick={() => setCreateLeadOpen(true)}
                         >
                           <Briefcase className="mr-1.5 h-3.5 w-3.5" />
-                          Criar lead no CRM
+                          Criar lead
                         </Button>
                       ) : null}
                     </div>
-                    <ChatCrmHeader chat={activeChat} />
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <ChatFollowupBadge
+                        followups={chatFollowups}
+                        onClick={() => setFollowUpDialogOpen(true)}
+                      />
+                      <ChatCrmHeader chat={activeChat} />
+                    </div>
                   </div>
                 </div>
 

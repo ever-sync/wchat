@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -7,12 +7,15 @@ import {
   CheckCircle2,
   Circle,
   Kanban,
+  Mail,
+  MoreHorizontal,
   Pause,
   Pencil,
   Phone,
   Play,
   Plus,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 import {
@@ -45,6 +48,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerCrmPipelineForm } from "@/components/cliente/CustomerCrmPipelineForm";
 import { CrmNegotiationDocumentsSection } from "@/components/crm/CrmNegotiationDocumentsSection";
@@ -192,6 +202,46 @@ function profileHeaderPhone(customer: Customer | null | undefined, chat: InboxCh
     chat?.remoteJid?.trim() ||
     "";
   return phone || "Telefone não informado";
+}
+
+function looksLikePhone(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("@s.whatsapp.net")) {
+    return true;
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 8 && /^[\d\s()+\-./]+$/.test(trimmed);
+}
+
+function formatPhoneDisplay(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  return value.trim();
+}
+
+function resolveProfileIdentity(
+  customer: Customer | null | undefined,
+  chat: InboxChat | null,
+): { displayName: string; phone: string; phoneFormatted: string } {
+  const phone = profileHeaderPhone(customer, chat);
+  const phoneFormatted =
+    phone !== "Telefone não informado" ? formatPhoneDisplay(phone) : phone;
+
+  const candidates = [
+    customer?.nome?.trim(),
+    chat?.customerName?.trim(),
+    chat?.displayName?.trim(),
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  const properName = candidates.find((candidate) => !looksLikePhone(candidate));
+  const displayName = properName ?? "Contato sem nome";
+
+  return { displayName, phone, phoneFormatted };
 }
 
 function getInitials(name: string) {
@@ -394,7 +444,12 @@ function EditableCustomerFactRow({
   }, [editing, value]);
 
   const isBusy = updateCustomer.isPending;
-  const display = value.trim() ? value : "Não informado";
+  const display =
+    field === "nome" && value.trim() && looksLikePhone(value)
+      ? "Adicionar nome"
+      : value.trim()
+        ? value
+        : "Não informado";
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -449,115 +504,161 @@ function EditableCustomerFactRow({
       });
       return;
     }
-    setDraft(value.trim());
+    setDraft(field === "nome" && looksLikePhone(value) ? "" : value.trim());
     setEditing(true);
   };
 
+  const FieldIcon = field === "email" ? Mail : User;
+
   return (
-    <div className="rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]">{label}</p>
-      <div
-        className={
-          showEditButton && !editing
-            ? "mt-1.5 flex min-w-0 cursor-pointer items-start gap-2 rounded-lg py-0.5 transition-colors hover:bg-card/80"
-            : "mt-1.5 flex min-w-0 items-center gap-1.5"
-        }
-        onClick={showEditButton && !editing ? startEditing : undefined}
-        role={showEditButton && !editing ? "button" : undefined}
-        tabIndex={showEditButton && !editing ? 0 : undefined}
-        title={
-          showEditButton && !editing
-            ? canEdit
-              ? `Editar ${label.toLowerCase()}`
-              : (editBlockedMessage ?? undefined)
-            : undefined
-        }
-      >
-        {editing ? (
-          <>
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              type={inputType}
-              placeholder={placeholder}
-              className="h-9 min-w-0 flex-1 rounded-lg border-[var(--inbox-border)] bg-card text-sm"
-              disabled={isBusy}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void save();
-                }
-                if (e.key === "Escape") {
-                  setDraft(value);
-                  setEditing(false);
-                }
-              }}
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              className="h-8 w-8 shrink-0 rounded-lg"
-              disabled={isBusy}
-              aria-label="Salvar"
-              onClick={(e) => {
-                e.stopPropagation();
-                void save();
-              }}
-            >
-              <Check className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 rounded-lg"
-              disabled={isBusy}
-              aria-label="Cancelar"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDraft(value);
-                setEditing(false);
-              }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="min-w-0 flex-1 break-words text-sm font-medium leading-snug text-[var(--inbox-ink)]">
-              {display}
-            </p>
-            {showEditButton ? (
+    <div className="flex items-start gap-3 border-b border-border/50 px-4 py-3 last:border-b-0">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+        <FieldIcon className="h-4 w-4" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <div
+          className={
+            showEditButton && !editing
+              ? "mt-1 flex min-w-0 cursor-pointer items-center gap-2 rounded-md py-0.5 transition-colors hover:bg-muted/40"
+              : "mt-1 flex min-w-0 items-center gap-2"
+          }
+          onClick={showEditButton && !editing ? startEditing : undefined}
+          role={showEditButton && !editing ? "button" : undefined}
+          tabIndex={showEditButton && !editing ? 0 : undefined}
+          title={
+            showEditButton && !editing
+              ? canEdit
+                ? `Editar ${label.toLowerCase()}`
+                : (editBlockedMessage ?? undefined)
+              : undefined
+          }
+        >
+          {editing ? (
+            <>
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                type={inputType}
+                placeholder={placeholder}
+                className="h-9 min-w-0 flex-1 rounded-lg text-sm"
+                disabled={isBusy}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void save();
+                  }
+                  if (e.key === "Escape") {
+                    setDraft(value);
+                    setEditing(false);
+                  }
+                }}
+              />
               <Button
                 type="button"
                 size="icon"
-                variant="outline"
-                className="h-8 w-8 shrink-0 rounded-lg border-[var(--inbox-border)] bg-card text-primary shadow-sm hover:border-primary/40 hover:bg-primary/5"
+                variant="secondary"
+                className="h-8 w-8 shrink-0 rounded-lg"
                 disabled={isBusy}
-                aria-label={`Editar ${label.toLowerCase()}`}
+                aria-label="Salvar"
                 onClick={(e) => {
                   e.stopPropagation();
-                  startEditing();
+                  void save();
                 }}
               >
-                <Pencil className="h-4 w-4" />
+                <Check className="h-3.5 w-3.5" />
               </Button>
-            ) : null}
-          </>
-        )}
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 rounded-lg"
+                disabled={isBusy}
+                aria-label="Cancelar"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDraft(value);
+                  setEditing(false);
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <p
+                className={cn(
+                  "min-w-0 flex-1 break-words text-sm font-medium leading-snug",
+                  display === "Adicionar nome" || display === "Não informado"
+                    ? "text-muted-foreground"
+                    : "text-foreground",
+                )}
+              >
+                {display}
+              </p>
+              {showEditButton ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:text-primary"
+                  disabled={isBusy}
+                  aria-label={`Editar ${label.toLowerCase()}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEditing();
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function QuickFactRow({ label, value }: { label: string; value: string }) {
+function ProfileSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] px-3 py-2.5 text-sm">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]">
-        {label}
-      </span>
-      <span className="min-w-0 break-words text-right font-medium leading-snug text-[var(--inbox-ink)]">{value}</span>
+    <section className="space-y-2">
+      <h3 className="px-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        {title}
+      </h3>
+      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function ProfileFactRow({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon?: ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border/50 px-4 py-3 last:border-b-0">
+      {Icon ? (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+          <Icon className="h-4 w-4" aria-hidden />
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className="mt-0.5 break-words text-sm font-medium leading-snug text-foreground">{value}</p>
+      </div>
     </div>
   );
 }
@@ -579,64 +680,58 @@ function CustomerQuickFacts({
   showIdentityEditButton: boolean;
   identityEditBlockedMessage?: string | null;
 }) {
-  const phone = customer.telefone || chat?.remotePhoneE164 || chat?.remotePhoneDigits || chat?.remoteJid || "";
-
   return (
-    <div className="space-y-4">
-      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Identificação</p>
-        <div className="mt-3 grid gap-2">
-          <EditableCustomerFactRow
-            label="Nome"
-            value={customer.nome ?? ""}
-            field="nome"
-            customer={customer}
-            canEdit={canEditIdentity}
-            showEditButton={showIdentityEditButton}
-            editBlockedMessage={identityEditBlockedMessage}
-            placeholder="Nome do contato"
-          />
-          <QuickFactRow label="Telefone" value={infoValue(phone)} />
-          <EditableCustomerFactRow
-            label="E-mail"
-            value={customer.email ?? ""}
-            field="email"
-            customer={customer}
-            canEdit={canEditIdentity}
-            showEditButton={showIdentityEditButton}
-            editBlockedMessage={identityEditBlockedMessage}
-            inputType="email"
-            placeholder="email@exemplo.com"
-          />
-        </div>
-      </div>
+    <div className="space-y-5">
+      <ProfileSection title="Contato">
+        <EditableCustomerFactRow
+          label="Nome"
+          value={customer.nome ?? ""}
+          field="nome"
+          customer={customer}
+          canEdit={canEditIdentity}
+          showEditButton={showIdentityEditButton}
+          editBlockedMessage={identityEditBlockedMessage}
+          placeholder="Nome do contato"
+        />
+        <EditableCustomerFactRow
+          label="E-mail"
+          value={customer.email ?? ""}
+          field="email"
+          customer={customer}
+          canEdit={canEditIdentity}
+          showEditButton={showIdentityEditButton}
+          editBlockedMessage={identityEditBlockedMessage}
+          inputType="email"
+          placeholder="email@exemplo.com"
+        />
+      </ProfileSection>
 
       {chat || linkedNegotiationAssigneeLabel != null ? (
-        <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Atendimento</p>
-          <div className="mt-3 grid gap-2">
-            {chat ? <QuickFactRow label="Atendente (conversa)" value={chatAttendantLabel(chat)} /> : null}
-            {linkedNegotiationAssigneeLabel != null ? (
-              <QuickFactRow label="Responsável CRM" value={linkedNegotiationAssigneeLabel} />
-            ) : null}
-          </div>
-        </div>
+        <ProfileSection title="Atendimento">
+          {chat ? (
+            <ProfileFactRow label="Atendente da conversa" value={chatAttendantLabel(chat)} icon={User} />
+          ) : null}
+          {linkedNegotiationAssigneeLabel != null ? (
+            <ProfileFactRow label="Responsável no CRM" value={linkedNegotiationAssigneeLabel} icon={Kanban} />
+          ) : null}
+        </ProfileSection>
       ) : null}
 
-      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Histórico</p>
-        <div className="mt-3 grid gap-2">
-          <QuickFactRow label="Cadastro" value={formatDate(customer.cadastradoEm)} />
-          {chat ? <QuickFactRow label="Mensagens (esta conversa)" value={String(messageCount)} /> : null}
-          {chat ? <QuickFactRow label="Última mensagem" value={formatDateTime(chat.lastMessageAt)} /> : null}
-        </div>
-      </div>
+      <ProfileSection title="Histórico">
+        <ProfileFactRow label="Cadastro" value={formatDate(customer.cadastradoEm)} icon={CalendarClock} />
+        {chat ? (
+          <ProfileFactRow label="Mensagens nesta conversa" value={String(messageCount)} icon={Phone} />
+        ) : null}
+        {chat ? (
+          <ProfileFactRow label="Última mensagem" value={formatDateTime(chat.lastMessageAt)} icon={CalendarClock} />
+        ) : null}
+      </ProfileSection>
     </div>
   );
 }
 
 const PROFILE_TAB_TRIGGER_CLASS =
-  "shrink-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--inbox-muted)] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm";
+  "shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm";
 
 function ProfileTasksPanel({
   tasks,
@@ -825,17 +920,18 @@ function ChatOnlyConversationSummary({
 }: {
   chat: InboxChat;
 }) {
+  const phone = chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "";
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card/90 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--inbox-muted-2)]">Conversa</p>
-        <div className="mt-3 space-y-2">
-          <QuickFactRow label="Atendente" value={chatAttendantLabel(chat)} />
-          <QuickFactRow label="Telefone" value={infoValue(chat.remotePhoneE164 || chat.remotePhoneDigits || chat.remoteJid || "")} />
-          <QuickFactRow label="Última mensagem" value={formatDateTime(chat.lastMessageAt)} />
-        </div>
-      </div>
-    </div>
+    <ProfileSection title="Conversa">
+      <ProfileFactRow label="Atendente" value={chatAttendantLabel(chat)} icon={User} />
+      <ProfileFactRow
+        label="Telefone"
+        value={phone.trim() ? formatPhoneDisplay(phone) : "Não informado"}
+        icon={Phone}
+      />
+      <ProfileFactRow label="Última mensagem" value={formatDateTime(chat.lastMessageAt)} icon={CalendarClock} />
+    </ProfileSection>
   );
 }
 
@@ -997,8 +1093,16 @@ export function CustomerProfileSheet({
   });
 
   const totalMessages = messages.length;
-  const displayName = customer?.nome ?? chat?.customerName ?? chat?.displayName ?? "Cliente";
-  const initials = getInitials(displayName || "CL");
+  const profileIdentity = useMemo(
+    () => resolveProfileIdentity(customer, chat),
+    [customer, chat],
+  );
+  const displayName = profileIdentity.displayName;
+  const initials = getInitials(displayName === "Contato sem nome" ? "?" : displayName);
+  const resolutionLabel =
+    chat?.resolution && CHAT_RESOLUTION_LABELS[chat.resolution]
+      ? CHAT_RESOLUTION_LABELS[chat.resolution]
+      : "Em aberto";
   const [profileTab, setProfileTab] = useState("resumo");
   const showCrmTab = Boolean(customer && isSupabaseConfigured);
   const showCamposTab = Boolean(customer && isSupabaseConfigured);
@@ -1044,170 +1148,192 @@ export function CustomerProfileSheet({
         className="w-[96vw] overflow-y-auto border-l border-[var(--inbox-border)] bg-[linear-gradient(180deg,var(--inbox-surface)_0%,var(--inbox-surface-2)_100%)] p-0 sm:max-w-[760px] xl:max-w-[860px]"
       >
         <div className="flex min-h-full flex-col">
-          <SheetHeader className="space-y-0 border-b border-[var(--inbox-border)] bg-card/60 px-5 pb-5 pt-5 backdrop-blur-sm">
-            <div className="rounded-[20px] border border-[var(--inbox-border)] bg-card p-4 shadow-sm">
-              <div className="flex items-start gap-3.5">
-                <Avatar className="h-16 w-16 shrink-0 border-[3px] border-card shadow-[0_10px_24px_rgba(84,95,101,0.1)]">
-                  <AvatarImage
-                    src={
-                      chat?.avatarUrl && isInlineMediaUrlAllowed(chat.avatarUrl)
-                        ? chat.avatarUrl
-                        : undefined
-                    }
-                    alt={displayName}
-                    className="object-cover"
-                  />
-                  <AvatarFallback className="bg-gradient-to-br from-[var(--crm-info-tint)] via-sky-50 to-[var(--crm-info-tint)] text-xl font-bold text-[var(--crm-info)]">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+          <SheetHeader className="space-y-0 border-b border-border/60 bg-card/80 px-5 pb-4 pt-5 backdrop-blur-sm">
+            <div className="flex items-start gap-4">
+              <Avatar className="h-14 w-14 shrink-0 ring-2 ring-background shadow-md">
+                <AvatarImage
+                  src={
+                    chat?.avatarUrl && isInlineMediaUrlAllowed(chat.avatarUrl)
+                      ? chat.avatarUrl
+                      : undefined
+                  }
+                  alt={displayName}
+                  className="object-cover"
+                />
+                <AvatarFallback className="bg-primary/10 text-base font-semibold text-primary">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
 
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div>
-                    <SheetTitle className="line-clamp-2 text-lg font-semibold leading-snug tracking-tight text-[var(--inbox-ink)]">
-                      {displayName}
-                    </SheetTitle>
-                    <SheetDescription className="mt-1 flex items-center gap-1.5 text-sm text-[var(--inbox-muted)]">
-                      <Phone className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-                      <span className="truncate">{profileHeaderPhone(customer, chat)}</span>
-                    </SheetDescription>
-                  </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <div>
+                  <SheetTitle className="line-clamp-2 text-left text-lg font-semibold leading-tight tracking-tight">
+                    {displayName}
+                  </SheetTitle>
+                  <SheetDescription className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="truncate">{profileIdentity.phoneFormatted}</span>
+                  </SheetDescription>
+                </div>
 
+                <div className="flex flex-wrap gap-1.5">
                   {chat ? (
-                    <div>
-                      <Label
-                        htmlFor="inbox-profile-resolution"
-                        className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--inbox-muted-2)]"
-                      >
-                        Status da conversa
-                      </Label>
-                      <Select
-                        value={chat.resolution ?? "open"}
-                        disabled={crmActionsLocked || !canActOnChat || setChatResolution.isPending}
-                        onValueChange={(value) => {
-                          if (!canActOnChat) {
-                            toast({
-                              title: "Assuma a conversa",
-                              description: chatAssigneeBlockedMessage(),
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          void setChatResolution.mutateAsync({
-                            chatId: chat.id,
-                            resolution: value as ChatResolution,
-                          });
-                        }}
-                      >
-                        <SelectTrigger
-                          id="inbox-profile-resolution"
-                          className="h-9 w-full rounded-xl border border-[var(--inbox-border)] bg-[var(--inbox-surface)] text-sm text-[var(--inbox-ink)]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(CHAT_RESOLUTION_LABELS) as ChatResolution[]).map((key) => (
-                            <SelectItem key={key} value={key}>
-                              {CHAT_RESOLUTION_LABELS[key]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px] font-medium">
+                      {chatAttendantLabel(chat)}
+                    </Badge>
                   ) : null}
-
-                  {customer ? (
-                    <div className="grid gap-2 pt-0.5">
-                      {canViewCrm ? (
-                        <Button
-                          asChild
-                          variant="secondary"
-                          size="sm"
-                          className="h-9 rounded-xl bg-[var(--crm-brand-tint)] px-2.5 text-xs font-semibold text-[var(--crm-brand)] hover:bg-[var(--crm-brand-tint)]"
-                        >
-                          <Link to="/crm" className="inline-flex items-center justify-center gap-1.5">
-                            <Kanban className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                            Abrir CRM
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
+                  {chat ? (
+                    <Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px] font-medium">
+                      {resolutionLabel}
+                    </Badge>
                   ) : null}
-                  {channelAiEnabled && chat ? (() => {
-                    const aiPaused = chat.aiMode === "off" || chat.aiMode === "handoff";
-                    const disabled = setAiMode.isPending || !canActOnChat || !canEditInbox;
-                    return (
-                      <Button
-                        type="button"
-                        variant={aiPaused ? "ghost" : "secondary"}
-                        size="sm"
-                        disabled={disabled}
-                        onClick={() => {
-                          if (!canEditInbox) {
-                            toast({
-                              title: "Ação indisponível",
-                              description: "Seu papel não tem permissão para esta ação.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          if (!canActOnChat) {
-                            toast({
-                              title: "Assuma a conversa",
-                              description: chatAssigneeBlockedMessage(),
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          setAiMode.mutate(
-                            { chatId: chat.id, aiMode: aiPaused ? "full" : "off" },
-                            {
-                              onSuccess: () =>
-                                toast({
-                                  title: aiPaused
-                                    ? "IA reativada nesta conversa"
-                                    : "IA pausada nesta conversa",
-                                }),
-                            },
-                          );
-                        }}
-                        className={cn(
-                          "mt-1 h-9 w-full rounded-xl px-2.5 text-xs font-semibold",
-                          aiPaused
-                            ? "border border-[var(--inbox-border)] bg-transparent text-[var(--inbox-ink)] hover:bg-[var(--crm-brand-tint)] hover:text-[var(--crm-brand)]"
-                            : "bg-[var(--crm-brand)] text-white hover:bg-[var(--crm-brand)]/90",
-                        )}
-                      >
-                        {aiPaused ? (
-                          <Play className="mr-1.5 h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
-                        ) : (
-                          <Pause className="mr-1.5 h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
-                        )}
-                        {setAiMode.isPending
-                          ? aiPaused ? "Retomando..." : "Pausando..."
-                          : aiPaused ? "Retomar IA" : "Pausar IA"}
-                      </Button>
-                    );
-                  })() : null}
-                  {isAdmin && chat ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={deleteChat.isPending}
-                      onClick={() => setDeleteConfirmOpen(true)}
-                      className="mt-1 h-9 w-full rounded-xl border border-[var(--crm-danger-border,rgba(220,38,38,0.25))] bg-transparent px-2.5 text-xs font-semibold text-[var(--crm-danger,#dc2626)] hover:bg-[var(--crm-danger-tint,rgba(220,38,38,0.08))] hover:text-[var(--crm-danger,#dc2626)]"
-                    >
-                      <Trash2 className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                      {deleteChat.isPending ? "Excluindo..." : "Excluir conversa"}
-                    </Button>
+                  {customer?.email?.trim() ? (
+                    <Badge variant="outline" className="max-w-full truncate rounded-md px-2 py-0.5 text-[11px] font-medium">
+                      {customer.email.trim()}
+                    </Badge>
                   ) : null}
                 </div>
               </div>
             </div>
+
+            {chat ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <div className="min-w-[160px] flex-1">
+                  <Label htmlFor="inbox-profile-resolution" className="sr-only">
+                    Status da conversa
+                  </Label>
+                  <Select
+                    value={chat.resolution ?? "open"}
+                    disabled={crmActionsLocked || !canActOnChat || setChatResolution.isPending}
+                    onValueChange={(value) => {
+                      if (!canActOnChat) {
+                        toast({
+                          title: "Assuma a conversa",
+                          description: chatAssigneeBlockedMessage(),
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      void setChatResolution.mutateAsync({
+                        chatId: chat.id,
+                        resolution: value as ChatResolution,
+                      });
+                    }}
+                  >
+                    <SelectTrigger
+                      id="inbox-profile-resolution"
+                      className="h-9 w-full rounded-lg bg-background text-sm"
+                    >
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(CHAT_RESOLUTION_LABELS) as ChatResolution[]).map((key) => (
+                        <SelectItem key={key} value={key}>
+                          {CHAT_RESOLUTION_LABELS[key]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {customer && canViewCrm ? (
+                  <Button
+                    asChild
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 shrink-0 rounded-lg px-3 text-xs font-semibold"
+                  >
+                    <Link to="/crm" className="inline-flex items-center gap-1.5">
+                      <Kanban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Abrir CRM
+                    </Link>
+                  </Button>
+                ) : null}
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 rounded-lg"
+                      aria-label="Mais ações do perfil"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {channelAiEnabled ? (() => {
+                      const aiPaused = chat.aiMode === "off" || chat.aiMode === "handoff";
+                      const disabled = setAiMode.isPending || !canActOnChat || !canEditInbox;
+                      return (
+                        <DropdownMenuItem
+                          disabled={disabled}
+                          onClick={() => {
+                            if (!canEditInbox) {
+                              toast({
+                                title: "Ação indisponível",
+                                description: "Seu papel não tem permissão para esta ação.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            if (!canActOnChat) {
+                              toast({
+                                title: "Assuma a conversa",
+                                description: chatAssigneeBlockedMessage(),
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setAiMode.mutate(
+                              { chatId: chat.id, aiMode: aiPaused ? "full" : "off" },
+                              {
+                                onSuccess: () =>
+                                  toast({
+                                    title: aiPaused
+                                      ? "IA reativada nesta conversa"
+                                      : "IA pausada nesta conversa",
+                                  }),
+                              },
+                            );
+                          }}
+                        >
+                          {aiPaused ? (
+                            <Play className="mr-2 h-4 w-4" aria-hidden />
+                          ) : (
+                            <Pause className="mr-2 h-4 w-4" aria-hidden />
+                          )}
+                          {setAiMode.isPending
+                            ? aiPaused
+                              ? "Retomando IA..."
+                              : "Pausando IA..."
+                            : aiPaused
+                              ? "Retomar IA"
+                              : "Pausar IA"}
+                        </DropdownMenuItem>
+                      );
+                    })() : null}
+                    {isAdmin ? (
+                      <>
+                        {channelAiEnabled ? <DropdownMenuSeparator /> : null}
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          disabled={deleteChat.isPending}
+                          onClick={() => setDeleteConfirmOpen(true)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" aria-hidden />
+                          {deleteChat.isPending ? "Excluindo..." : "Excluir conversa"}
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : null}
           </SheetHeader>
 
-          <div className="px-6 py-5">
+          <div className="px-5 py-5">
             {crmActionsLocked ? (
               <p className="mb-5 rounded-xl border border-[var(--crm-amber-border)] bg-[var(--crm-amber-tint)] px-4 py-3 text-sm text-[var(--crm-amber-ink)]">
                 {negotiationAssigneeBlockedMessage()}
@@ -1316,7 +1442,7 @@ export function CustomerProfileSheet({
 
             {chat ? (
               <Tabs value={profileTab} onValueChange={setProfileTab} className="space-y-4">
-                <TabsList className="h-auto w-full flex-nowrap justify-start gap-0.5 overflow-x-auto rounded-2xl border border-[var(--inbox-border)] bg-card/90 p-1 shadow-sm">
+                <TabsList className="h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1">
                   <TabsTrigger value="resumo" className={PROFILE_TAB_TRIGGER_CLASS}>
                     Resumo
                   </TabsTrigger>

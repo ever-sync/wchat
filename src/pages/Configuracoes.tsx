@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   AlertTriangle,
   BarChart3,
@@ -585,7 +586,7 @@ export default function Configuracoes() {
   };
 
   return (
-    <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:py-8 md:pb-8 lg:px-8">
+    <PageShell contentClassName="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Configuracoes</h1>
@@ -1986,6 +1987,6 @@ export default function Configuracoes() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

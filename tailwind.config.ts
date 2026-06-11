@@ -90,6 +90,9 @@ export default {
           "text-muted": "hsl(var(--wchat-text-muted))",
         },
       },
+      maxWidth: {
+        page: "1600px",
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

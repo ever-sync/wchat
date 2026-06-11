@@ -11,6 +11,8 @@ import {
   MoreVertical,
   Users,
   Pencil,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -58,7 +60,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { buildPipelineLabels } from "@/lib/crm-pipeline";
 import { isNegotiationUnassigned } from "@/lib/crm/negotiation-alerts";
 import { negotiationAssigneeBlockedMessage } from "@/lib/crm/negotiation-assignee";
 import { CustomerCustomFieldInput } from "@/components/customers/CustomerCustomFieldInput";
@@ -75,7 +76,8 @@ import {
 } from "@/lib/customer-custom-field-display";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CrmTask, Customer } from "@/types/domain";
+import { negotiationPauseToggleLabel } from "@/lib/crm/negotiation-status";
+import type { CrmNegotiationStatus, CrmTask, Customer } from "@/types/domain";
 
 /** Paleta wChat */
 const BRAND_ACCENT = "#5B2FD4";
@@ -146,10 +148,13 @@ function PipelineChevrons({
   activeIndex: number;
   daysContact: number;
   onStageSelect?: (stageIndex: number) => void;
-  /** Etapas reais do funil da negociação; sem isso usa o funil legado fixo. */
+  /** Etapas reais do funil; sem funil configurado o stepper fica oculto. */
   stages?: Array<{ key: string; label: string }>;
 }) {
-  const segments = stages ?? buildPipelineLabels(daysContact);
+  const segments = stages ?? [];
+  if (!segments.length) {
+    return null;
+  }
   const interactive = Boolean(onStageSelect);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | HTMLDivElement | null>(null);
@@ -657,6 +662,10 @@ export type ClienteRdPerfilViewProps = {
   onRefresh: () => void;
   onMarkLoss: () => void;
   onMarkWin: () => void;
+  /** Status da negociação persistida — habilita Pausar/Retomar na ficha CRM. */
+  negotiationStatus?: CrmNegotiationStatus;
+  onTogglePauseNegotiation?: () => void;
+  pauseTogglePending?: boolean;
   onEdit: () => void;
   onOpenInbox: () => void;
   onBlock: () => void;
@@ -731,6 +740,9 @@ export function ClienteRdPerfilView({
   onRefresh,
   onMarkLoss,
   onMarkWin,
+  negotiationStatus,
+  onTogglePauseNegotiation,
+  pauseTogglePending,
   onEdit,
   onOpenInbox,
   onBlock,
@@ -790,8 +802,8 @@ export function ClienteRdPerfilView({
       const idx = Math.min(Math.max(pipelineActiveIndex, 0), pipelineStages.length - 1);
       return pipelineStages[idx]?.label ?? "—";
     }
-    return buildPipelineLabels(daysContact)[pipelineActiveIndex]?.label ?? "—";
-  }, [pipelineActiveIndex, pipelineStages, daysContact]);
+    return "—";
+  }, [pipelineActiveIndex, pipelineStages]);
 
   const [promoVisible, setPromoVisible] = useState(true);
   const [negoPanelEditing, setNegoPanelEditing] = useState(false);
@@ -1079,6 +1091,31 @@ export function ClienteRdPerfilView({
               >
                 <Users className="mr-2 h-4 w-4" aria-hidden />
                 {releaseNegotiationPending ? "Devolvendo…" : "Devolver ao pool"}
+              </Button>
+            ) : null}
+            {negotiationPauseToggleLabel(negotiationStatus ?? "em_andamento") &&
+            onTogglePauseNegotiation ? (
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="crm-toggle-pause"
+                className="rounded-[10px] border-[var(--crm-border-2)] px-4 py-2.5 font-semibold shadow-none hover:bg-[var(--crm-surface)] disabled:opacity-50"
+                disabled={negotiationReadOnly || crmActionsDisabled || pauseTogglePending}
+                title={
+                  negotiationReadOnly
+                    ? "Assuma o negócio para pausar ou retomar"
+                    : crmActionsDisabled
+                      ? "Seu papel não tem permissão"
+                      : undefined
+                }
+                onClick={onTogglePauseNegotiation}
+              >
+                {negotiationStatus === "pausado" ? (
+                  <Play className="mr-2 h-4 w-4" aria-hidden />
+                ) : (
+                  <Pause className="mr-2 h-4 w-4" aria-hidden />
+                )}
+                {negotiationPauseToggleLabel(negotiationStatus ?? "em_andamento")}
               </Button>
             ) : null}
             <Button

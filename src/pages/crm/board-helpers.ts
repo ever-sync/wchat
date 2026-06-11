@@ -9,7 +9,6 @@ import {
   Flame,
   Footprints,
   Pause,
-  Play,
   Snowflake,
   Target,
   ThumbsDown,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import type { CrmFunnel } from "@/data/crm-funnels";
 import type { CrmNegotiation, CrmNegotiationStatus, Customer } from "@/types/domain";
+import { parseSyntheticCustomerCardId } from "@/lib/crm/negotiation-model";
 import {
   type CrmAlertsFilterMode,
   isNegotiationUnassigned,
@@ -77,7 +77,6 @@ export const STATUS_OPTIONS: {
   { id: "vendido", label: "Vendido", icon: ThumbsUp },
   { id: "perdido", label: "Perdido", icon: ThumbsDown },
   { id: "pausado", label: "Pausado", icon: Pause },
-  { id: "nao_pausado", label: "Não pausado", icon: Play },
 ];
 
 export const SORT_OPTIONS: { id: SortId; label: string }[] = [
@@ -230,6 +229,10 @@ export function resolveCustomerIdForNegotiation(
   card: CrmNegotiation,
   _customers: Customer[],
 ): string | null {
+  const syntheticId = parseSyntheticCustomerCardId(card.id);
+  if (syntheticId) {
+    return syntheticId;
+  }
   return card.customerId?.trim() || null;
 }
 

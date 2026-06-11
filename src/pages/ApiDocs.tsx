@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
+import { PageShell } from "@/components/layout/PageShell";
 import { ArrowLeft, BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { OpenAPIV3 } from "swagger-ui-react";
@@ -60,7 +61,7 @@ export default function ApiDocs() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-16 md:p-6">
+    <PageShell className="pb-16" contentClassName="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -135,7 +136,7 @@ export default function ApiDocs() {
           <ApiDocsSwagger spec={n8nInboundSpec} />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }
 

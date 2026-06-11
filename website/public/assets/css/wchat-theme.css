@@ -1,0 +1,118 @@
+/* wChat — override da paleta do template Aior (navy + ciano) */
+
+body.wchat-theme {
+  --theme-color: #003d5b;
+  --theme-color2: #5bbfd0;
+  --title-color: #1e2d3d;
+  --body-color: #4a5b6b;
+  --smoke-color2: #f5f7f8;
+  --smoke-color4: #e0f5f8;
+  --th-border-color: #dde4ea;
+}
+
+body.wchat-theme .th-btn2.btn-gradient,
+body.wchat-theme .th-btn2.btn-gradient2 {
+  color: #ffffff;
+}
+
+body.wchat-theme .th-btn2.btn-gradient:hover,
+body.wchat-theme .th-btn2.btn-gradient2:hover {
+  color: #ffffff;
+}
+
+body.wchat-theme .th-btn2.style5:hover {
+  border-color: var(--theme-color);
+  color: var(--theme-color);
+}
+
+body.wchat-theme .scroll-top .progress-circle path {
+  stroke: var(--theme-color);
+}
+
+body.wchat-theme .main-menu > ul > li > a:hover,
+body.wchat-theme .main-menu > ul > li.active > a {
+  color: var(--theme-color);
+}
+
+body.wchat-theme .sub-title.style3,
+body.wchat-theme .sub-title.style6 .title {
+  color: var(--theme-color);
+}
+
+body.wchat-theme .hero-style8 .hero-title .title {
+  color: var(--theme-color);
+}
+
+body.wchat-theme .loader-letter {
+  color: var(--theme-color);
+}
+
+body.wchat-theme .breadcumb-wrapper {
+  background-color: var(--theme-color);
+}
+
+body.wchat-theme .price-card.active {
+  border-color: var(--theme-color2);
+}
+
+body.wchat-theme .feature-area2 .box-icon img,
+body.wchat-theme .service-card .box-icon img,
+body.wchat-theme .integration-icon img,
+body.wchat-theme .service-box .icon img,
+body.wchat-theme .box-quote img {
+  filter: brightness(0) saturate(100%) invert(18%) sepia(42%) saturate(1679%) hue-rotate(166deg)
+    brightness(95%) contrast(101%);
+}
+
+body.wchat-theme .slider-arrow img,
+body.wchat-theme .icon-btn .icon img {
+  filter: brightness(0) saturate(100%) invert(18%) sepia(42%) saturate(1679%) hue-rotate(166deg)
+    brightness(95%) contrast(101%);
+}
+
+body.wchat-theme .header-layout8:not(.header-absolute) + * {
+  margin-top: 0;
+}
+
+/* Auth pages */
+body.wchat-theme .wchat-auth-card {
+  border: 1px solid var(--th-border-color);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 61, 91, 0.08);
+}
+
+body.wchat-theme .wchat-auth-subtitle {
+  color: var(--body-color);
+}
+
+body.wchat-theme .wchat-auth-footer {
+  margin-top: 1.5rem;
+  color: var(--body-color);
+}
+
+body.wchat-theme .wchat-auth-footer a {
+  color: var(--theme-color);
+  font-weight: 600;
+}
+
+body.wchat-theme .wchat-auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+body.wchat-theme .wchat-auth-row a {
+  color: var(--theme-color);
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+
+body.wchat-theme .wchat-auth-page .form-label {
+  font-weight: 500;
+  color: var(--title-color);
+  margin-bottom: 0.375rem;
+}

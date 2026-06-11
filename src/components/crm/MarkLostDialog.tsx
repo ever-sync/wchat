@@ -39,10 +39,14 @@ export function MarkLostDialog({
   const handleConfirm = () => {
     const trimmed = reason.trim();
     if (!trimmed) return;
-    void Promise.resolve(onConfirm(trimmed)).then(() => {
-      setReason("");
-      onOpenChange(false);
-    });
+    void Promise.resolve(onConfirm(trimmed))
+      .then(() => {
+        setReason("");
+        onOpenChange(false);
+      })
+      .catch(() => {
+        /* Mantém o diálogo aberto quando onConfirm falha. */
+      });
   };
 
   return (

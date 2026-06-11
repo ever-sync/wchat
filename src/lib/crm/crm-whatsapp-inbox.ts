@@ -138,6 +138,10 @@ export function resolveCrmWhatsappOpenAction(params: {
   card: CrmNegotiation;
   customer: Customer | null;
 }): CrmWhatsappOpenAction {
+  if (params.card.sourceChatId?.trim()) {
+    return { kind: "open_chat", chatId: params.card.sourceChatId.trim() };
+  }
+
   const phones = params.customer ? customerPhoneOptions(params.customer) : [];
 
   if (phones.length >= 2) {
@@ -145,9 +149,6 @@ export function resolveCrmWhatsappOpenAction(params: {
   }
   if (phones.length === 1) {
     return { kind: "open", phone: phones[0].value };
-  }
-  if (params.card.sourceChatId) {
-    return { kind: "open_chat", chatId: params.card.sourceChatId };
   }
   return {
     kind: "error",
@@ -162,11 +163,14 @@ export function openCrmWhatsappInbox(params: {
   customer: Customer | null;
   phone: string;
 }): void {
-  const chat = findInboxChatByPhone(params.chats, params.phone, params.customer?.id);
+  const linkedChatId = params.card.sourceChatId?.trim() || null;
+  const chat =
+    (linkedChatId ? params.chats?.find((c) => c.id === linkedChatId) : null) ??
+    findInboxChatByPhone(params.chats, params.phone, params.customer?.id);
 
   params.navigate(
     buildInboxUrlForWhatsapp({
-      chatId: chat?.id ?? null,
+      chatId: chat?.id ?? linkedChatId,
       customerId: params.customer?.id ?? params.card.customerId ?? null,
       phone: params.phone,
     }),

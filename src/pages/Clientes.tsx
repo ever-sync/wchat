@@ -6,14 +6,14 @@ import {
   Upload,
   UserPlus,
   X,
-  RefreshCw,
   Download,
   ListFilter,
-  Calendar,
   Briefcase,
   MoreHorizontal,
   Pencil,
   Trash2,
+  Users2,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ import {
 import { useLinkWhatsappChatCustomer } from "@/lib/api/whatsapp";
 import { useRoutes } from "@/lib/api/routes";
 import { useToast } from "@/hooks/use-toast";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAuth } from "@/hooks/useAuth";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
 import { useAppStore } from "@/store/useAppStore";
@@ -72,13 +73,28 @@ import { normalizePhone } from "@/lib/phone";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import type { Customer, CustomerUpsertInput } from "@/types/domain";
 import { CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
+import { pageShellClasses } from "@/components/layout/PageShell";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 600, 1000] as const;
 type ClientesPageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
+const REGIAO_LABELS: Record<string, string> = {
+  norte: "Norte",
+  sul: "Sul",
+  leste: "Leste",
+  oeste: "Oeste",
+  centro: "Centro",
+  metropolitana: "Metropolitana",
+  litoral: "Litoral",
+  interior: "Interior",
+  rural: "Rural",
+  outros: "Outros",
+};
+
 /** Lista de contatos — paleta wChat (branco + roxo) */
 const ui = {
-  screen: "min-h-0 flex-1 space-y-4 overflow-y-auto bg-background px-4 py-4 pb-24 md:px-6 md:pb-8",
+  screen: cn(pageShellClasses.root, "space-y-4"),
   panel:
     "overflow-hidden rounded-[10px] border border-border bg-card shadow-[0_1px_3px_hsl(var(--wchat-brand-600)/0.06)]",
   btnSecondary:
@@ -262,11 +278,14 @@ export default function Clientes() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sheetCustomer, setSheetCustomer] = useState<Customer | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canEditClientes = can("clientes", "edit");
   const canDeleteClientes = can("clientes", "delete");
   const canViewCrm = can("crm", "view");
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const searchPending = search.trim() !== debouncedSearch.trim();
 
   async function openCustomerNegotiation(customer: Customer) {
     if (!canViewCrm) {
@@ -289,6 +308,7 @@ export default function Clientes() {
       const negotiations = await listCrmNegotiationsByCustomerId(customer.id);
       const target = negotiations.find((n) => isPersistedCrmNegotiationId(n.id));
       if (!target) {
+        navigate(`/clientes/${encodeURIComponent(customer.id)}`);
         return;
       }
       navigate(`/crm/negociacao/${encodeURIComponent(target.id)}`);
@@ -303,7 +323,7 @@ export default function Clientes() {
 
   const filters = useMemo(
     () => ({
-      search,
+      search: debouncedSearch,
       perfil: filterPerfil,
       status: filterStatus,
       rota: filterRota,
@@ -331,13 +351,13 @@ export default function Clientes() {
       filterZona,
       profile?.id,
       profile?.role,
-      search,
+      debouncedSearch,
     ],
   );
 
   const { data: routesFromApi = [] } = useRoutes();
 
-  const { data: filtered = [], isLoading, error } = useCustomers(filters);
+  const { data: filtered = [], isLoading, isFetching, error } = useCustomers(filters);
   const { data: negCountsByCustomer, isSuccess: negCountsReady } = useCrmNegotiationCountsByCustomer({
     enabled: isSupabaseConfigured,
   });
@@ -356,6 +376,12 @@ export default function Clientes() {
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageRangeStart = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const pageRangeEnd = filtered.length === 0 ? 0 : Math.min(page * pageSize, filtered.length);
+  const selectedCustomers = useMemo(
+    () => filtered.filter((customer) => selectedIds.has(customer.id)),
+    [filtered, selectedIds],
+  );
   const allPageSelected =
     paginated.length > 0 && paginated.every((customer) => selectedIds.has(customer.id));
   const somePageSelected = paginated.some((customer) => selectedIds.has(customer.id));
@@ -432,6 +458,52 @@ export default function Clientes() {
     setPage(1);
   };
 
+  function clearAllListFilters() {
+    setSearch("");
+    clearAdvancedFilters();
+  }
+
+  function removeActiveFilterChip(chipId: string) {
+    setPage(1);
+    switch (chipId) {
+      case "search":
+        setSearch("");
+        break;
+      case "perfil":
+        setFilterPerfil("todos");
+        break;
+      case "status":
+        setFilterStatus("todos");
+        break;
+      case "rota":
+        setFilterRota("todos");
+        break;
+      case "regiao":
+        setFilterRegiao("todos");
+        break;
+      case "bairro":
+        setFilterBairro("");
+        break;
+      case "zona":
+        setFilterZona("");
+        break;
+      case "cidade":
+        setFilterCidade("");
+        break;
+      case "ativoComercial":
+        setFilterAtivoComercial("todos");
+        break;
+      case "observacoes":
+        setFilterObservacoes("");
+        break;
+      case "tag":
+        setFilterTag("");
+        break;
+      default:
+        break;
+    }
+  }
+
   const hasAdvancedFilters =
     filterPerfil !== "todos" ||
     filterStatus !== "todos" ||
@@ -470,6 +542,75 @@ export default function Clientes() {
     filterZona,
   ]);
 
+  const hasAnyListFilters = Boolean(search.trim()) || hasAdvancedFilters;
+
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ id: string; label: string }> = [];
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) {
+      chips.push({ id: "search", label: `Busca: ${trimmedSearch}` });
+    }
+    if (filterPerfil !== "todos") {
+      chips.push({ id: "perfil", label: `Perfil ${filterPerfil}` });
+    }
+    if (filterStatus !== "todos") {
+      const statusLabel =
+        filterStatus === "ativo" ? "Ativo" : filterStatus === "inativo" ? "Inativo" : "Bloqueado";
+      chips.push({ id: "status", label: statusLabel });
+    }
+    if (filterRota !== "todos") {
+      chips.push({ id: "rota", label: `Rota: ${filterRota}` });
+    }
+    if (filterRegiao !== "todos") {
+      chips.push({ id: "regiao", label: REGIAO_LABELS[filterRegiao] ?? filterRegiao });
+    }
+    if (filterBairro.trim()) {
+      chips.push({ id: "bairro", label: `Bairro: ${filterBairro.trim()}` });
+    }
+    if (filterZona.trim()) {
+      chips.push({ id: "zona", label: `Zona: ${filterZona.trim()}` });
+    }
+    if (filterCidade.trim()) {
+      chips.push({ id: "cidade", label: `Cidade: ${filterCidade.trim()}` });
+    }
+    if (filterAtivoComercial !== "todos") {
+      chips.push({
+        id: "ativoComercial",
+        label: filterAtivoComercial === "sim" ? "Comercial: sim" : "Comercial: não",
+      });
+    }
+    if (filterObservacoes.trim()) {
+      chips.push({ id: "observacoes", label: `Obs: ${filterObservacoes.trim()}` });
+    }
+    if (filterTag.trim()) {
+      chips.push({ id: "tag", label: `Tag: ${filterTag.trim()}` });
+    }
+    return chips;
+  }, [
+    filterAtivoComercial,
+    filterBairro,
+    filterCidade,
+    filterObservacoes,
+    filterPerfil,
+    filterRegiao,
+    filterRota,
+    filterStatus,
+    filterTag,
+    filterZona,
+    search,
+  ]);
+
+  const resultsSummary = useMemo(() => {
+    if (isLoading && filtered.length === 0) {
+      return "Carregando contatos…";
+    }
+    const countLabel = `${filtered.length.toLocaleString("pt-BR")} contato${filtered.length === 1 ? "" : "s"}`;
+    if (hasAnyListFilters) {
+      return `${countLabel} com filtros aplicados`;
+    }
+    return countLabel;
+  }, [filtered.length, hasAnyListFilters, isLoading]);
+
   const exportCustomers = (customers: Customer[], fileLabel: string) => {
     if (!customers.length) {
       toast({
@@ -488,6 +629,14 @@ export default function Clientes() {
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     downloadBlob(`${fileLabel}.csv`, blob);
   };
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function openCustomerProfile(customerId: string) {
+    navigate(`/clientes/${encodeURIComponent(customerId)}`);
+  }
 
   function downloadMinimalImportTemplate() {
     const csv = buildMinimalCustomerImportTemplateCsv();
@@ -541,13 +690,136 @@ export default function Clientes() {
         }}
       />
 
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={cn(pageShellClasses.content, "flex flex-col gap-4")}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--wchat-brand-700))] text-primary-foreground shadow-[0_6px_16px_-8px_hsl(262_60%_40%/0.7)]">
+              <Users2 className="h-5 w-5" aria-hidden />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Contatos</h1>
+              <p className="text-sm text-muted-foreground">{resultsSummary}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className={ui.btnSecondary}
+              disabled={!canEditClientes}
+              title={!canEditClientes ? "Seu papel nao tem permissao para importar contatos." : undefined}
+              onClick={() => {
+                if (!canEditClientes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para importar contatos.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+            >
+              <Upload className="h-4 w-4 shrink-0" />
+              Importar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className={ui.btnPrimary}
+              disabled={!canEditClientes}
+              title={!canEditClientes ? "Seu papel nao tem permissao para cadastrar clientes." : undefined}
+              onClick={() => {
+                if (!canEditClientes) {
+                  toast({
+                    title: "Ação indisponível",
+                    description: "Seu papel nao tem permissao para cadastrar clientes.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setSheetCustomer(null);
+                setNewCustomerPrefill(null);
+                setPendingInboxChatId(null);
+                setReturnToInboxAfterCreate(false);
+                setDialogOpen(true);
+              }}
+            >
+              <UserPlus className="h-4 w-4 shrink-0" />
+              Cadastrar
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className={`${ui.btnGhost} h-9 w-9 shrink-0`} aria-label="Mais ações">
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  disabled={!canEditClientes}
+                  onClick={() => {
+                    if (!canEditClientes) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para colar contatos.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    setQuickPasteOpen((c) => !c);
+                  }}
+                >
+                  Colar contatos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadMinimalImportTemplate()}>Baixar modelo (telefone)</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => exportCustomers(filtered, "clientes-export")}>Exportar CSV</DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canEditClientes}
+                  onClick={() => {
+                    if (!canEditClientes) {
+                      toast({
+                        title: "Ação indisponível",
+                        description: "Seu papel nao tem permissao para editar campos personalizados.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    setCustomFieldsOpen(true);
+                  }}
+                >
+                  Campos personalizados
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[min(100%,20rem)] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, telefone, e-mail..."
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              className={`h-10 pl-9 pr-9 ${ui.input}`}
+              aria-busy={searchPending || isFetching}
+            />
+            {searchPending || (isFetching && !isLoading) ? (
+              <Loader2
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground"
+                aria-hidden
+              />
+            ) : null}
+          </div>
           <Popover modal={false}>
             <PopoverTrigger asChild>
               <Button type="button" variant="ghost" className={ui.btnSecondary}>
                 <ListFilter className="h-4 w-4 shrink-0" />
-                Filtros ({advancedFiltersActiveCount})
+                Filtros{advancedFiltersActiveCount > 0 ? ` (${advancedFiltersActiveCount})` : ""}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className={`w-[min(calc(100vw-2rem),32rem)] p-4 ${ui.popover}`}>
@@ -750,115 +1022,31 @@ export default function Clientes() {
               </div>
             </PopoverContent>
           </Popover>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={`${ui.btnGhost} h-9 w-9 shrink-0`}
-              aria-label="Agenda"
-              onClick={() =>
-                toast({
-                  title: "Período",
-                  description: "Filtro por data em breve.",
-                })
-              }
-            >
-              <Calendar className="h-5 w-5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className={ui.btnSecondary}
-              disabled={!canEditClientes}
-              title={!canEditClientes ? "Seu papel nao tem permissao para importar contatos." : undefined}
-              onClick={() => {
-                if (!canEditClientes) {
-                  toast({
-                    title: "Ação indisponível",
-                    description: "Seu papel nao tem permissao para importar contatos.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                fileInputRef.current?.click();
-              }}
-            >
-              <Upload className="h-4 w-4 shrink-0" />
-              Importar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className={ui.btnPrimary}
-              disabled={!canEditClientes}
-              title={!canEditClientes ? "Seu papel nao tem permissao para cadastrar clientes." : undefined}
-              onClick={() => {
-                if (!canEditClientes) {
-                  toast({
-                    title: "Ação indisponível",
-                    description: "Seu papel nao tem permissao para cadastrar clientes.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                setSheetCustomer(null);
-                setNewCustomerPrefill(null);
-                setPendingInboxChatId(null);
-                setReturnToInboxAfterCreate(false);
-                setDialogOpen(true);
-              }}
-            >
-              <UserPlus className="h-4 w-4 shrink-0" />
-              Cadastrar cliente
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className={`${ui.btnGhost} h-9 w-9 shrink-0`} aria-label="Mais ações">
-                  <MoreHorizontal className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem
-                    disabled={!canEditClientes}
-                    onClick={() => {
-                      if (!canEditClientes) {
-                        toast({
-                          title: "Ação indisponível",
-                          description: "Seu papel nao tem permissao para colar contatos.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setQuickPasteOpen((c) => !c);
-                    }}
-                  >
-                    Colar contatos
-                  </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => downloadMinimalImportTemplate()}>Baixar modelo (telefone)</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => exportCustomers(filtered, "clientes-export")}>Exportar CSV</DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!canEditClientes}
-                  onClick={() => {
-                    if (!canEditClientes) {
-                      toast({
-                        title: "Ação indisponível",
-                        description: "Seu papel nao tem permissao para editar campos personalizados.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    setCustomFieldsOpen(true);
-                  }}
-                >
-                  Campos personalizados
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
         </div>
+
+        {activeFilterChips.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeFilterChips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => removeActiveFilterChip(chip.id)}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-wchat-50 px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-wchat-100"
+                title={`Remover filtro: ${chip.label}`}
+              >
+                <span className="truncate">{chip.label}</span>
+                <X className="h-3 w-3 shrink-0 text-muted-foreground" />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={clearAllListFilters}
+              className="px-2 py-1 text-[11px] font-semibold text-primary hover:underline"
+            >
+              Limpar tudo
+            </button>
+          </div>
+        ) : null}
 
         {quickPasteOpen ? (
           <div className={`${ui.panel} p-4 md:p-5`}>
@@ -883,20 +1071,46 @@ export default function Clientes() {
           </div>
         ) : null}
 
-        <div className="relative min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar contatos por nome, telefone, e-mail..."
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            className={`h-10 pl-9 ${ui.input}`}
-          />
-        </div>
-
         <div className={ui.panel}>
+          {selectedIds.size > 0 ? (
+            <div className="flex flex-wrap items-center gap-3 border-b border-border bg-primary/5 px-4 py-3">
+              <span className="text-sm font-medium text-primary">
+                {selectedIds.size} selecionado{selectedIds.size > 1 ? "s" : ""}
+              </span>
+              <div className="flex-1" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-[8px]"
+                onClick={clearSelection}
+              >
+                Limpar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2 rounded-[8px]"
+                onClick={() => exportCustomers(selectedCustomers, "clientes-selecionados")}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Exportar
+              </Button>
+              {canDeleteClientes ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2 rounded-[8px] border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent [&>th]:border-0">
@@ -949,8 +1163,31 @@ export default function Clientes() {
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow className={`${ui.tableRow} hover:bg-transparent`}>
-                  <TableCell colSpan={TABLE_COLSPAN} className="h-32 text-center text-muted-foreground">
-                    Nenhum contato encontrado.
+                  <TableCell colSpan={TABLE_COLSPAN} className="h-40 text-center">
+                    <p className="text-muted-foreground">Nenhum contato encontrado.</p>
+                    {hasAnyListFilters ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="mt-2 h-auto p-0 text-primary"
+                        onClick={clearAllListFilters}
+                      >
+                        Limpar filtros
+                      </Button>
+                    ) : canEditClientes ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="mt-2 h-auto p-0 text-primary"
+                        onClick={() => {
+                          setSheetCustomer(null);
+                          setNewCustomerPrefill(null);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        Cadastrar primeiro contato
+                      </Button>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -962,8 +1199,12 @@ export default function Clientes() {
                   const showOpenNegotiation =
                     canViewCrm && isSupabaseConfigured && negCountsReady && nNeg > 0;
                   return (
-                    <TableRow key={customer.id} className={ui.tableRow}>
-                      <TableCell className="w-10 align-middle">
+                    <TableRow
+                      key={customer.id}
+                      className={cn(ui.tableRow, "cursor-pointer")}
+                      onClick={() => openCustomerProfile(customer.id)}
+                    >
+                      <TableCell className="w-10 align-middle" onClick={(event) => event.stopPropagation()}>
                         <Checkbox
                           aria-label={`Selecionar ${customer.nome}`}
                           checked={selectedIds.has(customer.id)}
@@ -1004,7 +1245,7 @@ export default function Clientes() {
                       <TableCell className={`py-4 text-right text-[13px] tabular-nums ${ui.tableCellMuted}`}>
                         {nNeg}
                       </TableCell>
-                      <TableCell className="py-4 text-right">
+                      <TableCell className="py-4 text-right" onClick={(event) => event.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -1018,6 +1259,9 @@ export default function Clientes() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => openCustomerProfile(customer.id)}>
+                              Ver perfil
+                            </DropdownMenuItem>
                             {showOpenNegotiation ? (
                               <>
                                 <DropdownMenuItem onClick={() => void openCustomerNegotiation(customer)}>
@@ -1070,8 +1314,13 @@ export default function Clientes() {
 
         {filtered.length > 0 ? (
           <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Linhas por página</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="text-sm text-muted-foreground">
+                Mostrando {pageRangeStart.toLocaleString("pt-BR")}–{pageRangeEnd.toLocaleString("pt-BR")} de{" "}
+                {filtered.length.toLocaleString("pt-BR")}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">Linhas por página</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(value) => {
@@ -1090,6 +1339,7 @@ export default function Clientes() {
                   ))}
                 </SelectContent>
               </Select>
+              </div>
             </div>
             {totalPages > 1 ? (
               <Pagination className="mx-auto w-full sm:mx-0 sm:w-auto">
@@ -1195,6 +1445,59 @@ export default function Clientes() {
                       description: `${deleteTarget.nome} foi removido.`,
                     });
                     setDeleteTarget(null);
+                  } catch (err) {
+                    toast({
+                      title: "Não foi possível excluir",
+                      description: err instanceof Error ? err.message : "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  }
+                })();
+              }}
+            >
+              {deleteCustomers.isPending ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkDeleteOpen && canDeleteClientes}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBulkDeleteOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="rounded-[12px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {selectedIds.size} contato{selectedIds.size > 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Os contatos selecionados serão removidos da base. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCustomers.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCustomers.isPending || !canDeleteClientes || selectedIds.size === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!canDeleteClientes || selectedIds.size === 0) {
+                  return;
+                }
+                const ids = [...selectedIds];
+                void (async () => {
+                  try {
+                    await deleteCustomers.mutateAsync(ids);
+                    toast({
+                      title: "Contatos excluídos",
+                      description: `${ids.length} contato(s) removido(s).`,
+                    });
+                    clearSelection();
+                    setBulkDeleteOpen(false);
                   } catch (err) {
                     toast({
                       title: "Não foi possível excluir",

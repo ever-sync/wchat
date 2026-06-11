@@ -1,38 +1,38 @@
-import Link from "next/link"
-export default function forgot_password() {
+import Link from "next/link";
+import AuthCard from "@/components/wchat/AuthCard";
+import WchatLayout from "@/components/wchat/WchatLayout";
 
-    return (
-        <>
-            <section className="user-form-section forgot-password-section centred">
-                <div className="pattern-layer" style={{ backgroundImage: "url(assets/images/shape/shape-6.jpg)" }}></div>
-                <div className="auto-container">
-                    <div className="sec-title light">
-                        <h6>[ Forgot Password ]</h6>
-                        <h2>Reset Your Password</h2>
-                        <p>Simple Step to Back your Account</p>
-                    </div>
-                    <div className="inner-box">
-                        <div className="form-inner">
-                            <div className="shape" style={{ backgroundImage: "url(assets/images/shape/shape-51.png)" }}></div>
-                            <form action="login.html" method="post">
-                                <div className="form-group">
-                                    <div className="text-box">
-                                        <div className="icon"><img src="assets/images/icons/icon-61.png" alt=""/></div>
-                                        <h6>Email</h6>
-                                    </div>
-                                    <input type="email" name="email" placeholder="Email Address" required=""/>
-                                </div>
-                                <div className="form-group message-btn">
-                                    <button type="submit" className="theme-btn btn-one">Reset Your Password</button>
-                                </div>
-                            </form>
-                        </div>
-                        <div className="lower-text">
-                            <h6><Link href="/login">Back to Login</Link></h6>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </>
-    )
+export default function ForgotPasswordPage() {
+  return (
+    <WchatLayout breadcrumbTitle="Recuperar senha">
+      <AuthCard
+        title="Esqueceu a senha?"
+        subtitle="Informe seu e-mail e enviaremos um link para redefinir sua senha."
+        footer={
+          <p className="mb-0 text-center">
+            <Link href="/login">Voltar para o login</Link>
+          </p>
+        }
+      >
+        <form action="/forgot-password" method="post">
+          <div className="form-group mb-4">
+            <label htmlFor="email" className="form-label">
+              E-mail
+            </label>
+            <input
+              type="email"
+              className="form-control"
+              name="email"
+              id="email"
+              placeholder="seu@email.com"
+              required
+            />
+          </div>
+          <button type="submit" className="th-btn2 btn-gradient w-100">
+            Enviar link de recuperação
+          </button>
+        </form>
+      </AuthCard>
+    </WchatLayout>
+  );
 }

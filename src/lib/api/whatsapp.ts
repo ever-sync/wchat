@@ -12,7 +12,7 @@ import {
 import { useEffect, useMemo } from "react";
 import { invokeAuthedFunction } from "@/lib/api/functions";
 import { isE2eMockAuth } from "@/lib/e2e";
-import { listE2eInboxChats } from "@/lib/inbox-e2e";
+import { getE2eInboxChatById, listE2eInboxChats } from "@/lib/inbox-e2e";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import type {
   ChatResolution,
@@ -25,7 +25,7 @@ import type {
   WhatsappInstanceConnectInput,
   WhatsappMessage,
 } from "@/types/domain";
-import { getCurrentTenantId } from "@/lib/api/tenant";
+import { getCurrentTenantId, getCurrentUserId } from "@/lib/api/tenant";
 import { sanitizeCustomerSearchForPostgrestOrIlike } from "@/lib/customer-search-sanitize";
 
 const CHAT_RESOLUTION_VALUES = new Set<ChatResolution>([
@@ -37,6 +37,45 @@ const CHAT_RESOLUTION_VALUES = new Set<ChatResolution>([
 ]);
 
 const DEFAULT_INBOX_CHATS_LIMIT = 500;
+
+/** Select compartilhado entre listagem e fetch por id (deep link CRM → Inbox). */
+const INBOX_CHAT_SELECT = `
+  id,
+  instance_id,
+  customer_id,
+  remote_jid,
+  remote_phone_digits,
+  remote_phone_e164,
+  display_name,
+  avatar_url,
+  last_message_preview,
+  last_message_at,
+  unread_count,
+  status,
+  resolution,
+  ai_mode,
+  primary_negotiation_id,
+  updated_at,
+  assignee_id,
+  first_inbound_at,
+  first_response_at,
+  sla_first_response_due_at,
+  snooze_until,
+  whatsapp_instances(display_name, archived_at),
+  customers(nome),
+  assignee:profiles!whatsapp_chats_assignee_id_fkey(nome),
+  whatsapp_chat_tags(tag_id, tagged_by, tagged_at, chat_tags(name, color, scope))
+`;
+
+/** Normaliza termo de busca para casar telefone com ou sem + / máscara. */
+export function inboxSearchTermsForPostgrest(raw: string): {
+  text: string;
+  digits: string;
+} {
+  const text = sanitizeCustomerSearchForPostgrestOrIlike(raw);
+  const digits = text.replace(/\D/g, "");
+  return { text, digits };
+}
 
 export function inboxChatFiltersFromListScope(
   scope: InboxListScope,
@@ -104,7 +143,6 @@ type ChatRow = {
   first_response_at?: string | null;
   sla_first_response_due_at?: string | null;
   snooze_until?: string | null;
-  is_pinned?: boolean | null;
   whatsapp_instances?: { display_name: string; archived_at?: string | null } | null;
   customers?: { nome: string } | null;
   assignee?: { nome: string } | null;
@@ -149,7 +187,35 @@ function mapInstance(row: InstanceRow): WhatsappInstance {
   };
 }
 
-function mapChat(row: ChatRow): InboxChat {
+/** Pins por usuário — falha silenciosa se a migration ainda não foi aplicada. */
+async function fetchPinnedChatIdsForCurrentUser(
+  supabase: ReturnType<typeof requireSupabase>,
+  tenantId: string,
+  profileId?: string | null,
+): Promise<Set<string>> {
+  const uid = profileId?.trim();
+  if (!uid) {
+    return new Set();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("whatsapp_chat_pins")
+      .select("chat_id")
+      .eq("tenant_id", tenantId)
+      .eq("profile_id", uid);
+
+    if (error) {
+      return new Set();
+    }
+
+    return new Set((data ?? []).map((row) => String(row.chat_id)));
+  } catch {
+    return new Set();
+  }
+}
+
+function mapChat(row: ChatRow, pinnedChatIds?: Set<string>): InboxChat {
   const rawDisplayName = row.display_name?.trim() ?? "";
   const digits = row.remote_phone_digits?.replace(/\D/g, "") ?? "";
   const fallbackPhone = row.remote_phone_e164 ??
@@ -199,7 +265,7 @@ function mapChat(row: ChatRow): InboxChat {
     firstResponseAt: row.first_response_at ?? null,
     slaFirstResponseDueAt: row.sla_first_response_due_at ?? null,
     snoozeUntil: row.snooze_until ?? null,
-    isPinned: row.is_pinned ?? false,
+    isPinned: pinnedChatIds?.has(row.id) ?? false,
     tags,
   };
 }
@@ -405,38 +471,14 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
     return [] as InboxChat[];
   }
 
-  const tenantId = await getCurrentTenantId();
   const supabase = requireSupabase();
+  const [tenantId, profileId] = await Promise.all([
+    getCurrentTenantId(),
+    getCurrentUserId().catch(() => null),
+  ]);
   let query = supabase
     .from("whatsapp_chats")
-    .select(`
-      id,
-      instance_id,
-      customer_id,
-      remote_jid,
-      remote_phone_digits,
-      remote_phone_e164,
-      display_name,
-      avatar_url,
-      last_message_preview,
-      last_message_at,
-      unread_count,
-      status,
-      resolution,
-      ai_mode,
-      primary_negotiation_id,
-      updated_at,
-      assignee_id,
-      first_inbound_at,
-      first_response_at,
-      sla_first_response_due_at,
-      snooze_until,
-      is_pinned,
-      whatsapp_instances(display_name, archived_at),
-      customers(nome),
-      assignee:profiles!whatsapp_chats_assignee_id_fkey(nome),
-      whatsapp_chat_tags(tag_id, tagged_by, tagged_at, chat_tags(name, color, scope))
-    `)
+    .select(INBOX_CHAT_SELECT)
     .eq("tenant_id", tenantId)
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(filters.limit ?? DEFAULT_INBOX_CHATS_LIMIT);
@@ -460,8 +502,8 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
   }
 
   if (filters.search?.trim()) {
-    const search = sanitizeCustomerSearchForPostgrestOrIlike(filters.search);
-    if (search.length > 0) {
+    const { text: search, digits } = inboxSearchTermsForPostgrest(filters.search);
+    if (search.length > 0 || digits.length > 0) {
       // O PostgREST não permite referenciar uma tabela aninhada (customers.nome)
       // dentro de um or() no nível do whatsapp_chats — isso retorna 400. Então
       // buscamos primeiro os ids dos clientes que casam pelo nome e filtramos por
@@ -474,14 +516,24 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
         .limit(1000);
       const customerIds = (matchedCustomers ?? []).map((c) => c.id as string);
 
-      const orParts = [
-        `display_name.ilike.%${search}%`,
-        `remote_phone_digits.ilike.%${search}%`,
-      ];
+      const orParts: string[] = [];
+      if (search.length > 0) {
+        orParts.push(`display_name.ilike.%${search}%`);
+      }
+      const phoneNeedle = digits.length >= 4 ? digits : search.replace(/\D/g, "");
+      if (phoneNeedle.length >= 4) {
+        orParts.push(`remote_phone_digits.ilike.%${phoneNeedle}%`);
+        orParts.push(`remote_phone_e164.ilike.%${phoneNeedle}%`);
+      } else if (search.length > 0) {
+        orParts.push(`remote_phone_digits.ilike.%${search}%`);
+        orParts.push(`remote_phone_e164.ilike.%${search}%`);
+      }
       if (customerIds.length > 0) {
         orParts.push(`customer_id.in.(${customerIds.join(",")})`);
       }
-      query = query.or(orParts.join(","));
+      if (orParts.length > 0) {
+        query = query.or(orParts.join(","));
+      }
     }
   }
 
@@ -503,6 +555,8 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
   if (error) {
     throw new Error(error.message);
   }
+
+  const pinnedChatIds = await fetchPinnedChatIdsForCurrentUser(supabase, tenantId, profileId);
 
   let rows = (data ?? []) as unknown as ChatRow[];
 
@@ -527,7 +581,7 @@ export async function listInboxChats(filters: InboxChatFilters = {}) {
 
   return rows
     .filter((row) => !row.whatsapp_instances?.archived_at)
-    .map((row) => mapChat(row))
+    .map((row) => mapChat(row, pinnedChatIds))
     .sort((left, right) => {
       // Fixadas sempre no topo, independente de snoozed.
       if (Boolean(left.isPinned) !== Boolean(right.isPinned)) {
@@ -1208,6 +1262,49 @@ export function useUpdateWhatsappInstance(
   });
 }
 
+export async function fetchInboxChatById(chatId: string): Promise<InboxChat | null> {
+  const id = chatId?.trim();
+  if (!id) {
+    return null;
+  }
+
+  if (isE2eMockAuth) {
+    return getE2eInboxChatById(id);
+  }
+
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+
+  const supabase = requireSupabase();
+  const [tenantId, profileId] = await Promise.all([
+    getCurrentTenantId(),
+    getCurrentUserId().catch(() => null),
+  ]);
+  const { data, error } = await supabase
+    .from("whatsapp_chats")
+    .select(INBOX_CHAT_SELECT)
+    .eq("tenant_id", tenantId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const row = data as unknown as ChatRow;
+  if (row.whatsapp_instances?.archived_at) {
+    return null;
+  }
+
+  const pinnedChatIds = await fetchPinnedChatIdsForCurrentUser(supabase, tenantId, profileId);
+  return mapChat(row, pinnedChatIds);
+}
+
 export function useInboxChats(
   filters: InboxChatFilters,
   options?: Omit<UseQueryOptions<InboxChat[], Error>, "queryKey" | "queryFn">,
@@ -1216,6 +1313,20 @@ export function useInboxChats(
     queryKey: ["inbox-chats", filters],
     queryFn: () => listInboxChats(filters),
     staleTime: 15_000,
+    ...options,
+  });
+}
+
+export function useInboxChatById(
+  chatId: string | null | undefined,
+  options?: Omit<UseQueryOptions<InboxChat | null, Error>, "queryKey" | "queryFn">,
+) {
+  const id = chatId?.trim() ?? "";
+  return useQuery({
+    queryKey: ["inbox-chat", id],
+    queryFn: () => fetchInboxChatById(id),
+    enabled: id.length > 0,
+    staleTime: 30_000,
     ...options,
   });
 }
@@ -2027,11 +2138,9 @@ export function useSendWhatsappMessage(
 
         return {
           ...old,
-          pages: upsertOutboundInboxMessagePages(old.pages, data),
+          pages: sanitizeInboxMessagePages(upsertOutboundInboxMessagePages(old.pages, data)),
         };
       });
-
-      void queryClient.invalidateQueries({ queryKey: ["inbox-messages-all", variables.chatId] });
 
       // Patch local da lista lateral em vez de invalidar `inbox-chats`. Evita um
       // GET com todos os filtros ativos (search, instancia, status, unreadOnly)
