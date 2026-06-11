@@ -653,7 +653,7 @@ function FlowCanvasInner({
   }, [steps, setRfNodes, scheduleEmit]);
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full">
+    <div ref={wrapperRef} className="relative h-full w-full bg-slate-950">
       <ReactFlow
         nodes={rfNodes}
         edges={trigger ? [...triggerEdges, ...rfEdges] : rfEdges}
