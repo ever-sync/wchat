@@ -32,7 +32,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { AlertTriangle, Copy, X } from "lucide-react";
+import { AlertTriangle, Copy, Filter, X, Zap } from "lucide-react";
 import { ACTION_ICONS, DRAG_MIME, type DragPayload } from "@/components/marketing/flow-actions";
 import { isExecutableMarketingFlowAction, type MarketingFlowEdge } from "@/lib/marketing/flow-types";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,16 @@ export type CanvasStep = {
 
 export type NodePositions = Record<string, { x: number; y: number }>;
 
+/** Dados do nó de gatilho (entrada do fluxo), renderizado DENTRO do canvas. */
+export type CanvasTrigger = {
+  /** Nome do gatilho (ex.: "Formulário enviado"). */
+  label: string;
+  /** Resumo da configuração (ex.: "Formulário X · campo=valor"). */
+  summary?: string;
+  /** Resumo dos critérios de entrada (ex.: "2 critérios" | "Sem critérios"). */
+  criteriaSummary?: string;
+};
+
 type StepNodeData = {
   step: CanvasStep;
   onEdit: (id: string) => void;
@@ -59,7 +69,18 @@ type StepNodeData = {
   invalid?: boolean;
 };
 
-type RFNode = Node<StepNodeData, "step">;
+type TriggerNodeData = {
+  trigger: CanvasTrigger;
+  onEditTrigger?: () => void;
+  onEditCriteria?: () => void;
+};
+
+type CanvasNodeData = StepNodeData | TriggerNodeData;
+
+type RFNode = Node<CanvasNodeData>;
+
+/** Id reservado do nó de gatilho (não é um step; nunca entra no modelo de arestas). */
+const TRIGGER_NODE_ID = "__trigger__";
 
 // Ramos pre-definidos por tipo de acao (mesma semantica do worker/flow-graph).
 const SPLIT_ACTIONS = new Set(["dividir-caminho", "dividir-por-segmentacao"]);
@@ -93,7 +114,7 @@ function isBranching(actionId: string): boolean {
 // ---------------------------------------------------------------- No customizado
 
 function StepNode({ data, selected }: NodeProps<RFNode>) {
-  const { step, onEdit, onRemove, onDuplicate, invalid } = data;
+  const { step, onEdit, onRemove, onDuplicate, invalid } = data as StepNodeData;
   const Icon = ACTION_ICONS[step.iconKey];
   const noExecutor = !isExecutableMarketingFlowAction(step.actionId);
   const branching = isBranching(step.actionId);
@@ -184,7 +205,62 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
   );
 }
 
-const NODE_TYPES = { step: StepNode };
+/**
+ * Nó de gatilho — a porta de entrada do fluxo, dentro do canvas (estilo n8n).
+ * Clique no corpo abre as configurações do gatilho; o chip de critérios abre o
+ * editor de critérios. Saída visual apenas: as arestas até os passos de entrada
+ * são derivadas e não entram no modelo salvo.
+ */
+function TriggerNode({ data, selected }: NodeProps<RFNode>) {
+  const { trigger, onEditTrigger, onEditCriteria } = data as TriggerNodeData;
+  return (
+    <div
+      onClick={() => onEditTrigger?.()}
+      className={cn(
+        "group relative flex w-64 cursor-pointer flex-col gap-2 rounded-lg border bg-gradient-to-br from-violet-950 to-slate-900 px-3 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-all hover:shadow-[0_4px_16px_rgba(124,58,237,0.35)]",
+        selected
+          ? "border-violet-400 ring-2 ring-violet-400/30"
+          : "border-violet-600/70 hover:border-violet-400",
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white shadow-inner">
+          <Zap className="h-5 w-5 fill-current" aria-hidden />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-300">
+            Gatilho
+          </span>
+          <span className="truncate text-sm font-semibold text-slate-100">{trigger.label}</span>
+          {trigger.summary ? (
+            <span className="truncate text-xs text-slate-400">{trigger.summary}</span>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onEditCriteria?.();
+        }}
+        className="flex items-center gap-1.5 rounded-md border border-violet-700/60 bg-violet-950/60 px-2 py-1 text-left text-xs text-violet-200 transition-colors hover:border-violet-400 hover:text-violet-100"
+        title="Editar critérios de entrada"
+      >
+        <Filter className="h-3 w-3 shrink-0" aria-hidden />
+        <span className="truncate">{trigger.criteriaSummary ?? "Sem critérios"}</span>
+      </button>
+      {/* Apenas saída; as conexões até os passos de entrada são automáticas. */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+        className="!h-3.5 !w-3.5 !border-2 !border-violet-400 !bg-slate-900"
+      />
+    </div>
+  );
+}
+
+const NODE_TYPES = { step: StepNode, trigger: TriggerNode };
 
 // ---------------------------------------------------------------- Layout automatico
 
@@ -267,6 +343,10 @@ type FlowCanvasProps = {
   focusStepId?: string | null;
   /** Chamado depois de focar, pra o pai limpar o focusStepId. */
   onFocusHandled?: () => void;
+  /** Gatilho do fluxo renderizado como nó de entrada dentro do canvas. */
+  trigger?: CanvasTrigger | null;
+  onEditTrigger?: () => void;
+  onEditCriteria?: () => void;
 };
 
 function toRFNodes(
@@ -337,6 +417,9 @@ function FlowCanvasInner({
   onDropAction,
   focusStepId,
   onFocusHandled,
+  trigger,
+  onEditTrigger,
+  onEditCriteria,
 }: FlowCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, setCenter } = useReactFlow();
@@ -356,9 +439,36 @@ function FlowCanvasInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [rfNodes, setRfNodes, onNodesChange] = useNodesState<RFNode>(
-    toRFNodes(steps, initialPositions, onEditStep, onRemoveStep, onDuplicateStep, invalidStepIds),
-  );
+  // Nós iniciais (init-only: o canvas remonta por fluxo via key no pai).
+  // Inclui o nó de gatilho quando informado: posição salva ou à esquerda do
+  // passo mais à esquerda.
+  const initialNodes = useMemo(() => {
+    const stepNodes = toRFNodes(
+      steps,
+      initialPositions,
+      onEditStep,
+      onRemoveStep,
+      onDuplicateStep,
+      invalidStepIds,
+    );
+    if (!trigger) return stepNodes;
+    const minX = stepNodes.length
+      ? Math.min(...stepNodes.map((n) => n.position.x))
+      : NODE_W + GAP_X;
+    const firstY = stepNodes.length ? stepNodes[0].position.y : 0;
+    const triggerPos = positions[TRIGGER_NODE_ID] ?? { x: minX - (NODE_W + GAP_X), y: firstY };
+    const triggerNode: RFNode = {
+      id: TRIGGER_NODE_ID,
+      type: "trigger",
+      position: triggerPos,
+      deletable: false,
+      data: { trigger, onEditTrigger, onEditCriteria },
+    };
+    return [triggerNode, ...stepNodes];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [rfNodes, setRfNodes, onNodesChange] = useNodesState<RFNode>(initialNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>(toRFEdges(edges));
 
   // Refs sempre com o estado mais recente, pra emitir DEPOIS do commit sem ler
@@ -391,11 +501,26 @@ function FlowCanvasInner({
   useEffect(() => {
     setRfNodes((nodes) =>
       nodes.map((n) => {
+        if (n.id === TRIGGER_NODE_ID) return n;
         const invalid = invalidStepIds?.has(n.id) ?? false;
-        return n.data.invalid === invalid ? n : { ...n, data: { ...n.data, invalid } };
+        return (n.data as StepNodeData).invalid === invalid
+          ? n
+          : { ...n, data: { ...n.data, invalid } };
       }),
     );
   }, [invalidStepIds, setRfNodes]);
+
+  // Mantem o conteudo do nó de gatilho em sincronia (label/summary/critérios).
+  useEffect(() => {
+    if (!trigger) return;
+    setRfNodes((nodes) =>
+      nodes.map((n) =>
+        n.id === TRIGGER_NODE_ID
+          ? { ...n, data: { trigger, onEditTrigger, onEditCriteria } }
+          : n,
+      ),
+    );
+  }, [trigger, onEditTrigger, onEditCriteria, setRfNodes]);
 
   // Emite o grafo normalizado pro pai. Deferido (setTimeout 0) pra rodar fora da
   // fase de render — assim os refs ja refletem o commit e nunca chamamos
@@ -416,8 +541,31 @@ function FlowCanvasInner({
     [onGraphChange],
   );
 
+  // Arestas derivadas do gatilho até os passos de entrada (sem aresta de
+  // chegada). Visual apenas: nunca entram no modelo salvo nem são editáveis.
+  const triggerEdges = useMemo<Edge[]>(() => {
+    if (!trigger) return [];
+    const hasIncoming = new Set(rfEdges.map((e) => e.target));
+    return rfNodes
+      .filter((n) => n.id !== TRIGGER_NODE_ID && !hasIncoming.has(n.id))
+      .map((n) => ({
+        id: `t-${TRIGGER_NODE_ID}-${n.id}`,
+        source: TRIGGER_NODE_ID,
+        target: n.id,
+        type: "smoothstep",
+        selectable: false,
+        deletable: false,
+        focusable: false,
+        style: { stroke: "#a78bfa", strokeWidth: 1.5, strokeDasharray: "6 4" },
+      }));
+  }, [trigger, rfNodes, rfEdges]);
+
   const onConnect = useCallback(
     (connection: Connection) => {
+      // O gatilho não participa do modelo de arestas (conexões são derivadas).
+      if (connection.source === TRIGGER_NODE_ID || connection.target === TRIGGER_NODE_ID) {
+        return;
+      }
       const sourceStep = steps.find((s) => s.id === connection.source);
       const existingFromSource = edgesRef.current.filter(
         (e) => e.source === connection.source,
@@ -447,6 +595,7 @@ function FlowCanvasInner({
   // Editar rotulo do ramo: clique na aresta abre um editor inline (sem window.prompt).
   const onEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
+      if (edge.source === TRIGGER_NODE_ID) return; // aresta derivada do gatilho
       const sourceStep = steps.find((s) => s.id === edge.source);
       const rect = wrapperRef.current?.getBoundingClientRect();
       setEdgeEditor({
@@ -507,7 +656,7 @@ function FlowCanvasInner({
     <div ref={wrapperRef} className="relative h-full w-full">
       <ReactFlow
         nodes={rfNodes}
-        edges={rfEdges}
+        edges={trigger ? [...triggerEdges, ...rfEdges] : rfEdges}
         nodeTypes={NODE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

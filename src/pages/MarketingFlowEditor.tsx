@@ -247,126 +247,6 @@ function TabButton({
   );
 }
 
-function CriteriaCard({
-  conditions,
-  onEdit,
-}: {
-  conditions: string[];
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex w-[320px] shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-foreground">
-          Devem percorrer o fluxo
-        </span>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
-        >
-          <Pencil className="h-3.5 w-3.5" aria-hidden />
-          Editar
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-3">
-        <span className="w-fit rounded-md bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background">
-          Leads que vão atender aos critérios
-        </span>
-
-        {conditions.length === 0 ? (
-          <p className="text-sm leading-snug text-muted-foreground">
-            Nenhum critério configurado. Clique em <span className="font-semibold">Editar</span> para definir
-            quem deve percorrer este fluxo.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2 text-sm leading-snug text-foreground">
-            {conditions.map((condition, index) => (
-              <div key={`${index}-${condition}`} className="flex flex-col gap-0.5">
-                {index > 0 ? (
-                  <p className="text-muted-foreground">e também</p>
-                ) : null}
-                <p className="font-semibold">{condition}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TriggerCard({
-  trigger,
-  onEdit,
-}: {
-  trigger: Record<string, unknown>;
-  onEdit: () => void;
-}) {
-  const type = typeof trigger.type === "string" ? trigger.type : "";
-  const definition = getMarketingTriggerDefinition(type);
-  const summary = summarizeMarketingTrigger(type, trigger.config);
-
-  return (
-    <div className="flex w-[360px] shrink-0 flex-col gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-950/30">
-      <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-violet-700 dark:text-violet-300">
-          <span className="h-2.5 w-2.5 rounded-full bg-violet-600" aria-hidden />
-          Gatilho inicial
-        </span>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex items-center gap-1 text-sm font-semibold text-violet-700 hover:underline dark:text-violet-300"
-        >
-          <Pencil className="h-3.5 w-3.5" aria-hidden />
-          Ajustar
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-lg border border-violet-200 bg-background/90 p-3 dark:border-violet-900/50 dark:bg-background/20">
-        {definition ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full bg-violet-600 px-3 py-1 text-white hover:bg-violet-600">
-                {definition.label}
-              </Badge>
-              <Badge variant="outline" className="rounded-full px-3 py-1">
-                {definition.category === "manual"
-                  ? "Manual"
-                  : definition.category === "whatsapp"
-                    ? "WhatsApp"
-                    : definition.category === "forms"
-                      ? "Formulários"
-                      : definition.category === "tags"
-                        ? "Etiquetas"
-                        : definition.category === "crm"
-                          ? "CRM"
-                          : "IA"}
-              </Badge>
-            </div>
-            <p className="text-sm leading-snug text-foreground">{definition.description}</p>
-          </>
-        ) : (
-          <>
-            <Badge variant="outline" className="w-fit rounded-full px-3 py-1">
-              Sem gatilho definido
-            </Badge>
-            <p className="text-sm leading-snug text-muted-foreground">
-              Abra as configurações para escolher a fonte inicial deste fluxo.
-            </p>
-          </>
-        )}
-
-        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          {summary}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CriteriaEditDialog({
   open,
   onOpenChange,
@@ -1121,6 +1001,23 @@ export default function MarketingFlowEditor() {
 
   const flowCriteria = flow ? parseCriteria(flow.criteria) : { conditions: [] };
 
+  // Conteúdo do nó de gatilho dentro do canvas (memoizado: o canvas sincroniza
+  // o nó num efeito que depende desta referência).
+  const canvasTrigger = useMemo(() => {
+    const triggerRec = asRecord(flow?.trigger);
+    const type = typeof triggerRec.type === "string" ? triggerRec.type : "";
+    const definition = getMarketingTriggerDefinition(type);
+    const summary = type ? summarizeMarketingTrigger(type, triggerRec.config) : "";
+    const n = flowCriteria.conditions.length;
+    return {
+      label: definition?.label ?? "Defina o gatilho",
+      summary: summary || undefined,
+      criteriaSummary:
+        n > 0 ? `${n} critério${n === 1 ? "" : "s"} de entrada` : "Sem critérios — todos entram",
+    };
+     
+  }, [flow?.trigger, flowCriteria.conditions.length]);
+
   const handleSaveCriteria = (conditions: string[]) => {
     if (!flow) return;
     updateFlow.mutate(
@@ -1478,15 +1375,7 @@ export default function MarketingFlowEditor() {
 
       {flow && tab === "editor" ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          {/* Faixa de entrada: gatilho + critérios (editáveis nas abas/dialogs). */}
-          <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-border bg-card/60 px-6 py-4">
-            <TriggerCard trigger={flow.trigger} onEdit={() => setTab("configuracoes")} />
-            <CriteriaCard
-              conditions={flowCriteria.conditions}
-              onEdit={() => setCriteriaDialogOpen(true)}
-            />
-          </div>
-
+          {/* O gatilho vive DENTRO do canvas como nó de entrada (estilo n8n). */}
           <div className="relative min-h-0 flex-1">
             <div className="pointer-events-none absolute right-6 top-6 z-10">
               <button
@@ -1517,6 +1406,9 @@ export default function MarketingFlowEditor() {
               onDropAction={handleDropOnCanvas}
               focusStepId={focusStepId}
               onFocusHandled={() => setFocusStepId(null)}
+              trigger={canvasTrigger}
+              onEditTrigger={() => setTab("configuracoes")}
+              onEditCriteria={() => setCriteriaDialogOpen(true)}
             />
 
             {steps.length === 0 ? (
