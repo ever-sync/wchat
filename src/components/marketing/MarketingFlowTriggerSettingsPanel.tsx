@@ -276,6 +276,122 @@ function FormsScopePicker({
   );
 }
 
+type FormFieldOperator = "equals" | "contains" | "exists";
+type FormFieldCondition = { field: string; operator: FormFieldOperator; value: string };
+
+const FORM_FIELD_OPERATORS: { value: FormFieldOperator; label: string }[] = [
+  { value: "equals", label: "é igual a" },
+  { value: "contains", label: "contém" },
+  { value: "exists", label: "está preenchido" },
+];
+
+function parseFieldConditions(value: unknown): FormFieldCondition[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const r = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const op = String(r.operator ?? "contains");
+    return {
+      field: String(r.field ?? ""),
+      operator: op === "equals" || op === "exists" ? op : "contains",
+      value: String(r.value ?? ""),
+    };
+  });
+}
+
+/** Construtor de condições de campo do formulário (operador + E/OU). */
+function FormFieldConditionsEditor({
+  conditions,
+  mode,
+  onChange,
+}: {
+  conditions: FormFieldCondition[];
+  mode: "all" | "any";
+  onChange: (conditions: FormFieldCondition[], mode: "all" | "any") => void;
+}) {
+  const update = (i: number, patch: Partial<FormFieldCondition>) => {
+    onChange(
+      conditions.map((c, idx) => (idx === i ? { ...c, ...patch } : c)),
+      mode,
+    );
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {conditions.length > 1 ? (
+        <div className="inline-flex items-center gap-1 self-start rounded-md border border-border bg-muted/40 p-0.5 text-xs">
+          {(["all", "any"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onChange(conditions, m)}
+              className={cn(
+                "rounded px-2.5 py-1 font-medium transition-colors",
+                mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m === "all" ? "Todas (E)" : "Qualquer (OU)"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {conditions.map((c, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-2">
+          <Input
+            value={c.field}
+            onChange={(e) => update(i, { field: e.target.value })}
+            placeholder="campo (ex.: beneficio)"
+            className="h-9 w-full sm:w-40"
+          />
+          <Select value={c.operator} onValueChange={(v) => update(i, { operator: v as FormFieldOperator })}>
+            <SelectTrigger className="h-9 w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FORM_FIELD_OPERATORS.map((op) => (
+                <SelectItem key={op.value} value={op.value}>
+                  {op.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {c.operator !== "exists" ? (
+            <Input
+              value={c.value}
+              onChange={(e) => update(i, { value: e.target.value })}
+              placeholder="valor (ex.: INSS)"
+              className="h-9 w-full flex-1 sm:w-auto"
+            />
+          ) : (
+            <span className="flex-1 text-xs text-muted-foreground">qualquer valor</span>
+          )}
+          <button
+            type="button"
+            onClick={() => onChange(conditions.filter((_, idx) => idx !== i), mode)}
+            aria-label="Remover condição"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      ))}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start gap-1.5"
+        onClick={() => onChange([...conditions, { field: "", operator: "contains", value: "" }], mode)}
+      >
+        <Plus className="h-3.5 w-3.5" aria-hidden />
+        Adicionar condição
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Sem condições = qualquer envio do formulário entra. “SMS/HSM” não se aplica aqui.
+      </p>
+    </div>
+  );
+}
+
 function TriggerFieldEditor({
   field,
   value,
@@ -603,16 +719,43 @@ export function MarketingFlowTriggerSettingsPanel({
                 </div>
                 <Hash className="h-4 w-4 text-primary" aria-hidden />
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {definition.filters.map((field) => (
-                  <TriggerFieldEditor
-                    key={field.id}
-                    field={field}
-                    value={draftConfig[field.id]}
-                    onChange={(next) => patchConfig({ [field.id]: next })}
-                  />
-                ))}
-              </div>
+              {draftType === "form_submitted" ? (
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-sm font-medium text-foreground">
+                      Condições do formulário
+                    </Label>
+                    <FormFieldConditionsEditor
+                      conditions={parseFieldConditions(draftConfig.fieldConditions)}
+                      mode={draftConfig.fieldMatchMode === "any" ? "any" : "all"}
+                      onChange={(conditions, mode) =>
+                        patchConfig({ fieldConditions: conditions, fieldMatchMode: mode })
+                      }
+                    />
+                  </div>
+                  {definition.filters
+                    .filter((field) => field.id === "leadMode")
+                    .map((field) => (
+                      <TriggerFieldEditor
+                        key={field.id}
+                        field={field}
+                        value={draftConfig[field.id]}
+                        onChange={(next) => patchConfig({ [field.id]: next })}
+                      />
+                    ))}
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {definition.filters.map((field) => (
+                    <TriggerFieldEditor
+                      key={field.id}
+                      field={field}
+                      value={draftConfig[field.id]}
+                      onChange={(next) => patchConfig({ [field.id]: next })}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           ) : null}
 
