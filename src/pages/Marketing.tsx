@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { Suspense, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   ChevronDown,
   FileText,
   LayoutTemplate,
   Link2,
+  Loader2,
   type LucideIcon,
   Megaphone,
   MessageCircle,
@@ -13,19 +14,37 @@ import {
   Sparkles,
   Workflow,
 } from "lucide-react";
+import { lazyWithReload } from "@/lib/chunk-load-recovery";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MarketingAutomations } from "@/components/marketing/MarketingAutomations";
-import { MarketingAutomations2 } from "@/components/marketing/MarketingAutomations2";
-import { MarketingCampaigns } from "@/components/marketing/MarketingCampaigns";
-import { MarketingFormsTab } from "@/components/marketing/forms/MarketingFormsTab";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageShell } from "@/components/layout/PageShell";
 import { cn } from "@/lib/utils";
+
+const MarketingCampaigns = lazyWithReload(() =>
+  import("@/components/marketing/MarketingCampaigns").then((m) => ({
+    default: m.MarketingCampaigns,
+  })),
+);
+const MarketingAutomations = lazyWithReload(() =>
+  import("@/components/marketing/MarketingAutomations").then((m) => ({
+    default: m.MarketingAutomations,
+  })),
+);
+const MarketingFormsTab = lazyWithReload(() =>
+  import("@/components/marketing/forms/MarketingFormsTab").then((m) => ({
+    default: m.MarketingFormsTab,
+  })),
+);
+const MarketingAutomations2 = lazyWithReload(() =>
+  import("@/components/marketing/MarketingAutomations2").then((m) => ({
+    default: m.MarketingAutomations2,
+  })),
+);
 
 const CONVERTER_SUB_TABS = [
   { value: "landing-pages", label: "Landing Pages", icon: LayoutTemplate },
@@ -45,6 +64,12 @@ type MarketingTab = (typeof TABS)[number];
 const DEFAULT_TAB: MarketingTab = "campanhas";
 
 const CONVERTER_VALUES = new Set<string>(CONVERTER_SUB_TABS.map((t) => t.value));
+
+const MARKETING_TAB_TRIGGER_CLASS =
+  "gap-2 rounded-lg px-4 text-muted-foreground hover:text-foreground data-[state=active]:bg-[#003D5C] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:hover:bg-[#003D5C] data-[state=active]:hover:text-white";
+
+const MARKETING_TAB_ACTIVE_CLASS =
+  "bg-[#003D5C] text-white shadow-sm hover:bg-[#003D5C] hover:text-white";
 
 function parseTab(value: string | null): MarketingTab {
   if (value && (TABS as readonly string[]).includes(value)) {
@@ -83,9 +108,7 @@ function ConverterTabTrigger({
           type="button"
           className={cn(
             "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            active
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+            active ? MARKETING_TAB_ACTIVE_CLASS : "text-muted-foreground hover:text-foreground",
           )}
           aria-haspopup="menu"
         >
@@ -106,6 +129,28 @@ function ConverterTabTrigger({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function TabPanelFallback() {
+  return (
+    <div className="flex min-h-[240px] items-center justify-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      Carregando…
+    </div>
+  );
+}
+
+function MarketingTabPanel({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  if (!active) {
+    return null;
+  }
+  return <Suspense fallback={<TabPanelFallback />}>{children}</Suspense>;
 }
 
 function ComingSoon({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
@@ -149,15 +194,15 @@ export default function Marketing() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col gap-5">
         <TabsList className="h-11 w-full justify-start gap-1 rounded-xl bg-muted/60 p-1 sm:w-auto">
-          <TabsTrigger value="campanhas" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="campanhas" className={MARKETING_TAB_TRIGGER_CLASS}>
             <Send className="h-4 w-4" aria-hidden />
             Campanhas
           </TabsTrigger>
-          <TabsTrigger value="automacoes" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="automacoes" className={MARKETING_TAB_TRIGGER_CLASS}>
             <Workflow className="h-4 w-4" aria-hidden />
             Automações
           </TabsTrigger>
-          <TabsTrigger value="automacao-2" className="gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
+          <TabsTrigger value="automacao-2" className={MARKETING_TAB_TRIGGER_CLASS}>
             <Sparkles className="h-4 w-4" aria-hidden />
             Automação 2.0
           </TabsTrigger>
@@ -168,26 +213,39 @@ export default function Marketing() {
           />
         </TabsList>
 
-        <TabsContent value="campanhas" className="mt-0">
-          <MarketingCampaigns />
-        </TabsContent>
+        <div className="mt-0" role="tabpanel" hidden={activeTab !== "campanhas"}>
+          <MarketingTabPanel active={activeTab === "campanhas"}>
+            <MarketingCampaigns />
+          </MarketingTabPanel>
+        </div>
 
-        <TabsContent value="automacoes" className="mt-0">
-          <MarketingAutomations />
-        </TabsContent>
+        <div className="mt-0" role="tabpanel" hidden={activeTab !== "automacoes"}>
+          <MarketingTabPanel active={activeTab === "automacoes"}>
+            <MarketingAutomations />
+          </MarketingTabPanel>
+        </div>
 
-        <TabsContent value="automacao-2" className="mt-0">
-          <MarketingAutomations2 />
-        </TabsContent>
+        <div className="mt-0" role="tabpanel" hidden={activeTab !== "automacao-2"}>
+          <MarketingTabPanel active={activeTab === "automacao-2"}>
+            <MarketingAutomations2 />
+          </MarketingTabPanel>
+        </div>
 
         {CONVERTER_SUB_TABS.map((item) => (
-          <TabsContent key={item.value} value={item.value} className="mt-0">
-            {item.value === "formularios" ? (
-              <MarketingFormsTab />
-            ) : (
-              <ComingSoon icon={item.icon} title={item.label} />
-            )}
-          </TabsContent>
+          <div
+            key={item.value}
+            className="mt-0"
+            role="tabpanel"
+            hidden={activeTab !== item.value}
+          >
+            <MarketingTabPanel active={activeTab === item.value}>
+              {item.value === "formularios" ? (
+                <MarketingFormsTab />
+              ) : (
+                <ComingSoon icon={item.icon} title={item.label} />
+              )}
+            </MarketingTabPanel>
+          </div>
         ))}
       </Tabs>
     </PageShell>
