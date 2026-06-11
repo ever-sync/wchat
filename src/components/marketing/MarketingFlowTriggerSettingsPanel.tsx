@@ -92,6 +92,9 @@ function renderScopeValue(
   onChange: (next: unknown) => void,
 ) {
   if (field.kind === "select") {
+    // Só injeta o "Tudo" genérico se o campo NÃO tiver a própria opção `any`
+    // (evita duplicar, ex.: leadMode já tem "Novo ou existente" = any).
+    const hasAnyOption = field.options?.some((option) => option.value === "any");
     return (
       <Select
         value={typeof value === "string" ? value : "any"}
@@ -101,7 +104,7 @@ function renderScopeValue(
           <SelectValue placeholder={field.placeholder ?? "Selecione"} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="any">Tudo</SelectItem>
+          {hasAnyOption ? null : <SelectItem value="any">Tudo</SelectItem>}
           {field.options?.map((option) => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
