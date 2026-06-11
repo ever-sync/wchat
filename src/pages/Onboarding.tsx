@@ -91,7 +91,7 @@ function objectiveDestination(objective: Objective) {
     case "suporte":
       return { label: "Abrir Inbox", to: "/inbox" };
     case "recuperacao":
-      return { label: "Abrir automacoes", to: "/marketing?aba=automacoes" };
+      return { label: "Abrir automacoes", to: "/marketing?aba=automacao-2" };
     case "atendimento":
     default:
       return { label: "Abrir Inbox", to: "/inbox" };
@@ -204,7 +204,7 @@ export default function Onboarding() {
               ? `IA padrão: ${settings.defaultAiMode}`
               : "Sem automação externa ligada",
         actionLabel: "Abrir automações",
-        actionTo: "/marketing?aba=automacoes",
+        actionTo: "/marketing?aba=automacao-2",
         icon: Workflow,
       },
       {

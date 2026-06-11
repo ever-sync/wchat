@@ -502,18 +502,48 @@ function StepEditDialog({
     }
   };
 
-  return (
-    <Dialog open={!!step} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{step ? step.label : "Editar passo"}</DialogTitle>
-          <DialogDescription>
-            {ConfigComponent
-              ? "Configure os campos abaixo. Os valores são salvos junto com o fluxo no botão “Salvar” do cabeçalho."
-              : "Adicione uma descrição para este passo. Deixe em branco para remover."}
-          </DialogDescription>
-        </DialogHeader>
+  if (!step) return null;
 
+  // Painel lateral (estilo n8n): configura o nó sem modal, com o canvas visível.
+  return (
+    <aside
+      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-200"
+      role="dialog"
+      aria-label={`Configurar ${step.label}`}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white",
+              step.iconClass,
+            )}
+          >
+            {(() => {
+              const Icon = ACTION_ICONS[step.iconKey];
+              return Icon ? <Icon className="h-4 w-4" aria-hidden /> : null;
+            })()}
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-foreground">{step.label}</h2>
+            <p className="text-xs text-muted-foreground">
+              {ConfigComponent
+                ? "Os valores são salvos com o fluxo no “Salvar” do cabeçalho."
+                : "Descrição livre do passo (em branco remove)."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          aria-label="Fechar painel"
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {ConfigComponent && configKind ? (
           <ConfigComponent
             value={parseConfig(configKind, configDraft)}
@@ -566,20 +596,20 @@ function StepEditDialog({
             </div>
           </div>
         )}
+      </div>
 
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={ConfigComponent ? handleSaveConfig : handleSaveSubtitle}
-          >
-            Aplicar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          onClick={ConfigComponent ? handleSaveConfig : handleSaveSubtitle}
+        >
+          Aplicar
+        </Button>
+      </div>
+    </aside>
   );
 }
 
@@ -1252,7 +1282,7 @@ export default function MarketingFlowEditor() {
       <header className="flex items-center justify-between border-b border-border bg-card px-6">
         <div className="flex items-center gap-6">
           <Link
-            to="/marketing?aba=automacoes"
+            to="/marketing?aba=automacao-2"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             ← Voltar
@@ -1476,7 +1506,10 @@ export default function MarketingFlowEditor() {
               steps={steps}
               edges={edges}
               positions={positions}
-              onEditStep={setEditingStepId}
+              onEditStep={(id) => {
+                setActionsOpen(false);
+                setEditingStepId(id);
+              }}
               onRemoveStep={handleRemoveStep}
               onDuplicateStep={handleDuplicateStep}
               invalidStepIds={invalidStepIds}

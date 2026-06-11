@@ -12,7 +12,6 @@ import {
   Send,
   Shuffle,
   Sparkles,
-  Workflow,
 } from "lucide-react";
 import { lazyWithReload } from "@/lib/chunk-load-recovery";
 import {
@@ -40,12 +39,6 @@ const MarketingFormsTab = lazyWithReload(() =>
     default: m.MarketingFormsTab,
   })),
 );
-const MarketingAutomations2 = lazyWithReload(() =>
-  import("@/components/marketing/MarketingAutomations2").then((m) => ({
-    default: m.MarketingAutomations2,
-  })),
-);
-
 const CONVERTER_SUB_TABS = [
   { value: "landing-pages", label: "Landing Pages", icon: LayoutTemplate },
   { value: "formularios", label: "Formulários", icon: FileText },
@@ -55,7 +48,6 @@ const CONVERTER_SUB_TABS = [
 
 const TABS = [
   "campanhas",
-  "automacoes",
   "automacao-2",
   ...CONVERTER_SUB_TABS.map((t) => t.value),
 ] as const;
@@ -72,6 +64,10 @@ const MARKETING_TAB_ACTIVE_CLASS =
   "bg-[#003D5C] text-white shadow-sm hover:bg-[#003D5C] hover:text-white";
 
 function parseTab(value: string | null): MarketingTab {
+  // Links antigos da aba Automações redirecionam para a Automação 2.0.
+  if (value === "automacoes") {
+    return "automacao-2";
+  }
   if (value && (TABS as readonly string[]).includes(value)) {
     return value as MarketingTab;
   }
@@ -198,10 +194,6 @@ export default function Marketing() {
             <Send className="h-4 w-4" aria-hidden />
             Campanhas
           </TabsTrigger>
-          <TabsTrigger value="automacoes" className={MARKETING_TAB_TRIGGER_CLASS}>
-            <Workflow className="h-4 w-4" aria-hidden />
-            Automações
-          </TabsTrigger>
           <TabsTrigger value="automacao-2" className={MARKETING_TAB_TRIGGER_CLASS}>
             <Sparkles className="h-4 w-4" aria-hidden />
             Automação 2.0
@@ -219,15 +211,9 @@ export default function Marketing() {
           </MarketingTabPanel>
         </div>
 
-        <div className="mt-0" role="tabpanel" hidden={activeTab !== "automacoes"}>
-          <MarketingTabPanel active={activeTab === "automacoes"}>
-            <MarketingAutomations />
-          </MarketingTabPanel>
-        </div>
-
         <div className="mt-0" role="tabpanel" hidden={activeTab !== "automacao-2"}>
           <MarketingTabPanel active={activeTab === "automacao-2"}>
-            <MarketingAutomations2 />
+            <MarketingAutomations />
           </MarketingTabPanel>
         </div>
 

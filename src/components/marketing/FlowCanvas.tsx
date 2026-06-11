@@ -102,20 +102,20 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
     <div
       onClick={() => onEdit(step.id)}
       className={cn(
-        "group relative flex w-60 cursor-pointer items-start gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors",
+        "group relative flex w-64 cursor-pointer items-center gap-3 rounded-lg border bg-slate-800 px-3 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.5)]",
         invalid
-          ? "border-destructive/70 ring-2 ring-destructive/30"
+          ? "border-red-500/80 ring-2 ring-red-500/30"
           : selected
-            ? "border-primary ring-2 ring-primary/30"
+            ? "border-sky-400 ring-2 ring-sky-400/30"
             : noExecutor
-              ? "border-amber-500/60"
-              : "border-border",
+              ? "border-amber-500/50"
+              : "border-slate-600/80 hover:border-slate-400",
       )}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-2 !border-primary !bg-background"
+        className="!h-3.5 !w-3.5 !border-2 !border-slate-400 !bg-slate-900 transition-colors hover:!border-sky-400"
       />
       <div className="absolute -right-2 -top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         {onDuplicate ? (
@@ -126,7 +126,7 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
               onDuplicate(step.id);
             }}
             aria-label={`Duplicar ${step.label}`}
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-slate-300 shadow-sm transition-colors hover:border-sky-400 hover:text-sky-400"
           >
             <Copy className="h-3.5 w-3.5" aria-hidden />
           </button>
@@ -138,38 +138,36 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
             onRemove(step.id);
           }}
           aria-label={`Remover ${step.label}`}
-          className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-slate-300 shadow-sm transition-colors hover:border-red-400 hover:text-red-400"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
       <span
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white shadow-inner",
           step.iconClass,
         )}
       >
         {Icon ? (
-          <Icon className={cn("h-4 w-4", step.iconKey === "star" ? "fill-current" : "")} aria-hidden />
+          <Icon className={cn("h-5 w-5", step.iconKey === "star" ? "fill-current" : "")} aria-hidden />
         ) : null}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+        <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-slate-100">
           {step.label}
           {invalid ? (
-            <AlertTriangle className="h-3 w-3 shrink-0 text-destructive" aria-hidden />
+            <AlertTriangle className="h-3 w-3 shrink-0 text-red-400" aria-hidden />
           ) : noExecutor ? (
-            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" aria-hidden />
+            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" aria-hidden />
           ) : null}
         </span>
         {noExecutor ? (
-          <span className="truncate text-xs text-amber-600 dark:text-amber-400">
-            Ainda não executável
-          </span>
+          <span className="truncate text-xs text-amber-400/90">Ainda não executável</span>
         ) : step.subtitle ? (
-          <span className="truncate text-xs text-muted-foreground">{step.subtitle}</span>
+          <span className="truncate text-xs text-slate-400">{step.subtitle}</span>
         ) : (
-          <span className="truncate text-xs text-muted-foreground">Clique para configurar</span>
+          <span className="truncate text-xs text-slate-500">Clique para configurar</span>
         )}
       </div>
 
@@ -178,8 +176,8 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
         type="source"
         position={Position.Right}
         className={cn(
-          "!h-3 !w-3 !border-2 !bg-background",
-          branching ? "!border-amber-500" : "!border-primary",
+          "!h-3.5 !w-3.5 !border-2 !bg-slate-900 transition-colors hover:!border-sky-400",
+          branching ? "!border-amber-400" : "!border-slate-400",
         )}
       />
     </div>
@@ -296,7 +294,10 @@ function branchSuggestions(actionId: string): string[] {
   return [];
 }
 
-const BRANCH_EDGE_STYLE = { stroke: "hsl(var(--primary))", strokeWidth: 2 };
+const BRANCH_EDGE_STYLE = { stroke: "#38bdf8", strokeWidth: 2 };
+const DEFAULT_EDGE_STYLE = { stroke: "#64748b", strokeWidth: 1.5 };
+const EDGE_LABEL_STYLE = { fontSize: 11, fontWeight: 600, fill: "#e2e8f0" } as const;
+const EDGE_LABEL_BG_STYLE = { fill: "#1e293b", fillOpacity: 0.95 } as const;
 
 function toRFEdges(edges: MarketingFlowEdge[]): Edge[] {
   return edges.map((e, i) => {
@@ -308,8 +309,9 @@ function toRFEdges(edges: MarketingFlowEdge[]): Edge[] {
       label: e.branch,
       type: "smoothstep",
       animated: false,
-      style: hasBranch ? BRANCH_EDGE_STYLE : undefined,
-      labelStyle: { fontSize: 11, fontWeight: 600 },
+      style: hasBranch ? BRANCH_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+      labelStyle: EDGE_LABEL_STYLE,
+      labelBgStyle: EDGE_LABEL_BG_STYLE,
       labelBgPadding: [6, 2] as [number, number],
       labelBgBorderRadius: 6,
     };
@@ -428,8 +430,9 @@ function FlowCanvasInner({
           ...connection,
           type: "smoothstep",
           label: branch,
-          style: branch ? BRANCH_EDGE_STYLE : undefined,
-          labelStyle: { fontSize: 11, fontWeight: 600 },
+          style: branch ? BRANCH_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+          labelStyle: EDGE_LABEL_STYLE,
+          labelBgStyle: EDGE_LABEL_BG_STYLE,
           labelBgPadding: [6, 2] as [number, number],
           labelBgBorderRadius: 6,
         },
@@ -462,7 +465,11 @@ function FlowCanvasInner({
       const trimmed = label.trim();
       const updated = edgesRef.current.map((e) =>
         e.id === id
-          ? { ...e, label: trimmed || undefined, style: trimmed ? BRANCH_EDGE_STYLE : undefined }
+          ? {
+              ...e,
+              label: trimmed || undefined,
+              style: trimmed ? BRANCH_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+            }
           : e,
       );
       setRfEdges(updated);
@@ -518,37 +525,40 @@ function FlowCanvasInner({
         fitView
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={["Backspace", "Delete"]}
-        className="bg-muted/20"
+        className="bg-slate-950"
       >
-        <Background gap={20} className="text-border" />
-        <Controls showInteractive={false} />
+        <Background gap={24} size={1.5} color="#334155" />
+        <Controls
+          showInteractive={false}
+          className="!rounded-lg !border !border-slate-700 !bg-slate-800 !shadow-lg [&_button]:!border-slate-700 [&_button]:!bg-slate-800 [&_button]:!fill-slate-300 [&_button:hover]:!bg-slate-700"
+        />
         <MiniMap
           pannable
           zoomable
-          className="!bg-card"
-          nodeClassName="fill-primary/40"
-          maskColor="hsl(var(--muted) / 0.6)"
+          className="!rounded-lg !border !border-slate-700 !bg-slate-900"
+          nodeColor="#475569"
+          maskColor="rgba(2, 6, 23, 0.7)"
         />
       </ReactFlow>
 
       <button
         type="button"
         onClick={autoLayout}
-        className="absolute left-4 top-4 z-10 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:text-primary"
+        className="absolute left-4 top-4 z-10 rounded-full border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 shadow-md transition-colors hover:border-sky-400 hover:text-sky-400"
       >
         Auto-organizar
       </button>
 
       {edgeEditor ? (
         <div
-          className="absolute z-20 flex w-56 flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-lg"
+          className="absolute z-20 flex w-56 flex-col gap-2 rounded-lg border border-slate-600 bg-slate-800 p-3 shadow-xl"
           style={{
             left: Math.max(8, Math.min(edgeEditor.x, (wrapperRef.current?.clientWidth ?? 400) - 232)),
             top: Math.max(8, edgeEditor.y),
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <p className="text-xs font-semibold text-foreground">Rótulo do ramo</p>
+          <p className="text-xs font-semibold text-slate-100">Rótulo do ramo</p>
           <input
             autoFocus
             value={edgeEditor.value}
@@ -560,7 +570,7 @@ function FlowCanvasInner({
               else if (e.key === "Escape") setEdgeEditor(null);
             }}
             placeholder="Ex.: sim / não"
-            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            className="h-8 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-400"
           />
           {edgeEditor.suggestions.length > 0 ? (
             <div className="flex flex-wrap gap-1">
@@ -569,7 +579,7 @@ function FlowCanvasInner({
                   key={s}
                   type="button"
                   onClick={() => commitEdgeLabel(edgeEditor.id, s)}
-                  className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                  className="rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-300 transition-colors hover:border-sky-400 hover:text-sky-400"
                 >
                   {s}
                 </button>
@@ -580,14 +590,14 @@ function FlowCanvasInner({
             <button
               type="button"
               onClick={() => commitEdgeLabel(edgeEditor.id, "")}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-xs text-slate-400 hover:text-slate-100"
             >
               Saída padrão
             </button>
             <button
               type="button"
               onClick={() => commitEdgeLabel(edgeEditor.id, edgeEditor.value)}
-              className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+              className="rounded-md bg-sky-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-400"
             >
               Salvar
             </button>
