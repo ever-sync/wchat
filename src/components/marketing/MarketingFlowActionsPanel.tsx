@@ -8,6 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { isExecutableMarketingFlowAction } from "@/lib/marketing/flow-types";
 import {
   ACTION_CATEGORIES,
   ACTION_ICONS,
@@ -50,6 +51,34 @@ function ItemBadgeRender({ badge }: { badge: ItemBadge }) {
 
 function ActionItemRow({ item }: { item: ActionDefinition }) {
   const Icon = ACTION_ICONS[item.iconKey];
+  const executable = isExecutableMarketingFlowAction(item.id);
+
+  // Ações sem executor no worker não podem ir para um fluxo publicado — mostra
+  // como "Em breve" e bloqueia o arraste (evita a armadilha de montar e não rodar).
+  if (!executable) {
+    return (
+      <div
+        aria-disabled
+        title="Em breve — esta ação ainda não executa em fluxos publicados"
+        className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 opacity-60"
+      >
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white",
+            item.iconClass,
+          )}
+        >
+          {Icon ? <Icon className="h-4 w-4" aria-hidden /> : null}
+        </span>
+        <span className="flex-1 truncate text-base font-medium text-muted-foreground">
+          {item.label}
+        </span>
+        <span className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Em breve
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
