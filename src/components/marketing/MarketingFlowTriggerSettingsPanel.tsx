@@ -305,18 +305,45 @@ function parseFieldConditions(value: unknown): FormFieldCondition[] {
 function FormFieldConditionsEditor({
   conditions,
   mode,
+  formIds,
   onChange,
 }: {
   conditions: FormFieldCondition[];
   mode: "all" | "any";
+  formIds: string[];
   onChange: (conditions: FormFieldCondition[], mode: "all" | "any") => void;
 }) {
+  const { data: forms = [] } = useMarketingForms();
+
+  // Campos reais dos formularios selecionados (uniao, dedupe por `name`, que é a
+  // chave que o matcher usa). Se nenhum form selecionado -> texto livre.
+  const availableFields = useMemo(() => {
+    const selected = formIds.length ? forms.filter((f) => formIds.includes(f.id)) : [];
+    const map = new Map<string, { name: string; label: string; options: { label: string; value: string }[] }>();
+    for (const form of selected) {
+      for (const field of form.fields ?? []) {
+        if (!field.name || field.type === "hidden") continue;
+        if (!map.has(field.name)) {
+          map.set(field.name, {
+            name: field.name,
+            label: field.label || field.name,
+            options: (field.options ?? []).map((o) => ({ label: o.label, value: o.value })),
+          });
+        }
+      }
+    }
+    return [...map.values()];
+  }, [forms, formIds]);
+
+  const hasFieldCatalog = availableFields.length > 0;
+
   const update = (i: number, patch: Partial<FormFieldCondition>) => {
     onChange(
       conditions.map((c, idx) => (idx === i ? { ...c, ...patch } : c)),
       mode,
     );
   };
+
   return (
     <div className="flex flex-col gap-3">
       {conditions.length > 1 ? (
@@ -337,46 +364,84 @@ function FormFieldConditionsEditor({
         </div>
       ) : null}
 
-      {conditions.map((c, i) => (
-        <div key={i} className="flex flex-wrap items-center gap-2">
-          <Input
-            value={c.field}
-            onChange={(e) => update(i, { field: e.target.value })}
-            placeholder="campo (ex.: beneficio)"
-            className="h-9 w-full sm:w-40"
-          />
-          <Select value={c.operator} onValueChange={(v) => update(i, { operator: v as FormFieldOperator })}>
-            <SelectTrigger className="h-9 w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FORM_FIELD_OPERATORS.map((op) => (
-                <SelectItem key={op.value} value={op.value}>
-                  {op.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {c.operator !== "exists" ? (
-            <Input
-              value={c.value}
-              onChange={(e) => update(i, { value: e.target.value })}
-              placeholder="valor (ex.: INSS)"
-              className="h-9 w-full flex-1 sm:w-auto"
-            />
-          ) : (
-            <span className="flex-1 text-xs text-muted-foreground">qualquer valor</span>
-          )}
-          <button
-            type="button"
-            onClick={() => onChange(conditions.filter((_, idx) => idx !== i), mode)}
-            aria-label="Remover condição"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
-      ))}
+      {conditions.map((c, i) => {
+        const selectedField = availableFields.find((f) => f.name === c.field);
+        const fieldOptions = selectedField?.options ?? [];
+        return (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            {hasFieldCatalog ? (
+              <Select
+                value={c.field || undefined}
+                onValueChange={(v) => update(i, { field: v, value: "" })}
+              >
+                <SelectTrigger className="h-9 w-full sm:w-44">
+                  <SelectValue placeholder="campo do formulário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableFields.map((f) => (
+                    <SelectItem key={f.name} value={f.name}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={c.field}
+                onChange={(e) => update(i, { field: e.target.value })}
+                placeholder="campo (ex.: beneficio)"
+                className="h-9 w-full sm:w-44"
+              />
+            )}
+
+            <Select value={c.operator} onValueChange={(v) => update(i, { operator: v as FormFieldOperator })}>
+              <SelectTrigger className="h-9 w-full sm:w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FORM_FIELD_OPERATORS.map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {c.operator === "exists" ? (
+              <span className="flex-1 text-xs text-muted-foreground">qualquer valor</span>
+            ) : fieldOptions.length > 0 ? (
+              <Select value={c.value || undefined} onValueChange={(v) => update(i, { value: v })}>
+                <SelectTrigger className="h-9 w-full flex-1 sm:w-auto">
+                  <SelectValue placeholder="valor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {fieldOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={c.value}
+                onChange={(e) => update(i, { value: e.target.value })}
+                placeholder="valor (ex.: INSS)"
+                className="h-9 w-full flex-1 sm:w-auto"
+              />
+            )}
+
+            <button
+              type="button"
+              onClick={() => onChange(conditions.filter((_, idx) => idx !== i), mode)}
+              aria-label="Remover condição"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        );
+      })}
 
       <Button
         type="button"
@@ -389,7 +454,9 @@ function FormFieldConditionsEditor({
         Adicionar condição
       </Button>
       <p className="text-xs text-muted-foreground">
-        Sem condições = qualquer envio do formulário entra. “SMS/HSM” não se aplica aqui.
+        {hasFieldCatalog
+          ? "Campos e valores vêm do(s) formulário(s) selecionado(s). Sem condições = qualquer envio entra."
+          : "Selecione um formulário acima para escolher os campos numa lista. Sem condições = qualquer envio entra."}
       </p>
     </div>
   );
@@ -731,6 +798,7 @@ export function MarketingFlowTriggerSettingsPanel({
                     <FormFieldConditionsEditor
                       conditions={parseFieldConditions(draftConfig.fieldConditions)}
                       mode={draftConfig.fieldMatchMode === "any" ? "any" : "all"}
+                      formIds={triggerConfigArray(draftConfig.formIds)}
                       onChange={(conditions, mode) =>
                         patchConfig({ fieldConditions: conditions, fieldMatchMode: mode })
                       }
