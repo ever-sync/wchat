@@ -1492,7 +1492,7 @@ export default function MarketingFlowEditor() {
               <button
                 type="button"
                 onClick={() => setActionsOpen(true)}
-                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:border-primary hover:text-primary"
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 shadow-md transition-colors hover:border-sky-400 hover:text-sky-400"
               >
                 Ações
                 <Plus className="h-4 w-4" aria-hidden />
@@ -1520,11 +1520,11 @@ export default function MarketingFlowEditor() {
             />
 
             {steps.length === 0 ? (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Comece arrastando uma ação</p>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-slate-400">
+                <p className="font-medium text-slate-100">Comece arrastando uma ação</p>
                 <p className="max-w-sm">
-                  Abra <span className="font-semibold">Ações</span> e arraste para o canvas.
-                  Conecte os cartões para definir o caminho do lead.
+                  Abra <span className="font-semibold text-slate-200">Ações</span> e arraste para o
+                  canvas. Conecte os cartões para definir o caminho do lead.
                 </p>
               </div>
             ) : null}
