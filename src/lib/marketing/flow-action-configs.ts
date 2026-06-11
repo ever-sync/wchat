@@ -109,6 +109,9 @@ export type UpdateDealStatusConfig = { status: DealStatus; lossReason?: string }
 
 export type AddNoteConfig = { note: string };
 
+/** Estrelas de qualificação da negociação (0–5), espelha crm_negotiations.qualification. */
+export type SetQualificationConfig = { qualification: number };
+
 /** valueCents vazio => mantém o valor atual da negociação. */
 export type MarkSaleConfig = { valueCents: string };
 
@@ -134,6 +137,7 @@ export type ActionConfigByKind = {
   "set-variable": SetVariableConfig;
   "update-deal-title": UpdateDealTitleConfig;
   "update-deal-status": UpdateDealStatusConfig;
+  "set-qualification": SetQualificationConfig;
   "add-note": AddNoteConfig;
   "mark-sale": MarkSaleConfig;
   "ai-classify": AiClassifyConfig;
@@ -167,6 +171,7 @@ export const ACTION_CONFIG_REGISTRY: Record<string, ActionConfigKind> = {
   "definir-variavel": "set-variable",
   "atualizar-nome-negociacao": "update-deal-title",
   "atualizar-status": "update-deal-status",
+  "definir-qualificacao": "set-qualification",
   "adicionar-anotacao": "add-note",
   "marcar-venda": "mark-sale",
   "classificar-ia": "ai-classify",
@@ -318,6 +323,11 @@ export function parseConfig<K extends ActionConfigKind>(
           : "em_andamento",
         lossReason: toString(r.lossReason) || undefined,
       } as ActionConfigByKind[K];
+    }
+    case "set-qualification": {
+      const n = Number(r.qualification);
+      const qualification = Number.isFinite(n) ? Math.min(5, Math.max(0, Math.round(n))) : 0;
+      return { qualification } as ActionConfigByKind[K];
     }
     case "add-note":
       return { note: toString(r.note) } as ActionConfigByKind[K];
@@ -671,6 +681,19 @@ export function validateActionConfig(
       }
       return [];
     }
+    case "set-qualification": {
+      const c = config as SetQualificationConfig;
+      if (!Number.isInteger(c.qualification) || c.qualification < 0 || c.qualification > 5) {
+        return [
+          {
+            code: "QUALIFICATION_RANGE",
+            severity: "error",
+            message: `“${label}”: a qualificação deve ser de 0 a 5 estrelas.`,
+          },
+        ];
+      }
+      return [];
+    }
     case "add-note": {
       const c = config as AddNoteConfig;
       if (!c.note.trim()) {
@@ -834,6 +857,11 @@ export function summarizeConfig(
         nao_pausado: "Reativada",
       };
       return label_[c.status] ?? "Status";
+    }
+    case "set-qualification": {
+      const c = config as SetQualificationConfig;
+      const n = Math.min(5, Math.max(0, Math.round(c.qualification || 0)));
+      return n === 0 ? "Zerar estrelas" : `${"★".repeat(n)} (${n})`;
     }
     case "add-note": {
       const c = config as AddNoteConfig;

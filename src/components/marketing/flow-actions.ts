@@ -262,6 +262,12 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
         iconClass: "bg-sky-500",
       },
       {
+        id: "definir-qualificacao",
+        label: "Definir qualificação (estrelas)",
+        iconKey: "star",
+        iconClass: "bg-sky-500",
+      },
+      {
         id: "mover-negociacao",
         label: "Mover Negociação no CRM",
         iconKey: "arrow-right-circle",

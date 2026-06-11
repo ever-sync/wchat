@@ -97,6 +97,7 @@ export const MARKETING_FLOW_EXECUTABLE_ACTIONS = [
   "definir-variavel",
   "atualizar-nome-negociacao",
   "atualizar-status",
+  "definir-qualificacao",
   "adicionar-anotacao",
   "marcar-venda",
   "classificar-ia",

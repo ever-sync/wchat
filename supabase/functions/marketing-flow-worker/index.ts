@@ -728,6 +728,8 @@ async function executeStep(
       return await runUpdateDealTitle(admin, step, participant);
     case "atualizar-status":
       return await runUpdateDealStatus(admin, step, participant);
+    case "definir-qualificacao":
+      return await runSetQualification(admin, step, participant);
     case "adicionar-anotacao":
       return await runAddNote(admin, step, participant);
     case "marcar-venda":
@@ -1409,6 +1411,30 @@ async function runUpdateDealStatus(
     .eq("tenant_id", participant.tenant_id);
   if (error) throw new Error(error.message);
   return { detail: { status } };
+}
+
+async function runSetQualification(
+  admin: AdminClient,
+  step: Step,
+  participant: Participant,
+): Promise<StepResult> {
+  if (!participant.negotiation_id) {
+    throw new PermanentError("Participante sem negociação para qualificar");
+  }
+  const c = asRecord(step.config);
+  const n = Number(c.qualification);
+  if (!Number.isFinite(n) || n < 0 || n > 5) {
+    throw new PermanentError(`Qualificação inválida: "${c.qualification}" (use 0 a 5)`);
+  }
+  const qualification = Math.round(n);
+
+  const { error } = await admin
+    .from("crm_negotiations")
+    .update({ qualification, last_interaction_at: new Date().toISOString() })
+    .eq("id", participant.negotiation_id)
+    .eq("tenant_id", participant.tenant_id);
+  if (error) throw new Error(error.message);
+  return { detail: { qualification } };
 }
 
 async function runAddNote(

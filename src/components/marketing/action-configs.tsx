@@ -4,6 +4,7 @@
 // componente certo ou null quando a action nao tem schema ainda.
 
 import type { ComponentType } from "react";
+import { Star } from "lucide-react";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import {
   type MarkSaleConfig,
   type MoveDealConfig,
   type RemoveFromFlowConfig,
+  type SetQualificationConfig,
   type SetVariableAssignment,
   type SetVariableConfig,
   type SmartMessageConfig,
@@ -990,6 +992,48 @@ export function UpdateDealStatusActionConfig({
   );
 }
 
+export function SetQualificationActionConfig({
+  value,
+  onChange,
+}: ConfigProps<SetQualificationConfig>) {
+  const current = Math.min(5, Math.max(0, Math.round(value.qualification || 0)));
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide">
+          Qualificação (estrelas)
+        </Label>
+        <div className="flex items-center gap-1" role="group" aria-label="Definir estrelas">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`${n} estrela${n === 1 ? "" : "s"}`}
+              aria-pressed={n <= current}
+              onClick={() => onChange({ ...value, qualification: current === n ? 0 : n })}
+              className="flex h-8 w-8 items-center justify-center rounded transition-transform hover:scale-110"
+            >
+              <Star
+                className={
+                  n <= current
+                    ? "h-5 w-5 fill-amber-400 text-amber-400"
+                    : "h-5 w-5 text-muted-foreground"
+                }
+                aria-hidden
+              />
+            </button>
+          ))}
+          <span className="ml-2 text-sm text-muted-foreground">{current} / 5</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Clique para definir; clicar na estrela atual zera. Requer uma negociação no fluxo
+          (use após “Criar Negociação”).
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Add Note
 
 export function AddNoteActionConfig({ value, onChange }: ConfigProps<AddNoteConfig>) {
@@ -1166,6 +1210,7 @@ const COMPONENTS: { [K in ActionConfigKind]: ComponentType<ConfigProps<ActionCon
   "set-variable": SetVariableActionConfig,
   "update-deal-title": UpdateDealTitleActionConfig,
   "update-deal-status": UpdateDealStatusActionConfig,
+  "set-qualification": SetQualificationActionConfig,
   "add-note": AddNoteActionConfig,
   "mark-sale": MarkSaleActionConfig,
   "ai-classify": AiClassifyActionConfig,
