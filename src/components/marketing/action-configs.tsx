@@ -6,6 +6,7 @@
 import type { ComponentType } from "react";
 import { Star } from "lucide-react";
 import { MARKETING_FLOW_SUPPRESSION_CHANNELS } from "@/lib/marketing/flow-types";
+import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -225,7 +226,8 @@ function FunnelStageFields({
   stageId: string;
   onChange: (next: { funnelId: string; stageId: string }) => void;
 }) {
-  const funnel = DEFAULT_CRM_FUNNELS.find((f) => f.id === funnelId);
+  const { data: funnels = DEFAULT_CRM_FUNNELS } = useEffectiveCrmFunnels();
+  const funnel = funnels.find((f) => f.id === funnelId);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
@@ -240,7 +242,7 @@ function FunnelStageFields({
             <SelectValue placeholder="Selecione um funil" />
           </SelectTrigger>
           <SelectContent>
-            {DEFAULT_CRM_FUNNELS.map((f) => (
+            {funnels.map((f) => (
               <SelectItem key={f.id} value={f.id}>
                 {f.listName}
               </SelectItem>

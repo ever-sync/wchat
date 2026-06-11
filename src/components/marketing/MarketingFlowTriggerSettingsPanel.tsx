@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Check,
   ChevronRight,
   CircleDot,
   Database,
@@ -26,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { MarketingFlowRecord } from "@/lib/api/marketing-flows";
+import { useMarketingForms } from "@/lib/api/marketing-forms";
+import { cn } from "@/lib/utils";
 import {
   MARKETING_TRIGGER_CATEGORY_LABEL,
   MARKETING_TRIGGER_CONDITION_OPERATORS,
@@ -212,6 +215,67 @@ function TriggerSummaryChips({
   );
 }
 
+/** Seletor dos formulários reais do tenant (em vez de digitar id/nome à mão). */
+function FormsScopePicker({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (next: unknown) => void;
+}) {
+  const { data: forms = [], isLoading } = useMarketingForms();
+  const selected = new Set(triggerConfigArray(value));
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange([...next]);
+  };
+
+  if (isLoading) {
+    return <p className="text-xs text-muted-foreground">Carregando formulários…</p>;
+  }
+  if (forms.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Nenhum formulário criado ainda. Crie em Marketing → Converter → Formulários.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto rounded-md border border-border bg-background p-2">
+        {forms.map((form) => {
+          const checked = selected.has(form.id);
+          return (
+            <button
+              key={form.id}
+              type="button"
+              onClick={() => toggle(form.id)}
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
+                checked
+                  ? "bg-primary/10 font-medium text-primary"
+                  : "text-foreground hover:bg-muted",
+              )}
+            >
+              <span className="truncate">{form.name || "(sem nome)"}</span>
+              {checked ? <Check className="h-4 w-4 shrink-0" aria-hidden /> : null}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {selected.size === 0
+          ? "Nenhum selecionado = qualquer formulário dispara o fluxo."
+          : `${selected.size} formulário${selected.size === 1 ? "" : "s"} selecionado${selected.size === 1 ? "" : "s"}.`}
+      </p>
+    </div>
+  );
+}
+
 function TriggerFieldEditor({
   field,
   value,
@@ -224,7 +288,11 @@ function TriggerFieldEditor({
   return (
     <div className="flex flex-col gap-2">
       <Label className="text-sm font-medium text-foreground">{field.label}</Label>
-      {renderScopeValue(field, value, onChange)}
+      {field.id === "formIds" ? (
+        <FormsScopePicker value={value} onChange={onChange} />
+      ) : (
+        renderScopeValue(field, value, onChange)
+      )}
       {field.helper ? <p className="text-xs text-muted-foreground">{field.helper}</p> : null}
     </div>
   );
