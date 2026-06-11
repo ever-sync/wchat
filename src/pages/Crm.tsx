@@ -121,6 +121,7 @@ import {
   useCrmNegotiations,
   useDeleteCrmNegotiation,
   useReleaseCrmNegotiationToPool,
+  patchCrmNegotiationStageInCaches,
   useUpdateCrmNegotiation,
 } from "@/lib/api/crm-negotiations";
 import { useTenantCrmFunnelConfig } from "@/lib/api/crm-funnel-config";
@@ -154,7 +155,10 @@ import {
 } from "@/lib/crm/crm-kanban-card-accent";
 import { canReleaseCrmNegotiationToPool } from "@/lib/crm/negotiation-assignee";
 import {
+  buildLinkedCustomerIdsForKanban,
   buildSyntheticCustomerNegotiationCards,
+  dedupeNegotiationsForKanban,
+  findNegotiationForCustomerInFunnel,
   crmNegotiationRecordToCard,
   isPersistedCrmNegotiationId,
   parseSyntheticCustomerCardId,
@@ -540,18 +544,14 @@ export default function Crm() {
       };
     });
 
-    const linkedCustomerIds = new Set(
-      dbRecords
-        .map((row) => row.customerId?.trim())
-        .filter((id): id is string => Boolean(id)),
-    );
+    const linkedCustomerIds = buildLinkedCustomerIdsForKanban(dbRecords, customers, funnelId);
     const syntheticCards = buildSyntheticCustomerNegotiationCards({
       customers,
       funnelId,
       funnels,
       linkedCustomerIds,
     });
-    return [...persistedCards, ...syntheticCards];
+    return dedupeNegotiationsForKanban([...persistedCards, ...syntheticCards], customers);
   }, [customers, dbRecords, e2eAssigneeOverrides, funnelId, funnels, profileId, stageOverrides]);
 
   const attendants = useMemo(() => {
@@ -1491,8 +1491,23 @@ export default function Crm() {
       if (!customer) {
         return null;
       }
+      const customerName = customer.nome?.trim() || "Nova negociação";
+      const existing = findNegotiationForCustomerInFunnel(dbRecords, {
+        funnelId,
+        customerId,
+        customerName,
+      });
+      if (existing) {
+        if (!existing.customerId?.trim()) {
+          await updateCrmNegotiation.mutateAsync({
+            id: existing.id,
+            patch: { customerId },
+          });
+        }
+        return existing.id;
+      }
       const created = await createCrmNegotiation.mutateAsync({
-        title: customer.nome?.trim() || "Nova negociação",
+        title: customerName,
         funnelId,
         stageId,
         customerId,
@@ -1503,7 +1518,16 @@ export default function Crm() {
       await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
       return created.id;
     },
-    [createCrmNegotiation, customers, funnelId, profile?.role, profileId, queryClient],
+    [
+      createCrmNegotiation,
+      customers,
+      dbRecords,
+      funnelId,
+      profile?.role,
+      profileId,
+      queryClient,
+      updateCrmNegotiation,
+    ],
   );
 
   const handleDragEnd = useCallback(
@@ -1653,10 +1677,37 @@ export default function Crm() {
         }
       }
 
+      const dbRowForDrag = persistedRow ? dbRecords.find((r) => r.id === negId) : undefined;
+      const negStatus = dbRowForDrag?.status ?? card.status;
+      const dragPatch: CrmNegotiationPatch | null = persistedRow
+        ? { stageId: stageDropId, funnelId }
+        : null;
+      if (dragPatch && negStatus === "perdido" && !isLostDestinationStage(funnels, funnelId, stageDropId)) {
+        dragPatch.status = "em_andamento";
+        dragPatch.lostReason = null;
+      }
+
+      if (dragPatch) {
+        patchCrmNegotiationStageInCaches(queryClient, negId, dragPatch);
+      } else if (!persistedRow) {
+        queryClient.setQueryData<Record<string, { funnel_id: string; stage_id: string }>>(
+          ["crm-negotiation-stages"],
+          (prev) => ({
+            ...(prev ?? {}),
+            [card.id]: { funnel_id: funnelId, stage_id: stageDropId },
+          }),
+        );
+      }
+
       try {
-        if (persistedRow) {
+        if (persistedRow && dragPatch) {
+          await updateCrmNegotiation.mutateAsync({
+            id: negId,
+            patch: dragPatch,
+          });
+
           if (destTemplate) {
-            const created = await createStageTemplateTask({
+            void createStageTemplateTask({
               negotiationId: negId,
               customerId: cid ?? null,
               assigneeId: dragAssigneeId ?? null,
@@ -1666,43 +1717,16 @@ export default function Crm() {
                 notes: destTemplate.notes,
                 defaultDueDays: destTemplate.defaultDueDays,
               },
-            });
-            if (created) {
-              void queryClient.invalidateQueries({ queryKey: ["crm-tasks"] });
-              void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-            }
+            })
+              .then((created) => {
+                if (!created) return;
+                void queryClient.invalidateQueries({ queryKey: ["crm-tasks"] });
+                void queryClient.invalidateQueries({ queryKey: ["crm-kanban-task-previews"] });
+              })
+              .catch(() => {
+                // Tarefa automática é best-effort; a etapa já foi salva.
+              });
           }
-          const dbRowForDrag = dbRecords.find((r) => r.id === negId);
-          const negStatus = dbRowForDrag?.status ?? card.status;
-          const dragPatch: CrmNegotiationPatch = { stageId: stageDropId, funnelId };
-          if (
-            negStatus === "perdido" &&
-            !isLostDestinationStage(funnels, funnelId, stageDropId)
-          ) {
-            dragPatch.status = "em_andamento";
-            dragPatch.lostReason = null;
-          }
-          await updateCrmNegotiation.mutateAsync({
-            id: negId,
-            patch: dragPatch,
-          });
-        }
-        if (cid) {
-          const customer = customers.find((c) => c.id === cid);
-          if (!customer) {
-            return;
-          }
-          await updateCustomer.mutateAsync({
-            id: cid,
-            input: {
-              ...toCustomerUpsertInput(customer),
-              sourceColumns: {
-                ...customer.sourceColumns,
-                [CRM_PIPELINE_STAGE_KEY]: stageDropId,
-                [CRM_FUNNEL_ID_KEY]: funnelId,
-              },
-            },
-          });
         } else if (!persistedRow) {
           await upsertStageOverride.mutateAsync({
             negotiationId: card.id,
@@ -1710,6 +1734,28 @@ export default function Crm() {
             stageId: stageDropId,
           });
         }
+
+        if (cid) {
+          const customer = customers.find((c) => c.id === cid);
+          if (customer) {
+            void updateCustomer
+              .mutateAsync({
+                id: cid,
+                input: {
+                  ...toCustomerUpsertInput(customer),
+                  sourceColumns: {
+                    ...customer.sourceColumns,
+                    [CRM_PIPELINE_STAGE_KEY]: stageDropId,
+                    [CRM_FUNNEL_ID_KEY]: funnelId,
+                  },
+                },
+              })
+              .catch(() => {
+                // Sincroniza cadastro em background; o quadro já reflete a etapa.
+              });
+          }
+        }
+
         toast({
           title: "Etapa salva",
           description: `${card.title} → ${stageTitle}`,

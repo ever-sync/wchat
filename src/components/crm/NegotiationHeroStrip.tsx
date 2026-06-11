@@ -6,6 +6,7 @@ import {
   CalendarX2,
   Clock,
   Footprints,
+  Hand,
   MessageCircle,
   Pause,
   Play,

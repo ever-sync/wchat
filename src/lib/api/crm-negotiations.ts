@@ -586,8 +586,22 @@ export function useDeleteCrmNegotiation(
 }
 
 
-function patchCrmNegotiationStageInCaches(
-  queryClient: ReturnType<typeof useQueryClient>,
+const STAGE_DRAG_PATCH_KEYS = new Set<keyof CrmNegotiationPatch>([
+  "stageId",
+  "funnelId",
+  "status",
+  "lostReason",
+]);
+
+export function isStageDragPatch(patch: CrmNegotiationPatch): boolean {
+  const keys = (Object.keys(patch) as (keyof CrmNegotiationPatch)[]).filter(
+    (k) => patch[k] !== undefined,
+  );
+  return keys.length > 0 && keys.every((k) => STAGE_DRAG_PATCH_KEYS.has(k));
+}
+
+export function patchCrmNegotiationStageInCaches(
+  queryClient: QueryClient,
   id: string,
   patch: Pick<CrmNegotiationPatch, "stageId" | "funnelId" | "status" | "lostReason">,
 ) {
@@ -602,6 +616,17 @@ function patchCrmNegotiationStageInCaches(
     ["crm-negotiations", id],
     (prev) => (prev ? { ...prev, ...patch } : prev),
   );
+}
+
+function mergeCrmNegotiationRecordInCaches(queryClient: QueryClient, data: CrmNegotiationRecord) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!prev) return prev;
+      return prev.map((row) => (row.id === data.id ? data : row));
+    },
+  );
+  queryClient.setQueryData(["crm-negotiations", data.id], data);
 }
 
 export function useUpdateCrmNegotiation(
@@ -628,8 +653,12 @@ export function useUpdateCrmNegotiation(
           ? previousNegotiationCustomerIdFromQueryCache(queryClient, vars.id)
           : null;
 
-      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
-      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations", vars.id] });
+      if (isStageDragPatch(vars.patch)) {
+        mergeCrmNegotiationRecordInCaches(queryClient, data);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+        await queryClient.invalidateQueries({ queryKey: ["crm-negotiations", vars.id] });
+      }
 
       if (vars.patch.customerId !== undefined) {
         const next =

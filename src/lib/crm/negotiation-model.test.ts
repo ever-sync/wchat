@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
 import { CRM_FUNNEL_ID_KEY, CRM_PIPELINE_STAGE_KEY } from "@/lib/crm-pipeline";
 import type { CrmNegotiation, Customer } from "@/types/domain";
+import type { CrmNegotiationRecord } from "@/types/domain";
 import {
+  buildLinkedCustomerIdsForKanban,
   buildSyntheticCustomerNegotiationCards,
   customerMatchesCrmFunnel,
   customerStatusToSyntheticNegotiationStatus,
   customerStageForFunnel,
+  dedupeNegotiationsForKanban,
   isSyntheticCustomerCardId,
   parseCrmNegotiationStatus,
   parseSyntheticCustomerCardId,
@@ -303,6 +306,47 @@ describe("buildSyntheticCustomerNegotiationCards", () => {
     expect(cards).toHaveLength(0);
   });
 
+  it("buildLinkedCustomerIdsForKanban vincula por título quando não há customer_id", () => {
+    const customer = makeCustomer({
+      id: "cust-fatima",
+      nome: "Fátima Da Silva Ferreira",
+      sourceColumns: { [CRM_PIPELINE_STAGE_KEY]: "lead" },
+    });
+    const row: CrmNegotiationRecord = {
+      id: "neg-1",
+      tenantId: "t1",
+      title: "Fátima Da Silva Ferreira",
+      funnelId: "comercial",
+      stageId: "contato",
+      status: "em_andamento",
+      assigneeId: "user-1",
+      customerId: null,
+      starCount: 0,
+      qualification: 0,
+      totalValue: 0,
+      createdAt: "2026-01-01T12:00:00.000Z",
+      updatedAt: "2026-01-01T12:00:00.000Z",
+      nextTaskAt: null,
+      closingForecast: null,
+      lastContactAt: null,
+      lastInteractionAt: null,
+      sourceChatId: null,
+      lostReason: null,
+      sourceChatPreview: null,
+      sourceChatUnread: 0,
+      otherInfo: {},
+    };
+    const linked = buildLinkedCustomerIdsForKanban([row], [customer], "comercial");
+    expect(linked.has("cust-fatima")).toBe(true);
+    const cards = buildSyntheticCustomerNegotiationCards({
+      customers: [customer],
+      funnelId: "comercial",
+      funnels,
+      linkedCustomerIds: linked,
+    });
+    expect(cards).toHaveLength(0);
+  });
+
   it("mapeia inativo para pausado e bloqueado para perdido", () => {
     expect(customerStatusToSyntheticNegotiationStatus("inativo")).toBe("pausado");
     expect(customerStatusToSyntheticNegotiationStatus("bloqueado")).toBe("perdido");
@@ -319,5 +363,44 @@ describe("buildSyntheticCustomerNegotiationCards", () => {
       linkedCustomerIds: new Set(),
     });
     expect(cards[0]?.status).toBe("pausado");
+  });
+});
+
+describe("dedupeNegotiationsForKanban", () => {
+  const customer = {
+    id: "cust-fatima",
+    nome: "Fátima Da Silva Ferreira",
+    telefone: "",
+    perfil: "A",
+    rota: "",
+    ultimoPedido: "",
+    status: "ativo" as const,
+    email: "",
+    cnpj: "",
+    endereco: "",
+    vendedor: "",
+    ticketMedio: 0,
+    frequenciaCompra: "",
+    totalGasto: 0,
+  };
+
+  it("mantém negociação atribuída quando há duplicata no pool", () => {
+    const assigned: CrmNegotiation = {
+      ...baseCard(),
+      id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      title: "Fátima Da Silva Ferreira",
+      assigneeId: "user-1",
+      customerId: "cust-fatima",
+    };
+    const pool: CrmNegotiation = {
+      ...baseCard(),
+      id: "11111111-2222-3333-4444-555555555555",
+      title: "Fátima Da Silva Ferreira",
+      assigneeId: "",
+      customerId: undefined,
+    };
+    const deduped = dedupeNegotiationsForKanban([pool, assigned], [customer]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].id).toBe(assigned.id);
   });
 });

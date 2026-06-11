@@ -92,6 +92,136 @@ export function isSyntheticCustomerCardId(cardId: string): boolean {
   return parseSyntheticCustomerCardId(cardId) != null;
 }
 
+export function normalizeLeadTitle(title: string | null | undefined): string {
+  return (title ?? "").trim().toLowerCase();
+}
+
+/** Resolve o cliente de uma linha `crm_negotiations` (id direto ou título igual ao nome). */
+export function resolveCustomerIdForNegotiationRecord(
+  row: Pick<CrmNegotiationRecord, "customerId" | "title">,
+  customers: Customer[],
+): string | null {
+  const direct = row.customerId?.trim();
+  if (direct) {
+    return direct;
+  }
+  const title = normalizeLeadTitle(row.title);
+  if (!title) {
+    return null;
+  }
+  return customers.find((c) => normalizeLeadTitle(c.nome) === title)?.id ?? null;
+}
+
+/**
+ * Clientes que já têm negociação no funil — evita card sintético `customer:{uuid}` duplicado.
+ * Considera `customer_id` e negociações sem vínculo mas com título igual ao nome do cliente.
+ */
+export function buildLinkedCustomerIdsForKanban(
+  dbRecords: CrmNegotiationRecord[],
+  customers: Customer[],
+  funnelId: string,
+): Set<string> {
+  const linked = new Set<string>();
+  for (const row of dbRecords) {
+    if (row.funnelId !== funnelId) {
+      continue;
+    }
+    const customerId = resolveCustomerIdForNegotiationRecord(row, customers);
+    if (customerId) {
+      linked.add(customerId);
+    }
+  }
+  return linked;
+}
+
+/** Chave estável para agrupar cards do mesmo lead no Kanban. */
+export function resolveKanbanCustomerKey(
+  card: Pick<CrmNegotiation, "id" | "customerId" | "title" | "funnelId">,
+  customers: Customer[],
+): string | null {
+  const syntheticId = parseSyntheticCustomerCardId(card.id);
+  if (syntheticId) {
+    return syntheticId;
+  }
+  const fromCard = card.customerId?.trim();
+  if (fromCard) {
+    return fromCard;
+  }
+  const title = normalizeLeadTitle(card.title);
+  if (title) {
+    const byTitle = customers.find((c) => normalizeLeadTitle(c.nome) === title)?.id;
+    if (byTitle) {
+      return byTitle;
+    }
+    return `title:${title}:funnel:${card.funnelId}`;
+  }
+  return null;
+}
+
+function kanbanCardPreferenceScore(card: CrmNegotiation): number {
+  let score = 0;
+  if (card.status === "em_andamento") {
+    score += 100;
+  }
+  if (card.assigneeId?.trim()) {
+    score += 50;
+  }
+  if (isPersistedCrmNegotiationId(card.id)) {
+    score += 25;
+  }
+  score += new Date(card.createdAt).getTime() / 1_000_000_000;
+  return score;
+}
+
+/** Mantém um card por lead/funil quando há negociações duplicadas no banco. */
+export function dedupeNegotiationsForKanban(
+  cards: CrmNegotiation[],
+  customers: Customer[],
+): CrmNegotiation[] {
+  const byGroup = new Map<string, CrmNegotiation[]>();
+  const ungrouped: CrmNegotiation[] = [];
+
+  for (const card of cards) {
+    const customerKey = resolveKanbanCustomerKey(card, customers);
+    if (!customerKey) {
+      ungrouped.push(card);
+      continue;
+    }
+    const groupKey = `${card.funnelId}::${customerKey}`;
+    const list = byGroup.get(groupKey) ?? [];
+    list.push(card);
+    byGroup.set(groupKey, list);
+  }
+
+  const deduped: CrmNegotiation[] = [...ungrouped];
+  for (const group of byGroup.values()) {
+    if (group.length === 1) {
+      deduped.push(group[0]);
+      continue;
+    }
+    const best = [...group].sort((a, b) => kanbanCardPreferenceScore(b) - kanbanCardPreferenceScore(a))[0];
+    deduped.push(best);
+  }
+  return deduped;
+}
+
+/** Reutiliza negociação existente ao materializar card sintético (evita INSERT duplicado). */
+export function findNegotiationForCustomerInFunnel(
+  dbRecords: CrmNegotiationRecord[],
+  params: { funnelId: string; customerId: string; customerName: string },
+): CrmNegotiationRecord | undefined {
+  const nameKey = normalizeLeadTitle(params.customerName);
+  return dbRecords.find((row) => {
+    if (row.funnelId !== params.funnelId) {
+      return false;
+    }
+    if (row.customerId?.trim() === params.customerId) {
+      return true;
+    }
+    return normalizeLeadTitle(row.title) === nameKey;
+  });
+}
+
 /** Status inferido do cadastro quando ainda não há linha em `crm_negotiations`. */
 export function customerStatusToSyntheticNegotiationStatus(
   status: CustomerStatus,
