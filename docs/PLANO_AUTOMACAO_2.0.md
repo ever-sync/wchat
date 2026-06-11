@@ -243,12 +243,19 @@ Webhook vazando PII ⚠️ (há `pii-redaction`, aplicar em tudo).
 ## 12. Roadmap por release
 
 ### v2.0 — Fundação WhatsApp-native + caso real
-- Nós: **Esperar resposta do lead**, **Botões/lista interativa**, **Template/HSM**,
-  **Transferir p/ humano**, **Horário comercial**.
-- Nó **Definir estrelas (qualificação)** → fecha 100% do fluxo da RD.
-- Limpeza: esconder/"em breve" os ~28 nós sem executor; paleta por família.
-- **Template** "Formulário qualificado → CRM + WhatsApp" na galeria.
-- Blindagem mínima: **opt-out** checado em todo envio + **throttle** básico.
+- ✅ **ENTREGUE** Nó **Definir estrelas (qualificação)** → fecha 100% do fluxo da RD.
+- ✅ **ENTREGUE** Nó **Cancelar inscrição (opt-out)** — cria a supressão; o
+  enforcement (isSuppressed) já cobria WhatsApp/email/mensagem-inteligente.
+- ✅ **ENTREGUE** Nó **Transferir p/ humano** (ai_mode='handoff' no chat;
+  dispara o evento ai_paused via trigger de banco).
+- ✅ **ENTREGUE** Paleta saneada: nós sem executor aparecem "Em breve" e sem
+  arraste; templates corrigidos (sem ação não-executável) + novo template
+  **"Formulário qualificado → CRM + WhatsApp"** com estrelas pré-configuradas.
+- ✅ **ENTREGUE** Aba Automação 2.0 com vitrine das novidades + CTA.
+- ⏳ Pendente: **Esperar resposta do lead**, **Botões/lista interativa**,
+  **Template/HSM**, **Horário comercial como nó** (o pre-send já bloqueia fora
+  do horário quando configurado em channel_limits), **throttle** básico
+  (pre-send já tem max_per_hour por canal).
 
 ### v2.1 — Vendas (Kommo + cadência)
 - **Cadência** multicanal com tarefa manual para o vendedor.
