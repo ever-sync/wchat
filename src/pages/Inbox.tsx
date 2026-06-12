@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatBRL } from "@/lib/format";
-import { Briefcase, Hand } from "lucide-react";
+import { Briefcase, Hand, Instagram } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -1057,6 +1057,12 @@ export default function Inbox() {
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
                       <p className="min-w-0 truncate text-[17px] font-medium text-foreground">{activeChat.displayName}</p>
+                      {activeChat.channelType === "instagram" ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] font-semibold text-pink-600 dark:text-pink-400">
+                          <Instagram className="h-3 w-3" aria-hidden />
+                          Instagram
+                        </span>
+                      ) : null}
                       <CustomerLocalTime
                         phone={activeChat.remotePhoneE164 ?? activeChat.remotePhoneDigits ?? null}
                       />

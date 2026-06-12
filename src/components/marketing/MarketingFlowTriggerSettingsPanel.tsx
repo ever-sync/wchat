@@ -199,18 +199,18 @@ function TriggerSummaryChips({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+      <Badge variant="secondary" className="gap-1.5 rounded-full px-2.5 py-1 text-xs">
         <Icon className="h-3.5 w-3.5" aria-hidden />
         {MARKETING_TRIGGER_CATEGORY_LABEL[definition.category]}
       </Badge>
-      <Badge variant="outline" className="rounded-full px-3 py-1">
+      <Badge variant="outline" className="rounded-full px-2.5 py-1 text-xs">
         {definition.payload.length} variáveis
       </Badge>
-      <Badge variant="outline" className="rounded-full px-3 py-1">
+      <Badge variant="outline" className="rounded-full px-2.5 py-1 text-xs">
         {definition.examples.length} exemplos
       </Badge>
       {summary ? (
-        <Badge className="rounded-full bg-primary/10 px-3 py-1 text-primary hover:bg-primary/10">
+        <Badge className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/10">
           {summary}
         </Badge>
       ) : null}
@@ -872,25 +872,26 @@ export function MarketingFlowTriggerSettingsPanel({
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-foreground">Exemplos úteis</h3>
-                <p className="text-xs text-muted-foreground">
-                  Casos de uso que ajudam a validar se o gatilho ficou no nível certo.
-                </p>
-              </div>
-              <RefreshCw className="h-4 w-4 text-primary" aria-hidden />
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              {definition.examples.map((example) => (
-                <div
-                  key={example}
-                  className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-foreground"
-                >
-                  {example}
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Exemplos úteis</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Toque em um exemplo para visualizar o tipo de cenário que o gatilho cobre.
+                  </p>
                 </div>
-              ))}
-            </div>
+                <RefreshCw className="h-4 w-4 text-primary" aria-hidden />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {definition.examples.map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    className="inline-flex items-center rounded-full border border-border bg-muted/25 px-3 py-1.5 text-sm text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
           </section>
         </>
       ) : (

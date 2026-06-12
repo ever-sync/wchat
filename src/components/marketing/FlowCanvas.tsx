@@ -66,7 +66,7 @@ type StepNodeData = {
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onDuplicate?: (id: string) => void;
-  invalid?: boolean;
+  issueSeverity?: "error" | "warning";
 };
 
 type TriggerNodeData = {
@@ -114,7 +114,7 @@ function isBranching(actionId: string): boolean {
 // ---------------------------------------------------------------- No customizado
 
 function StepNode({ data, selected }: NodeProps<RFNode>) {
-  const { step, onEdit, onRemove, onDuplicate, invalid } = data as StepNodeData;
+  const { step, onEdit, onRemove, onDuplicate, issueSeverity } = data as StepNodeData;
   const Icon = ACTION_ICONS[step.iconKey];
   const noExecutor = !isExecutableMarketingFlowAction(step.actionId);
   const branching = isBranching(step.actionId);
@@ -124,13 +124,18 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
       onClick={() => onEdit(step.id)}
       className={cn(
         "group relative flex w-64 cursor-pointer items-center gap-3 rounded-lg border bg-slate-800 px-3 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.5)]",
-        invalid
+        issueSeverity === "error"
           ? "border-red-500/80 ring-2 ring-red-500/30"
-          : selected
-            ? "border-sky-400 ring-2 ring-sky-400/30"
-            : noExecutor
-              ? "border-amber-500/50"
-              : "border-slate-600/80 hover:border-slate-400",
+          : issueSeverity === "warning"
+            ? "border-amber-400/80 ring-2 ring-amber-400/25"
+            : selected
+              ? "border-sky-400 ring-2 ring-sky-400/30"
+              : noExecutor
+                ? "border-amber-500/50"
+                : "border-slate-600/80 hover:border-slate-400",
+        selected && !issueSeverity
+          ? "border-sky-400 ring-2 ring-sky-400/30"
+          : "",
       )}
     >
       <Handle
@@ -177,13 +182,19 @@ function StepNode({ data, selected }: NodeProps<RFNode>) {
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-slate-100">
           {step.label}
-          {invalid ? (
+          {issueSeverity === "error" ? (
             <AlertTriangle className="h-3 w-3 shrink-0 text-red-400" aria-hidden />
+          ) : issueSeverity === "warning" ? (
+            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" aria-hidden />
           ) : noExecutor ? (
             <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" aria-hidden />
           ) : null}
         </span>
-        {noExecutor ? (
+        {issueSeverity === "error" ? (
+          <span className="truncate text-xs text-red-400/90">Problema bloqueante</span>
+        ) : issueSeverity === "warning" ? (
+          <span className="truncate text-xs text-amber-400/90">Atenção necessária</span>
+        ) : noExecutor ? (
           <span className="truncate text-xs text-amber-400/90">Ainda não executável</span>
         ) : step.subtitle ? (
           <span className="truncate text-xs text-slate-400">{step.subtitle}</span>
@@ -334,7 +345,7 @@ type FlowCanvasProps = {
   onRemoveStep: (id: string) => void;
   onDuplicateStep?: (id: string) => void;
   /** Ids de passos com erro de validacao: marcam o no com anel/icone. */
-  invalidStepIds?: Set<string>;
+  stepIssueById?: Record<string, "error" | "warning">;
   /** Emite o grafo normalizado sempre que arestas/posicoes mudam. */
   onGraphChange: (next: { edges: MarketingFlowEdge[]; positions: NodePositions }) => void;
   /** Soltar acao do painel: cria no na posicao do drop. */
@@ -355,13 +366,13 @@ function toRFNodes(
   onEdit: (id: string) => void,
   onRemove: (id: string) => void,
   onDuplicate?: (id: string) => void,
-  invalidStepIds?: Set<string>,
+  stepIssueById?: Record<string, "error" | "warning">,
 ): RFNode[] {
   return steps.map((step, i) => ({
     id: step.id,
     type: "step",
     position: positions[step.id] ?? { x: i * (NODE_W + GAP_X), y: 0 },
-    data: { step, onEdit, onRemove, onDuplicate, invalid: invalidStepIds?.has(step.id) ?? false },
+    data: { step, onEdit, onRemove, onDuplicate, issueSeverity: stepIssueById?.[step.id] },
   }));
 }
 
@@ -412,7 +423,7 @@ function FlowCanvasInner({
   onEditStep,
   onRemoveStep,
   onDuplicateStep,
-  invalidStepIds,
+  stepIssueById,
   onGraphChange,
   onDropAction,
   focusStepId,
@@ -449,7 +460,7 @@ function FlowCanvasInner({
       onEditStep,
       onRemoveStep,
       onDuplicateStep,
-      invalidStepIds,
+      stepIssueById,
     );
     if (!trigger) return stepNodes;
     const minX = stepNodes.length
@@ -482,6 +493,11 @@ function FlowCanvasInner({
     edgesRef.current = rfEdges;
   }, [rfEdges]);
 
+  const stepIssueByIdRef = useRef(stepIssueById);
+  useEffect(() => {
+    stepIssueByIdRef.current = stepIssueById;
+  }, [stepIssueById]);
+
   // Foco em um passo (ex.: vindo da validacao): centraliza e seleciona o no.
   useEffect(() => {
     if (!focusStepId) return;
@@ -497,18 +513,18 @@ function FlowCanvasInner({
   }, [focusStepId, setCenter, setRfNodes, onFocusHandled]);
 
   // Mantem o estado de erro (anel/icone) dos nos em sincronia com a validacao.
-  // invalidStepIds deve ser memoizado no pai pra este efeito nao rodar a cada render.
+  // stepIssueById deve ser memoizado no pai para este efeito nao rodar a cada render.
   useEffect(() => {
     setRfNodes((nodes) =>
       nodes.map((n) => {
         if (n.id === TRIGGER_NODE_ID) return n;
-        const invalid = invalidStepIds?.has(n.id) ?? false;
-        return (n.data as StepNodeData).invalid === invalid
+        const issueSeverity = stepIssueByIdRef.current?.[n.id];
+        return (n.data as StepNodeData).issueSeverity === issueSeverity
           ? n
-          : { ...n, data: { ...n.data, invalid } };
+          : { ...n, data: { ...n.data, issueSeverity } };
       }),
     );
-  }, [invalidStepIds, setRfNodes]);
+  }, [setRfNodes]);
 
   // Mantem o conteudo do nó de gatilho em sincronia (label/summary/critérios).
   useEffect(() => {

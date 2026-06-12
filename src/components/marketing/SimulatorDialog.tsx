@@ -5,7 +5,16 @@
 //   (concluido / step alvo inexistente / loop / atingiu limite).
 
 import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Loader2, Play, Sparkles, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Play,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { evaluateSimpleCondition, type EvalContext } from "@/lib/marketing/criteria-evaluator";
 import { getConfigKind, parseConfig } from "@/lib/marketing/flow-action-configs";
+import {
+  analyzeFlowGraph,
+  buildFlowGraph,
+  type FlowGraphIssue,
+  nextNodeId,
+} from "@/lib/marketing/flow-graph";
 import { cn } from "@/lib/utils";
 
 type SimStep = {
@@ -30,8 +45,11 @@ type SimStep = {
 
 type TraceEntry = {
   step: SimStep;
+  branchLabel?: string;
+  branchNote?: string;
   decision?: { result: boolean; field: string; operator: string; value: string };
   nextStepId?: string;
+  nextStepLabel?: string;
 };
 
 const MAX_HOPS = 50;
@@ -56,47 +74,156 @@ function parseSteps(definition: Record<string, unknown> | null | undefined): Sim
     .filter((s): s is SimStep => s !== null);
 }
 
-function walkFlow(
-  steps: SimStep[],
-  ctx: EvalContext,
-): { trace: TraceEntry[]; outcome: "completed" | "missing" | "loop" | "limit" } {
-  if (steps.length === 0) return { trace: [], outcome: "completed" };
-  const trace: TraceEntry[] = [];
-  const visited = new Set<string>();
-  let idx = 0;
-  while (idx >= 0 && idx < steps.length && trace.length < MAX_HOPS) {
-    const step = steps[idx];
-    if (visited.has(step.id)) {
-      return { trace, outcome: "loop" };
-    }
-    visited.add(step.id);
-    const entry: TraceEntry = { step };
-    const kind = getConfigKind(step.actionId);
-    if (kind === "split") {
-      const cfg = parseConfig("split", step.config);
-      const result = evaluateSimpleCondition(cfg.field, cfg.operator, cfg.value, ctx);
-      const nextId = result ? cfg.trueStepId : cfg.falseStepId;
-      entry.decision = {
+function hashSeed(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function pickWeightedVariant<T extends { weight: number }>(items: T[], seed: string): T | null {
+  const total = items.reduce((sum, item) => sum + Math.max(0, item.weight), 0);
+  if (items.length === 0 || total <= 0) return items[0] ?? null;
+  let cursor = hashSeed(seed) % total;
+  for (const item of items) {
+    const weight = Math.max(0, item.weight);
+    if (cursor < weight) return item;
+    cursor -= weight;
+  }
+  return items[items.length - 1] ?? null;
+}
+
+function resolveBranchLabel(step: SimStep, ctx: EvalContext): { label?: string; note?: string; decision?: TraceEntry["decision"] } {
+  const kind = getConfigKind(step.actionId);
+  if (kind === "split") {
+    const cfg = parseConfig("split", step.config);
+    const result = evaluateSimpleCondition(cfg.field, cfg.operator, cfg.value, ctx);
+    return {
+      label: result ? "sim" : "não",
+      decision: {
         result,
         field: cfg.field,
         operator: cfg.operator,
         value: cfg.value,
-      };
-      entry.nextStepId = nextId;
-      trace.push(entry);
-      if (!nextId) {
-        return { trace, outcome: "missing" };
-      }
-      const nextIdx = steps.findIndex((s) => s.id === nextId);
-      if (nextIdx < 0) return { trace, outcome: "missing" };
-      idx = nextIdx;
-    } else {
-      trace.push(entry);
-      idx++;
-    }
+      },
+    };
   }
-  if (trace.length >= MAX_HOPS) return { trace, outcome: "limit" };
-  return { trace, outcome: "completed" };
+  if (kind === "ab-test") {
+    const cfg = parseConfig("ab-test", step.config);
+    const variant = pickWeightedVariant(cfg.variants, `${ctx.cliente?.nome ?? ""}|${ctx.cliente?.email ?? ""}|${ctx.cliente?.telefone ?? ""}`);
+    return {
+      label: variant?.label || variant?.id,
+      note: variant
+        ? `Variante simulada com base no peso configurado (${variant.weight}%).`
+        : "Sem variante configurada.",
+    };
+  }
+  if (kind === "wait-until") {
+    const cfg = parseConfig("wait-until", step.config);
+    const result = evaluateSimpleCondition(cfg.field, cfg.operator, cfg.value, ctx);
+    return {
+      label: result ? "condição atendida" : "tempo esgotado",
+      note: result
+        ? "A condição já está satisfeita no contexto informado."
+        : "A condição ainda não está satisfeita, então o fluxo cairia no timeout.",
+      decision: {
+        result,
+        field: cfg.field,
+        operator: cfg.operator,
+        value: cfg.value,
+      },
+    };
+  }
+  if (kind === "ai-classify") {
+    const cfg = parseConfig("ai-classify", step.config);
+    const choice = pickWeightedVariant(
+      cfg.categories.map((category, index) => ({
+        ...category,
+        weight: 1,
+        nextStepId: category.nextStepId,
+        label: category.label || `Categoria ${index + 1}`,
+      })),
+      `${ctx.cliente?.nome ?? ""}|${ctx.cliente?.email ?? ""}|${ctx.cliente?.telefone ?? ""}|${cfg.prompt}`,
+    );
+    return {
+      label: choice?.label || choice?.nextStepId,
+      note: choice
+        ? "Classificação simulada para mostrar o caminho do fluxo."
+        : "Sem categoria configurada.",
+    };
+  }
+  return {};
+}
+
+function describeGraphIssue(issue: FlowGraphIssue): string {
+  switch (issue.code) {
+    case "GRAPH_BROKEN_TARGET":
+      return `Aresta quebrada em ${issue.nodeId ?? "nó"} → ${issue.detail ?? "destino ausente"}`;
+    case "GRAPH_UNREACHABLE":
+      return `Nó inalcançável${issue.nodeId ? `: ${issue.nodeId}` : ""}`;
+    case "GRAPH_CYCLE":
+      return `Ciclo detectado${issue.nodeId ? ` em ${issue.nodeId}` : ""}`;
+  }
+}
+
+function walkFlow(
+  steps: SimStep[],
+  definition: Record<string, unknown> | null | undefined,
+  ctx: EvalContext,
+): {
+  trace: TraceEntry[];
+  outcome: "completed" | "missing" | "loop" | "limit";
+  issues: FlowGraphIssue[];
+} {
+  if (steps.length === 0) {
+    return {
+      trace: [],
+      outcome: "completed",
+      issues: [],
+    };
+  }
+  const graph = buildFlowGraph(definition ?? undefined);
+  const issues = analyzeFlowGraph(graph);
+  const stepMap = new Map(steps.map((step) => [step.id, step] as const));
+  const trace: TraceEntry[] = [];
+  const visited = new Set<string>();
+  let currentId = graph.entryId;
+  while (currentId && trace.length < MAX_HOPS) {
+    if (visited.has(currentId)) {
+      return { trace, outcome: "loop", issues };
+    }
+    visited.add(currentId);
+    const step = stepMap.get(currentId);
+    if (!step) {
+      return { trace, outcome: "missing", issues };
+    }
+    const entry: TraceEntry = { step };
+    const resolution = resolveBranchLabel(step, ctx);
+    if (resolution.decision) entry.decision = resolution.decision;
+    if (resolution.label) entry.branchLabel = resolution.label;
+    if (resolution.note) entry.branchNote = resolution.note;
+    const nextId = resolution.label
+      ? nextNodeId(graph, step.id, resolution.label)
+      : nextNodeId(graph, step.id);
+    if (nextId) {
+      entry.nextStepId = nextId;
+      entry.nextStepLabel = stepMap.get(nextId)?.label ?? nextId;
+      trace.push(entry);
+      currentId = nextId;
+      continue;
+    }
+    const outgoing = graph.edges.filter((edge) => edge.from === step.id);
+    trace.push(entry);
+    if (outgoing.length > 0) {
+      return { trace, outcome: "missing", issues };
+    }
+    return { trace, outcome: "completed", issues };
+  }
+  if (trace.length >= MAX_HOPS) {
+    return { trace, outcome: "limit", issues };
+  }
+  return { trace, outcome: currentId ? "loop" : "completed", issues };
 }
 
 export function SimulatorDialog({
@@ -109,6 +236,8 @@ export function SimulatorDialog({
   definition: Record<string, unknown> | null | undefined;
 }) {
   const steps = useMemo(() => parseSteps(definition), [definition]);
+  const graph = useMemo(() => buildFlowGraph(definition ?? undefined), [definition]);
+  const issues = useMemo(() => analyzeFlowGraph(graph), [graph]);
 
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -132,7 +261,7 @@ export function SimulatorDialog({
       negociacao: {},
       contexto: {},
     };
-    const res = walkFlow(steps, ctx);
+    const res = walkFlow(steps, definition, ctx);
     setTrace(res.trace);
     setOutcome(res.outcome);
   };
@@ -163,6 +292,32 @@ export function SimulatorDialog({
             Avalia o rascunho atual — não dispara execução real.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="gap-1">
+            {graph.explicit ? "Grafo explícito" : "Modo legado"}
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            {steps.length} passos
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            {issues.length} alertas
+          </Badge>
+        </div>
+
+        {issues.length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="mb-2 inline-flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" aria-hidden />
+              O grafo tem alertas estruturais
+            </div>
+            <ul className="space-y-1">
+              {issues.slice(0, 4).map((issue, index) => (
+                <li key={`${issue.code}-${issue.nodeId ?? index}`}>• {describeGraphIssue(issue)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
@@ -218,6 +373,17 @@ export function SimulatorDialog({
                   </span>
                   <div className="flex-1">
                     <p className="font-semibold text-foreground">{entry.step.label}</p>
+                    {entry.branchLabel ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Caminho escolhido:{" "}
+                        <span className="font-semibold text-foreground">{entry.branchLabel}</span>
+                      </p>
+                    ) : null}
+                    {entry.branchNote ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {entry.branchNote}
+                      </p>
+                    ) : null}
                     {entry.decision ? (
                       <p
                         className={cn(
@@ -226,16 +392,21 @@ export function SimulatorDialog({
                             ? "text-emerald-600 dark:text-emerald-400"
                             : "text-amber-600 dark:text-amber-400",
                         )}
-                      >
-                        Condição{" "}
-                        <code className="rounded bg-background px-1 py-0.5 font-mono">
-                          {entry.decision.field} {entry.decision.operator}{" "}
-                          {entry.decision.value || "—"}
-                        </code>{" "}
-                        →{" "}
-                        <span className="font-semibold">{entry.decision.result ? "sim" : "não"}</span>
-                        <ArrowRight className="h-3 w-3" aria-hidden />
-                        <span>{entry.nextStepId || "—"}</span>
+                        >
+                          Condição{" "}
+                          <code className="rounded bg-background px-1 py-0.5 font-mono">
+                            {entry.decision.field} {entry.decision.operator}{" "}
+                            {entry.decision.value || "—"}
+                          </code>{" "}
+                          →{" "}
+                          <span className="font-semibold">{entry.decision.result ? "sim" : "não"}</span>
+                          <ArrowRight className="h-3 w-3" aria-hidden />
+                          <span>{entry.nextStepLabel || entry.nextStepId || "—"}</span>
+                      </p>
+                    ) : null}
+                    {entry.nextStepLabel && !entry.decision ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Próximo passo: <span className="font-semibold text-foreground">{entry.nextStepLabel}</span>
                       </p>
                     ) : null}
                   </div>

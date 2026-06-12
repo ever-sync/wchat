@@ -6,6 +6,16 @@
 [functions.uazapi-webhook]
 verify_jwt = false
 
+# Webhook da Meta (Instagram Direct): GET hub.challenge + POST assinado com
+# X-Hub-Signature-256 (META_APP_SECRET) — sem Authorization header.
+[functions.instagram-webhook]
+verify_jwt = false
+
+# OAuth da Meta: GET e o redirect do navegador (state assinado autentica);
+# POST valida JWT manualmente via requireTenantPermission.
+[functions.meta-oauth]
+verify_jwt = false
+
 # Criacao de canal UAZAPI via app (JWT do tenant; requireTenantPermission valida).
 [functions.uazapi-instance-create]
 verify_jwt = false

@@ -1,7 +1,7 @@
 import { memo, type MouseEvent } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AlarmClock, CalendarClock, Check, Clock, Lock, Pin } from "lucide-react";
+import { AlarmClock, CalendarClock, Check, Clock, Instagram, Lock, Pin } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isChatSlaBreached, isChatSnoozed, slaMinutesRemaining } from "@/lib/inbox-chat-rules";
 import { mustAssumeUnassignedChatToView } from "@/lib/crm/negotiation-assignee";
@@ -184,6 +184,12 @@ export const ConversationRow = memo(function ConversationRow({
                 <p className="min-w-0 truncate text-sm font-medium leading-snug text-foreground">
                   {chat.displayName}
                 </p>
+                {chat.channelType === "instagram" ? (
+                  <Instagram
+                    className="h-3.5 w-3.5 shrink-0 text-pink-600 dark:text-pink-400"
+                    aria-label="Conversa do Instagram"
+                  />
+                ) : null}
                 {chat.assigneeName ? <AssigneeTag name={chat.assigneeName} /> : null}
                 {selected ? (
                   <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">

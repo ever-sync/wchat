@@ -662,11 +662,20 @@ export interface CobrancaUpsertInput {
   status: CobrancaStatus;
 }
 
+/** Backend da instância: UAZAPI (WhatsApp) ou Meta Graph API (Instagram Direct). */
+export type ChannelProvider = "uazapi" | "meta_instagram";
+
+/** Canal de uma conversa/mensagem. Em "instagram", remoteJid guarda o IGSID (sem telefone). */
+export type ChannelType = "whatsapp" | "instagram";
+
 export interface WhatsappInstance {
   id: string;
   displayName: string;
   uazapiInstanceName: string;
   uazapiBaseUrl: string;
+  provider?: ChannelProvider;
+  metaPageId?: string | null;
+  metaIgUserId?: string | null;
   phoneNumber?: string | null;
   status: WhatsappInstanceStatus;
   isDefault: boolean;
@@ -765,6 +774,7 @@ export interface InboxChat {
   customerId?: string | null;
   customerName?: string | null;
   primaryNegotiationId?: string | null;
+  channelType?: ChannelType;
   remoteJid: string;
   remotePhoneDigits?: string | null;
   remotePhoneE164?: string | null;
@@ -813,6 +823,7 @@ export interface WhatsappMessage {
   uazapiMessageId?: string | null;
   campaignId?: string | null;
   campaignRecipientId?: string | null;
+  channelType?: ChannelType;
   direction: MessageDirection;
   messageType: MessageType;
   status: MessageStatus;

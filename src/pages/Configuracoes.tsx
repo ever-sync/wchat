@@ -122,6 +122,7 @@ import {
   parseIntegrationsSectionParam,
   type IntegrationsSettingsSection,
 } from "@/components/settings/IntegrationsSectionNav";
+import { ChannelsHubSection } from "@/components/settings/ChannelsHubSection";
 import type { QuickReply, QuickReplyScope, UserRole, WhatsappInstance } from "@/types/domain";
 import { ROLE_LABELS } from "@/lib/permissions/role-permissions";
 
@@ -767,6 +768,15 @@ export default function Configuracoes() {
               onChange={handleIntegrationsSectionChange}
             />
             <div className="min-w-0 flex-1 space-y-6">
+              {integrationsSection === "canais" ? (
+                <ChannelsHubSection
+                  instances={instances}
+                  isLoading={isLoading}
+                  canEdit={canEditConfiguracoes}
+                  onOpenWhatsapp={() => handleIntegrationsSectionChange("whatsapp")}
+                />
+              ) : null}
+
               {integrationsSection === "whatsapp" ? (
                 <>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

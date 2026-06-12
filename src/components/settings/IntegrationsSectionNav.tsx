@@ -1,13 +1,14 @@
-import { Megaphone, MessageSquare, Webhook, Zap } from "lucide-react";
+import { Megaphone, MessageSquare, Network, Webhook, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type IntegrationsSettingsSection = "whatsapp" | "automacao" | "ads" | "webhooks";
+export type IntegrationsSettingsSection = "canais" | "whatsapp" | "automacao" | "ads" | "webhooks";
 
 const SECTIONS: {
   id: IntegrationsSettingsSection;
   label: string;
   icon: typeof MessageSquare;
 }[] = [
+  { id: "canais", label: "Canais", icon: Network },
   { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
   { id: "automacao", label: "IA e automacao", icon: Zap },
   { id: "ads", label: "ADS", icon: Megaphone },
@@ -18,6 +19,7 @@ export function parseIntegrationsSectionParam(
   value: string | null,
 ): IntegrationsSettingsSection {
   if (
+    value === "canais" ||
     value === "automacao" ||
     value === "whatsapp" ||
     value === "ads" ||

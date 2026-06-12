@@ -2,9 +2,15 @@ import { decryptSecret } from "../_shared/crypto.ts";
 import {
   ensureChat,
   getInstanceById,
+  insertMessage,
   insertOrDedupeOutboundMessage,
   normalizeUazapiMessageId,
 } from "../_shared/domain.ts";
+import {
+  getInstagramReplyWindow,
+  type InstagramInstanceRecord,
+  sendInstagramDirectMessage,
+} from "../_shared/instagram.ts";
 import { handleCors, jsonResponse } from "../_shared/http.ts";
 import {
   PermissionDeniedError,
@@ -177,6 +183,70 @@ Deno.serve(async (request) => {
       if (!existingChat || existingChat.assignee_id !== userId) {
         throw new Error("Assuma a conversa para enviar mensagens.");
       }
+    }
+
+    // Instagram Direct: sem telefone/ensureChat — a conversa nasce no inbound
+    // (não dá para iniciar DM fria) e o envio vai pela Graph API da Meta.
+    const igInstance = instance as InstagramInstanceRecord;
+    if (igInstance.provider === "meta_instagram") {
+      const igsid = String(body.remoteJid);
+      const { data: igChat, error: igChatError } = await admin
+        .from("whatsapp_chats")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("instance_id", instance.id)
+        .eq("remote_jid", igsid)
+        .maybeSingle();
+      if (igChatError) {
+        throw new Error(igChatError.message);
+      }
+      if (!igChat) {
+        throw new Error("Conversa do Instagram não encontrada — ela precisa começar pelo cliente.");
+      }
+
+      const window = await getInstagramReplyWindow(admin, igChat.id);
+      if (!window.withinWindow) {
+        throw new Error(
+          "Janela de 24h do Instagram expirou: só é possível responder até 24h após a última mensagem do cliente.",
+        );
+      }
+
+      const igBodyText = typeof body.bodyText === "string" ? body.bodyText : undefined;
+      const igMediaUrl = typeof body.mediaUrl === "string" ? body.mediaUrl : undefined;
+      const sent = await withRetries(
+        () =>
+          sendInstagramDirectMessage(igInstance, {
+            igsid,
+            messageType: String(body.messageType),
+            bodyText: igBodyText,
+            mediaUrl: igMediaUrl,
+          }),
+        { maxAttempts: 3, baseDelayMs: 400 },
+      );
+
+      const igMessage = await insertMessage(admin, instance, igChat.id, {
+        uazapiMessageId: sent.mid,
+        channelType: "instagram",
+        direction: "outbound",
+        messageType: String(body.messageType),
+        status: "sent",
+        bodyText: igBodyText ?? null,
+        mediaUrl: igMediaUrl ?? null,
+        payloadJson: { source: "instagram" },
+        rawEvent: sent.raw,
+        sentAt: new Date().toISOString(),
+        actorType: "human",
+      });
+
+      await admin
+        .from("whatsapp_chats")
+        .update({
+          last_message_preview: igBodyText ?? String(body.messageType),
+          last_message_at: new Date().toISOString(),
+        })
+        .eq("id", igChat.id);
+
+      return jsonResponse({ success: true, message: igMessage });
     }
 
     const apiKey = await decryptSecret(instance.encrypted_apikey);

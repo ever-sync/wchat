@@ -67,6 +67,7 @@ import { FlowExecutionsPanel } from "@/components/marketing/FlowExecutionsPanel"
 import { SimulatorDialog } from "@/components/marketing/SimulatorDialog";
 import { FlowCanvas, type NodePositions } from "@/components/marketing/FlowCanvas";
 import { ManualEnrollDialog } from "@/components/marketing/ManualEnrollDialog";
+import { FlowBranchMap } from "@/components/marketing/FlowBranchMap";
 import { withExplicitGraph, FLOW_DEFINITION_FORMAT } from "@/lib/marketing/flow-graph";
 import type { MarketingFlowEdge } from "@/lib/marketing/flow-types";
 import { cn } from "@/lib/utils";
@@ -664,13 +665,15 @@ function FlowExitPanel({
 function ValidationIssueList({
   issues,
   onSelectIssue,
+  stepsById,
 }: {
   issues: ValidationIssue[];
   onSelectIssue?: (stepId: string) => void;
+  stepsById?: Map<string, FlowStep>;
 }) {
   if (issues.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="flex flex-col gap-2">
       {issues.map((issue, index) => {
         const Icon = issue.severity === "error" ? AlertCircle : AlertTriangle;
         const tone =
@@ -685,18 +688,22 @@ function ValidationIssueList({
               disabled={!clickable}
               onClick={clickable ? () => onSelectIssue!(issue.stepId!) : undefined}
               className={cn(
-                "flex w-full items-start gap-2 rounded-md text-left text-sm",
-                clickable
-                  ? "cursor-pointer px-2 py-1 transition-colors hover:bg-muted"
-                  : "cursor-default",
+                "flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left text-sm transition-colors",
+                issue.severity === "error"
+                  ? "border-destructive/15 bg-destructive/5 hover:bg-destructive/10"
+                  : "border-amber-500/15 bg-amber-500/5 hover:bg-amber-500/10",
+                clickable ? "cursor-pointer" : "cursor-default",
               )}
             >
               <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", tone)} aria-hidden />
-              <span className="leading-snug text-foreground">
-                {issue.message}
-                {clickable ? (
-                  <span className="ml-1 text-xs font-medium text-primary">— ver passo</span>
-                ) : null}
+              <span className="min-w-0 leading-snug text-foreground">
+                <span className="block font-medium">{issue.message}</span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  {getValidationIssueHint(issue, stepsById?.get(issue.stepId ?? ""))}
+                  {clickable ? (
+                    <span className="ml-1 font-medium text-primary">— ver passo</span>
+                  ) : null}
+                </span>
               </span>
             </button>
           </li>
@@ -706,6 +713,105 @@ function ValidationIssueList({
   );
 }
 
+function getValidationIssueHint(issue: ValidationIssue, step?: FlowStep): string {
+  switch (issue.code) {
+    case "FLOW_NO_STEPS":
+      return "Adicione pelo menos um passo no editor.";
+    case "STEP_NO_EXECUTOR":
+      return step?.actionId === "teste-ab"
+        ? "Este teste não executa no worker ainda. Use um passo executável ou deixe para fluxos de rascunho."
+        : step?.actionId === "classificar-ia"
+          ? "A classificação por IA ainda não tem executor. Troque por uma ação ativa antes de publicar."
+          : "Troque a ação por uma que já tenha executor no worker.";
+    case "GRAPH_BROKEN_TARGET":
+      return step?.actionId === "dividir-caminho" || step?.actionId === "dividir-por-segmentacao"
+        ? "Abra esse split e reconecte os caminhos sim/não para passos existentes."
+        : step?.actionId === "teste-ab"
+          ? "A variante aponta para um passo removido. Atualize o destino dessa ramificação."
+          : "Reconecte essa saída para um passo existente.";
+    case "GRAPH_UNREACHABLE":
+      return step?.actionId === "unir-caminho"
+        ? "Esse merge ficou solto. Refaça as entradas dele ou remova o passo."
+        : "Ligue esse passo a partir da entrada do fluxo.";
+    case "GRAPH_CYCLE":
+      return step?.actionId === "esperar-condicao"
+        ? "Esse wait está formando um ciclo. Garanta um timeout ou outro caminho de saída."
+        : "Confirme se esse loop tem uma saída real.";
+    case "FLOW_NO_TRIGGER":
+      return "Defina um gatilho para permitir entrada automática.";
+    case "FLOW_NO_CRITERIA":
+      return "Se quiser filtrar entradas, adicione critérios; caso contrário, pode ignorar.";
+    case "FLOW_NO_EXIT":
+      return "Considere uma condição de saída para evitar fluxos sem fim.";
+    case "WAIT_NO_DURATION":
+      return "Defina uma espera maior que zero.";
+    case "MSG_EMPTY":
+      return "Escreva a mensagem que este passo vai disparar.";
+    case "EMAIL_NO_SUBJECT":
+      return "Adicione um assunto objetivo para o e-mail.";
+    case "EMAIL_NO_BODY":
+      return "Escreva o conteúdo do e-mail.";
+    case "TASK_NO_TITLE":
+      return "Dê um título claro para a tarefa.";
+    case "DEAL_NO_FUNNEL":
+      return "Selecione o funil de destino.";
+    case "DEAL_NO_STAGE":
+      return "Selecione a etapa de destino.";
+    case "TAG_EMPTY":
+      return "Informe a etiqueta que será aplicada.";
+    case "WEBHOOK_NO_URL":
+      return "Cole a URL do webhook que vai receber o payload.";
+    case "WEBHOOK_INVALID_URL":
+      return "Use uma URL completa começando com http:// ou https://.";
+    case "SPLIT_NO_FIELD":
+      return "Escolha o campo comparado por esse split.";
+    case "SPLIT_NO_VALUE":
+      return "Informe o valor usado nessa comparação.";
+    case "SPLIT_NO_TRUE_STEP":
+      return "Conecte o caminho \"sim\" a um passo válido.";
+    case "SPLIT_NO_FALSE_STEP":
+      return "Conecte o caminho \"não\" a um passo válido.";
+    case "ABTEST_FEW_VARIANTS":
+      return "Adicione ao menos duas variantes para dividir o tráfego.";
+    case "ABTEST_WEIGHTS":
+      return "Ajuste os pesos para somarem 100% no total.";
+    case "ABTEST_NO_STEP":
+      return "Cada variante precisa apontar para um passo de destino.";
+    case "WAITUNTIL_NO_FIELD":
+      return "Escolha o campo que será monitorado.";
+    case "WAITUNTIL_NO_VALUE":
+      return "Informe o valor que a condição precisa atingir.";
+    case "WAITUNTIL_INTERVAL":
+      return "Use um intervalo de verificação de pelo menos 1 minuto.";
+    case "WAITUNTIL_NO_TIMEOUT":
+      return "Defina um timeout para o lead não ficar preso.";
+    case "SMART_NO_PROMPT":
+      return "Explique o que a IA deve gerar nesse passo.";
+    case "VAR_EMPTY":
+      return "Adicione pelo menos uma variável com nome.";
+    case "DEAL_TITLE_EMPTY":
+      return "Escreva o novo nome da negociação.";
+    case "DEAL_STATUS_INVALID":
+      return "Selecione um status válido.";
+    case "QUALIFICATION_RANGE":
+      return "Escolha uma nota entre 0 e 5.";
+    case "SUPPRESS_CHANNEL_INVALID":
+      return "Selecione o canal a suprimir.";
+    case "NOTE_EMPTY":
+      return "Escreva a anotação antes de salvar.";
+    case "SALE_VALUE_INVALID":
+      return "Informe um valor numérico válido.";
+    case "AI_NO_PROMPT":
+      return "Escreva o que a IA precisa analisar.";
+    case "AI_NO_CATEGORIES":
+      return "Adicione pelo menos uma categoria de saída.";
+    case "AI_NO_NEXT_STEP":
+      return "Cada categoria precisa apontar para um passo.";
+    default:
+      return "Clique para revisar o passo relacionado.";
+  }
+}
+
 function FlowValidationDialog({
   open,
   result,
@@ -713,6 +819,7 @@ function FlowValidationDialog({
   onOpenChange,
   onConfirm,
   onSelectIssue,
+  stepsById,
 }: {
   open: boolean;
   result: ValidationResult | null;
@@ -720,6 +827,7 @@ function FlowValidationDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   onSelectIssue?: (stepId: string) => void;
+  stepsById?: Map<string, FlowStep>;
 }) {
   const hasErrors = (result?.errors.length ?? 0) > 0;
   const title = hasErrors ? "Não foi possível ativar o fluxo" : "Atenção antes de ativar";
@@ -729,40 +837,49 @@ function FlowValidationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+      <DialogContent className="sm:max-w-2xl gap-5">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="text-xl">{title}</DialogTitle>
+          <DialogDescription className="text-base leading-6">{description}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           {result && result.errors.length > 0 ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3 rounded-2xl border border-destructive/15 bg-destructive/5 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
                 Erros ({result.errors.length})
               </p>
-              <ValidationIssueList issues={result.errors} onSelectIssue={onSelectIssue} />
+              <ValidationIssueList
+                issues={result.errors}
+                onSelectIssue={onSelectIssue}
+                stepsById={stepsById}
+              />
             </div>
           ) : null}
           {result && result.warnings.length > 0 ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
                 Avisos ({result.warnings.length})
               </p>
-              <ValidationIssueList issues={result.warnings} onSelectIssue={onSelectIssue} />
+              <ValidationIssueList
+                issues={result.warnings}
+                onSelectIssue={onSelectIssue}
+                stepsById={stepsById}
+              />
             </div>
           ) : null}
         </div>
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={isPublishing}
+            className="min-w-32"
           >
             {hasErrors ? "Fechar" : "Cancelar"}
           </Button>
           {!hasErrors ? (
-            <Button type="button" onClick={onConfirm} disabled={isPublishing}>
+            <Button type="button" onClick={onConfirm} disabled={isPublishing} className="min-w-48">
               {isPublishing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
               ) : null}
@@ -1000,6 +1117,13 @@ export default function MarketingFlowEditor() {
   };
 
   const flowCriteria = flow ? parseCriteria(flow.criteria) : { conditions: [] };
+  const branchingSteps = useMemo(() => {
+    const outgoing = new Map<string, number>();
+    for (const edge of edges) {
+      outgoing.set(edge.from, (outgoing.get(edge.from) ?? 0) + 1);
+    }
+    return steps.filter((step) => (outgoing.get(step.id) ?? 0) > 1);
+  }, [edges, steps]);
 
   // Conteúdo do nó de gatilho dentro do canvas (memoizado: o canvas sincroniza
   // o nó num efeito que depende desta referência).
@@ -1097,14 +1221,28 @@ export default function MarketingFlowEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, steps, edges, positions]);
 
-  // Passos com erro de validacao: memoizado pra o canvas marcar os nos (anel/icone)
-  // sem recriar o Set a cada render.
-  const invalidStepIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const issue of validation?.errors ?? []) {
-      if (issue.stepId) set.add(issue.stepId);
+  const highlightedIssues = useMemo(() => {
+    if (!validation) return [];
+    return [...validation.errors, ...validation.warnings].slice(0, 4);
+  }, [validation]);
+
+  const stepsById = useMemo(() => new Map(steps.map((step) => [step.id, step] as const)), [steps]);
+
+  // Passos com issues de validacao: memoizado para o canvas pintar erro/aviso
+  // sem recriar o mapa a cada render.
+  const stepIssueById = useMemo(() => {
+    const map: Record<string, "error" | "warning"> = {};
+    for (const issue of validation?.warnings ?? []) {
+      if (issue.stepId && !map[issue.stepId]) {
+        map[issue.stepId] = "warning";
+      }
     }
-    return set;
+    for (const issue of validation?.errors ?? []) {
+      if (issue.stepId) {
+        map[issue.stepId] = "error";
+      }
+    }
+    return map;
   }, [validation]);
 
   const doPublish = (result: ValidationResult) => {
@@ -1376,6 +1514,84 @@ export default function MarketingFlowEditor() {
       {flow && tab === "editor" ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
           {/* O gatilho vive DENTRO do canvas como nó de entrada (estilo n8n). */}
+          <div className="border-b border-border bg-card px-6 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                  Gatilho: {canvasTrigger.label}
+                </Badge>
+                <Badge variant="outline" className="rounded-full px-3 py-1">
+                  {flowCriteria.conditions.length} critério(s) de entrada
+                </Badge>
+                <Badge variant="outline" className="rounded-full px-3 py-1">
+                  {steps.length} passo(s)
+                </Badge>
+                <Badge variant="outline" className="rounded-full px-3 py-1">
+                  {edges.length} conexão(ões)
+                </Badge>
+                <Badge variant="outline" className="rounded-full px-3 py-1">
+                  {branchingSteps.length} ramificação(ões)
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTab("configuracoes")}
+                >
+                  Ajustar gatilho
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSimulatorOpen(true)}
+                >
+                  Simular fluxo
+                </Button>
+              </div>
+            </div>
+
+            {validation && highlightedIssues.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/25">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                  {validation.errors.length > 0 ? "Problemas para resolver" : "Atenção no fluxo"}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {highlightedIssues.map((issue, index) => (
+                    <div key={`${issue.code}-${issue.stepId ?? index}`} className="flex max-w-full flex-col">
+                      <button
+                        type="button"
+                      onClick={() => {
+                        if (issue.stepId) {
+                          setTab("editor");
+                          setFocusStepId(issue.stepId);
+                        }
+                      }}
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-left text-xs font-medium transition-colors",
+                          issue.severity === "error"
+                            ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300",
+                        )}
+                        title={issue.stepId ? "Focar este passo no canvas" : issue.message}
+                      >
+                        <span className="truncate">{issue.message}</span>
+                        {issue.stepId ? <span aria-hidden>→</span> : null}
+                      </button>
+                      <span className="mt-1 block max-w-full text-xs text-muted-foreground">
+                        {getValidationIssueHint(issue, stepsById.get(issue.stepId ?? ""))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <div className="relative min-h-0 flex-1">
             <div className="pointer-events-none absolute right-6 top-6 z-10">
               <button
@@ -1401,7 +1617,7 @@ export default function MarketingFlowEditor() {
               }}
               onRemoveStep={handleRemoveStep}
               onDuplicateStep={handleDuplicateStep}
-              invalidStepIds={invalidStepIds}
+              stepIssueById={stepIssueById}
               onGraphChange={handleGraphChange}
               onDropAction={handleDropOnCanvas}
               focusStepId={focusStepId}
@@ -1421,6 +1637,17 @@ export default function MarketingFlowEditor() {
               </div>
             ) : null}
           </div>
+
+          {steps.length > 0 ? (
+            <details className="border-t border-border bg-card px-6 py-4">
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                Mapa de ramificações
+              </summary>
+              <div className="pt-4">
+                <FlowBranchMap steps={steps} />
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : flow ? (
         <div className="min-h-0 flex-1 overflow-auto">
@@ -1478,6 +1705,7 @@ export default function MarketingFlowEditor() {
           setTab("editor");
           setFocusStepId(stepId);
         }}
+        stepsById={stepsById}
       />
 
       <SimulatorDialog

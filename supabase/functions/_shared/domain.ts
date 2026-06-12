@@ -18,9 +18,9 @@ const OPT_OUT_KEYWORDS = [
   "nao me mande",
 ];
 
-type AdminClient = SupabaseClient;
+export type AdminClient = SupabaseClient;
 
-type InstanceRecord = {
+export type InstanceRecord = {
   id: string;
   tenant_id: string;
   display_name: string;
@@ -1213,6 +1213,8 @@ export async function insertMessage(
     sentAt?: string | null;
     receivedAt?: string | null;
     actorType?: "human" | "ai" | "system";
+    /** Canal de origem; default whatsapp preserva o comportamento atual. */
+    channelType?: "whatsapp" | "instagram";
   },
 ) {
   const { data, error } = await admin
@@ -1221,6 +1223,7 @@ export async function insertMessage(
       tenant_id: instance.tenant_id,
       instance_id: instance.id,
       chat_id: chatId,
+      channel_type: params.channelType ?? "whatsapp",
       campaign_id: params.campaignId ?? null,
       campaign_recipient_id: params.campaignRecipientId ?? null,
       uazapi_message_id: params.uazapiMessageId ?? null,
@@ -1509,7 +1512,7 @@ function isEncryptedWhatsappUrl(url: string | null | undefined) {
   return false;
 }
 
-function inferExtensionFromMime(mime: string | null | undefined) {
+export function inferExtensionFromMime(mime: string | null | undefined) {
   if (!mime) return "bin";
   const lower = mime.toLowerCase();
   if (lower.includes("jpeg")) return "jpg";
@@ -1524,11 +1527,11 @@ function inferExtensionFromMime(mime: string | null | undefined) {
   return "bin";
 }
 
-const MEDIA_BUCKET = "whatsapp-media";
+export const MEDIA_BUCKET = "whatsapp-media";
 
 const STORAGE_PUBLIC_MARKER = `/storage/v1/object/public/${MEDIA_BUCKET}/`;
 
-function externalizeStoragePublicUrl(publicUrl: string): string {
+export function externalizeStoragePublicUrl(publicUrl: string): string {
   const externalBase =
     Deno.env.get("SUPABASE_PUBLIC_URL") ??
     Deno.env.get("PUBLIC_SUPABASE_URL") ??
@@ -1550,7 +1553,7 @@ function externalizeStoragePublicUrl(publicUrl: string): string {
 }
 
 /** URL de CDN da Meta (foto de perfil do WhatsApp): expira e dá 403 em <img>. */
-function isMetaCdnAvatarUrl(url: string): boolean {
+export function isMetaCdnAvatarUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase();
     return (
@@ -1567,7 +1570,7 @@ function isMetaCdnAvatarUrl(url: string): boolean {
 }
 
 /** Já é uma cópia nossa no Storage (não precisa baixar de novo). */
-function isMirroredAvatarUrl(url: string | null | undefined): boolean {
+export function isMirroredAvatarUrl(url: string | null | undefined): boolean {
   return typeof url === "string" && url.includes(STORAGE_PUBLIC_MARKER) && url.includes("/avatars/");
 }
 
@@ -1577,7 +1580,7 @@ function isMirroredAvatarUrl(url: string | null | undefined): boolean {
  * muda quando o lead realmente troca a foto. Hash djb2 → token curto, usado como
  * `?v=` no avatar_url (compara mudança + fura cache do CDN/navegador).
  */
-function avatarSourceVersion(sourceUrl: string): string {
+export function avatarSourceVersion(sourceUrl: string): string {
   let basis = sourceUrl;
   try {
     const u = new URL(sourceUrl);
@@ -1593,7 +1596,7 @@ function avatarSourceVersion(sourceUrl: string): string {
 }
 
 /** Lê o `?v=` de um avatar já espelhado (para comparar com a versão da origem). */
-function mirroredAvatarVersion(url: string | null | undefined): string | null {
+export function mirroredAvatarVersion(url: string | null | undefined): string | null {
   if (typeof url !== "string") return null;
   try {
     return new URL(url).searchParams.get("v");
@@ -1607,7 +1610,7 @@ function mirroredAvatarVersion(url: string | null | undefined): string | null {
  * browser que causa 403) e sobe pro bucket público. Devolve a URL estável ou
  * null em falha. Caminho determinístico por remoteJid → 1 cópia por contato.
  */
-async function mirrorAvatarToStorage(
+export async function mirrorAvatarToStorage(
   admin: AdminClient,
   instance: InstanceRecord,
   remoteJid: string,

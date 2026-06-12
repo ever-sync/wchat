@@ -43,6 +43,7 @@ const INBOX_CHAT_SELECT = `
   id,
   instance_id,
   customer_id,
+  channel_type,
   remote_jid,
   remote_phone_digits,
   remote_phone_e164,
@@ -99,6 +100,9 @@ type InstanceRow = {
   display_name: string;
   uazapi_instance_name: string;
   uazapi_base_url: string;
+  provider?: WhatsappInstance["provider"];
+  meta_page_id?: string | null;
+  meta_ig_user_id?: string | null;
   phone_number: string | null;
   status: WhatsappInstance["status"];
   is_default: boolean;
@@ -125,6 +129,7 @@ type ChatRow = {
   id: string;
   instance_id: string;
   customer_id: string | null;
+  channel_type?: InboxChat["channelType"];
   remote_jid: string;
   remote_phone_digits: string | null;
   remote_phone_e164: string | null;
@@ -156,6 +161,7 @@ type MessageRow = {
   uazapi_message_id: string | null;
   campaign_id: string | null;
   campaign_recipient_id: string | null;
+  channel_type?: WhatsappMessage["channelType"];
   direction: WhatsappMessage["direction"];
   message_type: WhatsappMessage["messageType"];
   status: WhatsappMessage["status"];
@@ -176,6 +182,9 @@ function mapInstance(row: InstanceRow): WhatsappInstance {
     displayName: row.display_name,
     uazapiInstanceName: row.uazapi_instance_name,
     uazapiBaseUrl: row.uazapi_base_url,
+    provider: row.provider ?? "uazapi",
+    metaPageId: row.meta_page_id ?? null,
+    metaIgUserId: row.meta_ig_user_id ?? null,
     phoneNumber: row.phone_number,
     status: row.status,
     isDefault: row.is_default,
@@ -245,6 +254,7 @@ function mapChat(row: ChatRow, pinnedChatIds?: Set<string>): InboxChat {
     instanceName: row.whatsapp_instances?.display_name ?? "Instância",
     customerId: row.customer_id,
     customerName: row.customers?.nome ?? null,
+    channelType: row.channel_type ?? "whatsapp",
     remoteJid: row.remote_jid,
     remotePhoneDigits: row.remote_phone_digits,
     remotePhoneE164: row.remote_phone_e164,
@@ -278,6 +288,7 @@ function mapMessage(row: MessageRow): WhatsappMessage {
     uazapiMessageId: row.uazapi_message_id,
     campaignId: row.campaign_id,
     campaignRecipientId: row.campaign_recipient_id,
+    channelType: row.channel_type ?? "whatsapp",
     direction: row.direction,
     messageType: row.message_type,
     status: row.status,
@@ -302,7 +313,7 @@ export async function listWhatsappInstances() {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from("whatsapp_instances")
-    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
+    .select("id, display_name, uazapi_instance_name, uazapi_base_url, provider, meta_page_id, meta_ig_user_id, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
     .eq("tenant_id", tenantId)
     .is("archived_at", null)
     .order("is_default", { ascending: false })
@@ -455,7 +466,7 @@ export async function updateWhatsappInstance(id: string, input: WhatsappInstance
     .update(patch)
     .eq("tenant_id", tenantId)
     .eq("id", id)
-    .select("id, display_name, uazapi_instance_name, uazapi_base_url, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
+    .select("id, display_name, uazapi_instance_name, uazapi_base_url, provider, meta_page_id, meta_ig_user_id, phone_number, status, is_default, last_qr, last_sync_at, last_error, archived_at, created_at, ai_enabled")
     .single();
 
   if (error) throw new Error(error.message);
@@ -1213,6 +1224,20 @@ export function useCreateWhatsappChannel(
       await options?.onSuccess?.(data, variables, context);
     },
   });
+}
+
+/**
+ * Inicia a conexão de uma conta Instagram (OAuth da Meta): a edge function
+ * devolve a URL do dialog de autorização; o callback cria a instância e
+ * redireciona de volta para /configuracoes?secao=canais&meta=ok|erro.
+ */
+async function startMetaOauth(): Promise<string> {
+  const data = await invokeAuthedFunction<{ authorizeUrl: string }>("meta-oauth", {});
+  return data.authorizeUrl;
+}
+
+export function useStartMetaOauth(options?: UseMutationOptions<string, Error, void>) {
+  return useMutation({ mutationFn: startMetaOauth, ...options });
 }
 
 export function useSyncWhatsappInstances(
