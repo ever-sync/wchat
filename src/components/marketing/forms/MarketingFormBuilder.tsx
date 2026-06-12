@@ -30,8 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { DEFAULT_CRM_FUNNELS } from "@/data/crm-funnels";
-import { useEffectiveCrmFunnels } from "@/lib/api/crm-funnel-config";
 import { useUpdateMarketingForm } from "@/lib/api/marketing-forms";
 import { useMarketingEmailTemplates } from "@/lib/api/marketing-email-templates";
 import { useDistinctCustomerTags } from "@/lib/api/customers";
@@ -64,8 +62,6 @@ import { StepRoutingEditor } from "./StepRoutingEditor";
 import { EmbedSnippetDialog } from "./EmbedSnippetDialog";
 import { ABTestPanel } from "./ABTestPanel";
 import { EmailTemplatesDialog } from "./EmailTemplatesDialog";
-
-const TENANT_DEFAULT = "__tenant_default__";
 
 function parseTagList(value: string): string[] {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
@@ -335,7 +331,6 @@ interface MarketingFormBuilderProps {
 
 export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProps) {
   const { toast } = useToast();
-  const { data: funnels = DEFAULT_CRM_FUNNELS } = useEffectiveCrmFunnels();
   const { data: emailTemplates = [] } = useMarketingEmailTemplates();
   const { data: customerTagSuggestions = [] } = useDistinctCustomerTags();
   const updateForm = useUpdateMarketingForm();
@@ -347,8 +342,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const [submitMessage, setSubmitMessage] = useState(form.submitMessage || "Obrigado! Recebemos suas informações.");
   const [submitWebhookUrl, setSubmitWebhookUrl] = useState(form.submitWebhookUrl ?? "");
   const [submitRedirectUrl, setSubmitRedirectUrl] = useState(form.submitRedirectUrl ?? "");
-  const [targetFunnelId, setTargetFunnelId] = useState(form.targetFunnelId ?? TENANT_DEFAULT);
-  const [targetStageId, setTargetStageId] = useState(form.targetStageId ?? "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
@@ -366,10 +359,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
   const validation = useMemo(() => validateBuilderFields(fields), [fields]);
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
   const selectedFieldErrors = selectedField ? validation.fieldErrors[selectedField.id] ?? [] : [];
-  const selectedFunnel = useMemo(
-    () => funnels.find((f) => f.id === targetFunnelId) ?? null,
-    [funnels, targetFunnelId],
-  );
   const selectedStepIndex = useMemo(
     () => formSteps.findIndex((step) => stepFieldIds(step).includes(selectedId ?? "")),
     [formSteps, selectedId],
@@ -506,17 +495,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
     markDirty();
   }
 
-  function handleFunnelChange(value: string) {
-    setTargetFunnelId(value);
-    if (value === TENANT_DEFAULT) {
-      setTargetStageId("");
-    } else {
-      const f = funnels.find((x) => x.id === value);
-      setTargetStageId(f?.stages[0]?.id ?? "");
-    }
-    markDirty();
-  }
-
   const moveSelectedFieldStepLabel = selectedStepIndex >= 0 ? `Mover para etapa ${selectedStepIndex + 1}` : "Mover para etapa";
 
   const handleSave = () => {
@@ -532,7 +510,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
       });
       return;
     }
-    const usesDefault = targetFunnelId === TENANT_DEFAULT;
     updateForm.mutate(
       {
         id: form.id,
@@ -544,8 +521,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
           submitMessage: submitMessage.trim() || "Obrigado!",
           submitWebhookUrl: submitWebhookUrl.trim() || null,
           submitRedirectUrl: submitRedirectUrl.trim() || null,
-          targetFunnelId: usesDefault ? null : targetFunnelId,
-          targetStageId: usesDefault ? null : targetStageId || null,
           emailTemplateId: emailTemplateId || null,
         },
       },
@@ -712,58 +687,6 @@ export function MarketingFormBuilder({ form, onClose }: MarketingFormBuilderProp
                   }}
                   placeholder="Obrigado!"
                 />
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Destino no CRM */}
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold">Destino do lead no CRM</p>
-                <p className="text-xs text-muted-foreground">
-                  Cada envio cria um contato e abre uma negociação aqui.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Funil</Label>
-                  <Select value={targetFunnelId} onValueChange={handleFunnelChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Funil de destino" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TENANT_DEFAULT}>Funil padrão do tenant</SelectItem>
-                      {funnels.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.listName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Etapa</Label>
-                  <Select
-                    value={targetStageId}
-                    onValueChange={(v) => {
-                      setTargetStageId(v);
-                      markDirty();
-                    }}
-                    disabled={targetFunnelId === TENANT_DEFAULT}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Etapa de destino" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(selectedFunnel?.stages ?? []).map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </div>
 

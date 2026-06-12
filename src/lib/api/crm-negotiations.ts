@@ -472,6 +472,19 @@ function patchCrmNegotiationRecordInCaches(
   );
 }
 
+function removeCrmNegotiationFromCaches(queryClient: QueryClient, id: string) {
+  queryClient.setQueriesData<CrmNegotiationRecord[]>(
+    { queryKey: ["crm-negotiations"] },
+    (prev) => {
+      if (!Array.isArray(prev)) {
+        return prev;
+      }
+      return prev.filter((row) => row.id !== id);
+    },
+  );
+  queryClient.removeQueries({ queryKey: ["crm-negotiations", id], exact: true });
+}
+
 export function patchCrmNegotiationAssigneeInCaches(
   queryClient: QueryClient,
   id: string,
@@ -637,7 +650,28 @@ export function useDeleteCrmNegotiation(
   return useMutation({
     mutationFn: deleteCrmNegotiation,
     ...options,
+    onMutate: async (negotiationId) => {
+      const parentCtx = await options?.onMutate?.(negotiationId);
+      const snapshot = queryClient.getQueriesData<CrmNegotiationRecord[]>({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return key[0] === "crm-negotiations";
+        },
+      });
+      removeCrmNegotiationFromCaches(queryClient, negotiationId);
+      return { ...(parentCtx as object), snapshot };
+    },
+    onError: (error, negotiationId, ctx) => {
+      if (ctx && typeof ctx === "object" && "snapshot" in ctx) {
+        for (const [queryKey, data] of (ctx as { snapshot: Array<[unknown[], CrmNegotiationRecord[] | undefined]> }).snapshot) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
+      options?.onError?.(error, negotiationId, ctx);
+    },
     onSuccess: async (data, negotiationId, ctx) => {
+      await queryClient.invalidateQueries({ queryKey: ["crm-negotiations"] });
       await invalidateCrmNegotiationAssigneeQueries(queryClient, negotiationId);
       await options?.onSuccess?.(data, negotiationId, ctx);
     },
@@ -725,4 +759,3 @@ export function useUpdateCrmNegotiation(
     },
   });
 }
-

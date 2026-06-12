@@ -210,9 +210,6 @@ export interface MarketingFormRecord {
   theme: FormTheme;
   allowedDomains: string[];
   isActive: boolean;
-  /** Funil/etapa de destino do lead no CRM (null => padrão do tenant). */
-  targetFunnelId: string | null;
-  targetStageId: string | null;
   emailTemplateId: string | null;
   submitWebhookUrl: string | null;
   submitRedirectUrl: string | null;

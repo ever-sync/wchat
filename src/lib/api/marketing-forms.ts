@@ -28,8 +28,6 @@ const SELECT = [
   "theme",
   "allowed_domains",
   "is_active",
-  "target_funnel_id",
-  "target_stage_id",
   "email_template_id",
   "submit_webhook_url",
   "submit_redirect_url",
@@ -79,8 +77,6 @@ export function mapMarketingFormRow(row: Record<string, unknown>): MarketingForm
     theme: toTheme(row.theme),
     allowedDomains: toStringArray(row.allowed_domains),
     isActive: row.is_active !== false,
-    targetFunnelId: row.target_funnel_id == null ? null : String(row.target_funnel_id),
-    targetStageId: row.target_stage_id == null ? null : String(row.target_stage_id),
     emailTemplateId: row.email_template_id == null ? null : String(row.email_template_id),
     submitWebhookUrl: row.submit_webhook_url == null ? null : String(row.submit_webhook_url),
     submitRedirectUrl: row.submit_redirect_url == null ? null : String(row.submit_redirect_url),
@@ -101,8 +97,6 @@ export type MarketingFormCreateInput = {
   theme?: Partial<FormTheme>;
   allowedDomains?: string[];
   isActive?: boolean;
-  targetFunnelId?: string | null;
-  targetStageId?: string | null;
   submitWebhookUrl?: string | null;
   submitRedirectUrl?: string | null;
   submitMessage?: string;
@@ -117,8 +111,6 @@ export type MarketingFormPatch = Partial<{
   theme: FormTheme;
   allowedDomains: string[];
   isActive: boolean;
-  targetFunnelId: string | null;
-  targetStageId: string | null;
   emailTemplateId: string | null;
   submitWebhookUrl: string | null;
   submitRedirectUrl: string | null;
@@ -135,8 +127,6 @@ function patchToRow(patch: MarketingFormPatch): Record<string, unknown> {
   if (patch.theme !== undefined) row.theme = patch.theme;
   if (patch.allowedDomains !== undefined) row.allowed_domains = patch.allowedDomains;
   if (patch.isActive !== undefined) row.is_active = patch.isActive;
-  if (patch.targetFunnelId !== undefined) row.target_funnel_id = patch.targetFunnelId;
-  if (patch.targetStageId !== undefined) row.target_stage_id = patch.targetStageId;
   if (patch.emailTemplateId !== undefined) row.email_template_id = patch.emailTemplateId;
   if (patch.submitWebhookUrl !== undefined) row.submit_webhook_url = patch.submitWebhookUrl;
   if (patch.submitRedirectUrl !== undefined) row.submit_redirect_url = patch.submitRedirectUrl;
@@ -190,8 +180,6 @@ export async function createMarketingForm(input: MarketingFormCreateInput): Prom
       theme: { ...DEFAULT_FORM_THEME, ...(input.theme ?? {}) },
       allowed_domains: input.allowedDomains ?? [],
       is_active: input.isActive ?? true,
-      target_funnel_id: input.targetFunnelId ?? null,
-      target_stage_id: input.targetStageId ?? null,
       submit_webhook_url: input.submitWebhookUrl ?? null,
       submit_redirect_url: input.submitRedirectUrl ?? null,
       ...(input.submitMessage !== undefined ? { submit_message: input.submitMessage } : {}),
@@ -243,8 +231,6 @@ export async function duplicateMarketingForm(id: string): Promise<MarketingFormR
     theme: source.theme,
     allowedDomains: source.allowedDomains,
     isActive: false,
-    targetFunnelId: source.targetFunnelId,
-    targetStageId: source.targetStageId,
     submitWebhookUrl: source.submitWebhookUrl,
     submitRedirectUrl: source.submitRedirectUrl,
     submitMessage: source.submitMessage,
