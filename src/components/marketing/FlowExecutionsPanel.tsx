@@ -40,6 +40,7 @@ import {
   type FlowEvent,
   type FlowParticipant,
 } from "@/lib/api/marketing-flow-participants";
+import { useMarketingFlow } from "@/lib/api/marketing-flows";
 import type { MarketingFlowParticipantStatus } from "@/lib/marketing/flow-types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -275,11 +276,25 @@ function ExitConfirmDialog({
 }
 
 export function FlowExecutionsPanel({ flowId }: { flowId: string }) {
+  const { data: flow } = useMarketingFlow(flowId);
   const { data: participants, isLoading, error, refetch, isFetching } = useFlowParticipants(flowId);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<MarketingFlowParticipantStatus | "all">("all");
   const [detail, setDetail] = useState<FlowParticipant | null>(null);
   const [exitTarget, setExitTarget] = useState<FlowParticipant | null>(null);
+  const stepNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    const steps = (flow?.publishedDefinition ?? flow?.definition)?.steps;
+    if (!Array.isArray(steps)) return map;
+    for (const item of steps) {
+      if (!item || typeof item !== "object") continue;
+      const rec = item as Record<string, unknown>;
+      const id = typeof rec.id === "string" ? rec.id : "";
+      const label = typeof rec.label === "string" ? rec.label : "";
+      if (id) map.set(id, label || id);
+    }
+    return map;
+  }, [flow?.definition, flow?.publishedDefinition]);
 
   const filtered = useMemo<FlowParticipant[]>(() => {
     const list = participants ?? [];
@@ -441,7 +456,18 @@ export function FlowExecutionsPanel({ flowId }: { flowId: string }) {
                     ) : null}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {p.currentStepId ?? "—"}
+                    {p.currentStepId ? (
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">
+                          {stepNameById.get(p.currentStepId) ?? p.currentStepId}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {stepNameById.has(p.currentStepId) ? p.currentStepId.slice(0, 8) : "id bruto"}
+                        </span>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {formatDateTime(p.enteredAt)}

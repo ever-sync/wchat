@@ -507,6 +507,10 @@ async function markDone(
   const nextContext = result.contextPatch
     ? deepMerge(participant.context ?? {}, result.contextPatch)
     : null;
+  const nextNegotiationId =
+    typeof result.detail?.negotiation_id === "string" && result.detail.negotiation_id.trim()
+      ? result.detail.negotiation_id.trim()
+      : null;
 
   // Branch escolhido pelo executor (split/teste-ab/esperar-condicao) tem
   // prioridade; senao segue a aresta linear do grafo (que cobre reconvergencia
@@ -522,6 +526,7 @@ async function markDone(
         exited_at: new Date().toISOString(),
         current_step_id: null,
         next_run_at: null,
+        ...(nextNegotiationId ? { negotiation_id: nextNegotiationId } : {}),
         ...(nextContext ? { context: nextContext } : {}),
       })
       .eq("id", participant.id);
@@ -550,6 +555,7 @@ async function markDone(
       current_step_id: nextStep.id,
       next_run_at: runAt,
       status: waitMs > 0 ? "waiting" : "active",
+      ...(nextNegotiationId ? { negotiation_id: nextNegotiationId } : {}),
       ...(nextContext ? { context: nextContext } : {}),
     })
     .eq("id", participant.id);
